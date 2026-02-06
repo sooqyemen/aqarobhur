@@ -8,6 +8,3 @@ npm install
 npm run dev
 ```
 
-## ملاحظات
-- حدّث رقم واتساب داخل: app/layout.js و app/page.js
-- بعد رفع الملفات للريبو، اعمل Import على Vercel واربط الدومين aqarobhur.com
