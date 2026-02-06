@@ -6,7 +6,7 @@ export const metadata = {
   metadataBase: new URL('https://aqarobhur.com'),
 };
 
-const WHATSAPP = 'https://wa.me/966000000000'; // غيّر الرقم
+const WHATSAPP = 'https://wa.me/966597520693'; // غيّر الرقم
 
 export default function RootLayout({ children }) {
   return (
