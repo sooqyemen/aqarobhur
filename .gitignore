@@ -1,0 +1,25 @@
+# dependencies
+node_modules/
+
+# next
+.next/
+out/
+
+# vercel
+.vercel/
+
+# logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS
+.DS_Store
+
+# IDE
+.vscode/
+
+# env (keep example only)
+.env.local
+.env.*
+!.env.example
