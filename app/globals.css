@@ -1,27 +1,22 @@
-/* app/globals.css */
 @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap');
 
 :root {
-  /* ألوان الهوية البصرية الجديدة - أزرق ملكي وذهبي */
-  --bg-main: #f8f9fa;       /* خلفية عامة فاتحة جداً */
+  /* ألوان الهوية (أزرق ملكي وذهبي) */
+  --bg-main: #f8fafc;       /* خلفية رمادية فاتحة جداً */
   --bg-surface: #ffffff;    /* خلفية الكروت */
   
-  --primary: #1e3a8a;       /* أزرق غامق فخم */
-  --primary-hover: #172554;
+  --primary: #1e40af;       /* أزرق غامق (Blue-800) */
+  --primary-light: #eff6ff; /* أزرق فاتح جداً للخلفيات */
+  --accent: #b45309;        /* ذهبي/برونزي */
   
-  --accent: #d97706;        /* ذهبي/برتقالي للتميز */
+  --text-main: #0f172a;     /* أسود مزرق (Slate-900) */
+  --text-muted: #64748b;    /* رمادي للنصوص الفرعية */
+  --border: #e2e8f0;        /* لون الحدود */
   
-  --text-main: #111827;     /* أسود غير صريح */
-  --text-secondary: #6b7280;/* رمادي للنصوص الفرعية */
-  --border: #e5e7eb;
-  
-  --success: #059669;       /* أخضر للبيع/متاح */
-  --danger: #dc2626;        /* أحمر للمباع */
-  
-  /* ظلال ناعمة (Soft Shadows) */
-  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1);
-  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+  /* ألوان الحالات (للتوافق مع format.js) */
+  --success-bg: #dcfce7; --success-text: #166534;
+  --danger-bg: #fee2e2;  --danger-text: #991b1b;
+  --warn-bg: #ffedd5;    --warn-text: #9a3412;
 }
 
 * { box-sizing: border-box; }
@@ -30,46 +25,54 @@ html, body {
   margin: 0; padding: 0;
   background: var(--bg-main);
   color: var(--text-main);
-  font-family: 'Tajawal', sans-serif; /* تطبيق الخط الجديد */
+  font-family: 'Tajawal', sans-serif;
   direction: rtl;
+  -webkit-font-smoothing: antialiased;
 }
 
 a { text-decoration: none; color: inherit; transition: 0.2s; }
+ul { list-style: none; padding: 0; margin: 0; }
 
-/* تنسيق عام للحاوية */
 .container {
-  width: min(1200px, 92%);
+  width: min(1200px, calc(100% - 32px));
   margin: 0 auto;
 }
 
-/* تنسيق الأزرار الافتراضي */
+/* الأزرار */
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 10px 20px;
-  border-radius: 8px;
+  padding: 10px 18px;
+  border-radius: 10px;
   font-weight: 700;
   font-size: 14px;
   cursor: pointer;
   transition: all 0.2s ease;
   border: 1px solid var(--border);
-  background: var(--bg-surface);
+  background: #fff;
 }
-
-.btn:hover { background: #f3f4f6; }
+.btn:hover { background: #f1f5f9; transform: translateY(-1px); }
 
 .btn-primary {
   background: var(--primary);
   color: #fff;
   border-color: var(--primary);
+  box-shadow: 0 4px 6px -1px rgba(30, 64, 175, 0.2);
 }
-.btn-primary:hover { background: var(--primary-hover); }
+.btn-primary:hover { background: #1e3a8a; }
 
-/* تحسين شكل الشبكة (Grid) */
-.grid-listings {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 24px;
-  padding-bottom: 40px;
+/* --- تنسيقات Badges (مهم جداً لملف format.js) --- */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 99px;
+  font-size: 11px;
+  font-weight: 700;
+  background: #f3f4f6;
+  color: var(--text-muted);
 }
+.badge.ok { background: var(--success-bg); color: var(--success-text); }
+.badge.sold { background: var(--danger-bg); color: var(--danger-text); }
+.badge.warn { background: var(--warn-bg); color: var(--warn-text); }
