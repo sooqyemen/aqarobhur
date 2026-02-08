@@ -4,33 +4,34 @@ import { usePathname } from 'next/navigation';
 
 export default function Header() {
   const pathname = usePathname() || '/';
-  
   const isActive = (path) => pathname === path;
 
   return (
     <header className="header">
       <div className="container header-inner">
-        {/* اللوجو */}
-        <Link href="/" className="logo-area">
+        {/* الشعار */}
+        <Link href="/" className="brand">
           <div className="logo-box">
             <img src="/logo-mark.svg" alt="شعار" />
           </div>
-          <div className="logo-text">
-            <h1>عقار أبحر</h1>
-            <span>شمال جدة</span>
+          <div className="brand-text">
+            <h1 className="title">عقار أبحر</h1>
+            <span className="subtitle">عروض حصرية</span>
           </div>
         </Link>
 
         {/* القائمة */}
-        <nav className="nav-links">
-          <Link href="/" className={isActive('/') ? 'link active' : 'link'}>الرئيسية</Link>
-          <Link href="/listings" className={isActive('/listings') ? 'link active' : 'link'}>العروض</Link>
-          <Link href="/request" className={isActive('/request') ? 'link active' : 'link'}>طلب عقار</Link>
+        <nav className="nav">
+          <Link href="/" className={isActive('/') ? 'nav-link active' : 'nav-link'}>الرئيسية</Link>
+          <Link href="/listings" className={isActive('/listings') ? 'nav-link active' : 'nav-link'}>كل العروض</Link>
+          <Link href="/request" className={isActive('/request') ? 'nav-link active' : 'nav-link'}>طلب عقار</Link>
         </nav>
 
-        {/* زر جانبي */}
+        {/* زر الإجراء */}
         <div className="actions">
-          <Link href="/admin" className="btn-admin">دخول الملاك</Link>
+          <Link href="/admin" className="btn-login">
+            دخول الملاك
+          </Link>
         </div>
       </div>
 
@@ -38,11 +39,11 @@ export default function Header() {
         .header {
           position: sticky;
           top: 0;
-          z-index: 50;
+          z-index: 100;
           background: rgba(255, 255, 255, 0.9);
-          backdrop-filter: blur(8px);
+          backdrop-filter: blur(10px);
           border-bottom: 1px solid var(--border);
-          height: 72px;
+          height: 70px;
           display: flex;
           align-items: center;
         }
@@ -51,57 +52,57 @@ export default function Header() {
           align-items: center;
           justify-content: space-between;
         }
-        .logo-area {
+        .brand {
           display: flex;
           align-items: center;
           gap: 10px;
         }
         .logo-box {
-          width: 40px; 
-          height: 40px; 
-          border-radius: 8px; 
-          overflow: hidden; 
-          background: #eee;
+          width: 42px; height: 42px;
+          border-radius: 10px;
+          overflow: hidden;
+          background: #f8fafc;
+          border: 1px solid var(--border);
         }
         .logo-box img { width: 100%; height: 100%; object-fit: cover; }
         
-        .logo-text h1 { margin: 0; font-size: 18px; color: var(--primary); font-weight: 800; }
-        .logo-text span { font-size: 11px; color: var(--text-secondary); }
+        .title { margin: 0; font-size: 18px; font-weight: 800; color: var(--primary); line-height: 1; }
+        .subtitle { font-size: 11px; color: var(--text-muted); }
 
-        .nav-links {
+        .nav {
           display: flex;
-          gap: 4px;
-          background: #f3f4f6;
+          gap: 6px;
+          background: #f1f5f9;
           padding: 4px;
-          border-radius: 10px;
+          border-radius: 12px;
         }
-        .link {
-          padding: 6px 16px;
+        .nav-link {
+          padding: 8px 16px;
           font-size: 14px;
-          font-weight: 500;
-          color: var(--text-secondary);
+          font-weight: 600;
+          color: var(--text-muted);
           border-radius: 8px;
+          transition: 0.2s;
         }
-        .link.active {
+        .nav-link:hover { color: var(--text-main); background: rgba(255,255,255,0.5); }
+        .nav-link.active {
           background: #fff;
           color: var(--primary);
-          box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-          font-weight: 700;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.05);
         }
-        .link:hover:not(.active) { color: var(--text-main); }
 
-        .btn-admin {
+        .btn-login {
           font-size: 13px;
-          color: var(--primary);
           font-weight: 700;
-          padding: 8px 12px;
-          border-radius: 6px;
-          background: rgba(30, 58, 138, 0.05);
+          color: var(--primary);
+          padding: 8px 14px;
+          background: var(--primary-light);
+          border-radius: 8px;
         }
-        .btn-admin:hover { background: rgba(30, 58, 138, 0.1); }
+        .btn-login:hover { background: #dbeafe; }
 
-        @media(max-width: 768px) {
-          .nav-links { display: none; } /* يفضل عمل قائمة موبايل لاحقاً */
+        @media (max-width: 768px) {
+          .nav { display: none; }
         }
       `}</style>
     </header>
