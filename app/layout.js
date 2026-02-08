@@ -1,4 +1,7 @@
 import './globals.css';
+import Header from '@/components/Header';
+import Footer from '@/components/Footer';
+import WhatsAppBar from '@/components/WhatsAppBar';
 
 export const metadata = {
   title: 'عقار أبحر',
@@ -8,7 +11,16 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="ar" dir="rtl">
-      <body>{children}</body>
+      <body>
+        <div className="appShell">
+          <Header />
+          <main className="appMain">
+            {children}
+          </main>
+          <Footer />
+          <WhatsAppBar />
+        </div>
+      </body>
     </html>
   );
 }

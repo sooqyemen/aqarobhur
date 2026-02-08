@@ -1,9 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import Header from '@/components/Header';
-import WhatsAppBar, { buildWhatsAppLink } from '@/components/WhatsAppBar';
-import Footer from '@/components/Footer';
+import { buildWhatsAppLink } from '@/components/WhatsAppBar';
 import { fetchListingById } from '@/lib/listings';
 import { formatPriceSAR, statusBadge } from '@/lib/format';
 
@@ -35,9 +33,7 @@ export default function ListingDetails({ params }) {
   }, [item]);
 
   return (
-    <>
-      <Header />
-      <main className="container" style={{ paddingTop: 14 }}>
+    <div className="container" style={{ paddingTop: 16 }}>
         {loading ? (
           <div className="muted">جاري التحميل…</div>
         ) : !item ? (
@@ -97,10 +93,6 @@ export default function ListingDetails({ params }) {
             </div>
           </div>
         )}
-        <Footer />
-      </main>
-
-      <WhatsAppBar />
-    </>
+    </div>
   );
 }

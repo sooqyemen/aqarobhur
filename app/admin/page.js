@@ -1,8 +1,6 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import Header from '@/components/Header';
-import Footer from '@/components/Footer';
 import { getFirebase } from '@/lib/firebaseClient';
 import { signInWithEmailAndPassword, onAuthStateChanged, signOut } from 'firebase/auth';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -157,9 +155,7 @@ export default function AdminPage() {
 
   if (!user) {
     return (
-      <>
-        <Header />
-        <main className="container" style={{ paddingTop: 14 }}>
+      <div className="container" style={{ paddingTop: 16 }}>
           <h1 style={{ margin: '6px 0 4px' }}>تسجيل دخول الأدمن</h1>
           <div className="muted">سجّل بحساب Email/Password الذي أنشأته في Firebase Auth</div>
 
@@ -187,16 +183,13 @@ export default function AdminPage() {
               ) : null}
             </form>
           </section>
-        </main>
-      </>
+      </div>
     );
   }
 
   if (!isAdmin) {
     return (
-      <>
-        <Header />
-        <main className="container" style={{ paddingTop: 14 }}>
+      <div className="container" style={{ paddingTop: 16 }}>
           <h1 style={{ margin: '6px 0 4px' }}>غير مصرح</h1>
           <div className="muted">هذا الحساب ليس ضمن قائمة الأدمن.</div>
           <section className="card" style={{ marginTop: 12 }}>
@@ -206,15 +199,12 @@ export default function AdminPage() {
             </div>
             <div style={{ marginTop: 12 }}><button className="btn" onClick={logout}>تسجيل خروج</button></div>
           </section>
-        </main>
-      </>
+      </div>
     );
   }
 
   return (
-    <>
-      <Header />
-      <main className="container" style={{ paddingTop: 14 }}>
+    <div className="container" style={{ paddingTop: 16 }}>
         <div className="row" style={{ justifyContent: 'space-between' }}>
           <div>
             <h1 style={{ margin: '6px 0 4px' }}>لوحة الأدمن</h1>
@@ -401,7 +391,7 @@ https://..." />
             ) : (
               <div style={{ marginTop: 10, display:'grid', gap:10 }}>
                 {list.map(item => (
-                  <div key={item.id} className="card" style={{ background:'#fff' }}>
+                  <div key={item.id} className="card">
                     <div className="row" style={{ justifyContent:'space-between' }}>
                       <div style={{ fontWeight: 900 }}>{item.title || 'عرض'}</div>
                       {statusBadge(item.status)}
@@ -423,8 +413,6 @@ https://..." />
             )}
           </section>
         )}
-        <Footer />
-      </main>
-    </>
+    </div>
   );
 }

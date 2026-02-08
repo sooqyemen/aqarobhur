@@ -1,8 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import Header from '@/components/Header';
-import WhatsAppBar, { buildWhatsAppLink } from '@/components/WhatsAppBar';
+import { buildWhatsAppLink } from '@/components/WhatsAppBar';
 import { createRequest } from '@/lib/listings';
 import { NEIGHBORHOODS } from '@/lib/taxonomy';
 import { formatPriceSAR } from '@/lib/format';
@@ -54,8 +53,8 @@ function Section({ title, children }) {
     <section className="card" style={{ marginTop: 12, overflow: 'hidden' }}>
       <div
         style={{
-          background: '#1f8b4c',
-          color: '#fff',
+          background: 'linear-gradient(180deg, rgba(214,179,91,.95), rgba(180,137,45,.92))',
+          color: '#0b0f16',
           padding: '10px 12px',
           fontWeight: 800,
           fontSize: 14,
@@ -229,9 +228,7 @@ export default function RequestPage() {
   }
 
   return (
-    <>
-      <Header />
-      <main className="container" style={{ paddingTop: 14 }}>
+    <div className="container" style={{ paddingTop: 16 }}>
         <h1 style={{ margin: '6px 0 4px' }}>إنشاء طلب</h1>
         <div className="muted">املأ البيانات التالية وسيتم حفظ الطلب ثم يمكنك إرساله على واتساب.</div>
 
@@ -410,8 +407,6 @@ export default function RequestPage() {
               </div>
             </Section>
 
-            <footer className="footer muted">نرد عليك بأقرب وقت. إذا تحتاج رد فوري اضغط زر واتساب أسفل الصفحة.</footer>
-
             <style jsx>{`
               /* جعل الشبكة أقرب للفيديو على الشاشات الصغيرة */
               :global(.grid) { gap: 12px; }
@@ -421,8 +416,6 @@ export default function RequestPage() {
             `}</style>
           </form>
         )}
-      </main>
-      <WhatsAppBar />
-    </>
+    </div>
   );
 }

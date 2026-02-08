@@ -1,8 +1,6 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import Header from '@/components/Header';
-import WhatsAppBar from '@/components/WhatsAppBar';
 import ListingCard from '@/components/ListingCard';
 import ChipsRow from '@/components/ChipsRow';
 import { fetchListings } from '@/lib/listings';
@@ -62,9 +60,7 @@ export default function ListingsPage() {
   }
 
   return (
-    <>
-      <Header />
-      <main className="container" style={{ paddingTop: 14 }}>
+    <div className="container" style={{ paddingTop: 16 }}>
         <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-end' }}>
           <div>
             <h1 style={{ margin: '6px 0 4px' }}>كل العروض</h1>
@@ -155,18 +151,14 @@ export default function ListingsPage() {
             </>
           )}
         </section>
-
-        <footer className="footer muted">إذا ما لقيت اللي تبيه، أرسل طلبك وسنجهز لك خيارات مناسبة.</footer>
-      </main>
-
-      <WhatsAppBar />
-
+      
       <style jsx>{`
         .filterBar {
           position: sticky;
-          top: 10px;
+          top: 74px;
           z-index: 20;
-          backdrop-filter: blur(6px);
+          backdrop-filter: blur(10px);
+          background: rgba(10, 13, 18, 0.55);
         }
         .filterGrid {
           display: grid;
@@ -192,6 +184,6 @@ export default function ListingsPage() {
           }
         }
       `}</style>
-    </>
+    </div>
   );
 }

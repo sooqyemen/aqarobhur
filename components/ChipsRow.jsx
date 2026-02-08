@@ -1,5 +1,6 @@
 'use client';
 
+// نفس ChipsRow.js (موجودة للحفاظ على التوافق إن كان أي ملف يستورد .jsx صراحة)
 export default function ChipsRow({ value, options, onChange, disabled }) {
   return (
     <div className="chipsOuter" aria-disabled={disabled ? 'true' : 'false'}>
@@ -32,20 +33,30 @@ export default function ChipsRow({ value, options, onChange, disabled }) {
           gap: 8px;
           white-space: nowrap;
         }
+
         .chip {
           flex: 0 0 auto;
-          border: 1px solid #e5e7eb;
-          background: #fff;
+          border: 1px solid var(--border);
+          background: rgba(255,255,255,0.04);
+          color: var(--text);
           padding: 8px 12px;
           border-radius: 999px;
           font-weight: 900;
           cursor: pointer;
-          transition: 120ms;
+          transition: transform 120ms ease, background 120ms ease, border-color 120ms ease;
         }
+        .chip:hover {
+          transform: translateY(-1px);
+          background: rgba(255,255,255,0.06);
+          border-color: rgba(255,255,255,0.18);
+        }
+
         .chipActive {
-          border-color: #1d4ed8;
-          background: rgba(29, 78, 216, 0.08);
+          border-color: rgba(214,179,91,0.55);
+          background: rgba(214,179,91,0.12);
+          color: #f6f0df;
         }
+
         .chipsOuter[aria-disabled='true'] {
           opacity: 0.55;
         }
@@ -53,11 +64,10 @@ export default function ChipsRow({ value, options, onChange, disabled }) {
           cursor: not-allowed;
         }
 
-        /* أصغر على الجوال */
         @media (max-width: 640px) {
           .chip {
             padding: 7px 10px;
-            font-weight: 800;
+            font-weight: 850;
           }
         }
       `}</style>
