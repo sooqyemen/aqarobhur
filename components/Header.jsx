@@ -39,9 +39,9 @@ export default function Header() {
           height: 38px;
           border-radius: 12px;
           overflow: hidden;
-          border: 1px solid rgba(214,179,91,.45);
-          background: linear-gradient(180deg, rgba(214,179,91,.95), rgba(180,137,45,.92));
-          box-shadow: 0 12px 28px rgba(214,179,91,.18);
+          border: 1px solid var(--border);
+          background: #fff;
+          box-shadow: 0 8px 24px rgba(16, 24, 40, 0.08);
           display: flex;
           align-items: center;
           justify-content: center;
@@ -51,6 +51,10 @@ export default function Header() {
           height: 100%;
           object-fit: cover;
           display: block;
+        }
+        :global(.btnActive) {
+          border-color: rgba(29, 78, 216, 0.35) !important;
+          background: rgba(29, 78, 216, 0.06) !important;
         }
       `}</style>
     </header>
