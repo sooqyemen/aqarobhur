@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Header from '@/components/Header';
 import WhatsAppBar, { buildWhatsAppLink } from '@/components/WhatsAppBar';
+import Footer from '@/components/Footer';
 import { fetchListingById } from '@/lib/listings';
 import { formatPriceSAR, statusBadge } from '@/lib/format';
 
@@ -96,8 +97,7 @@ export default function ListingDetails({ params }) {
             </div>
           </div>
         )}
-
-        <footer className="footer muted">إذا أعجبك العرض، أرسل طلبك وسنرجع لك بأقرب وقت.</footer>
+        <Footer />
       </main>
 
       <WhatsAppBar />
