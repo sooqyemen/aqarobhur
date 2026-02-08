@@ -1,60 +1,75 @@
-:root{
-  --bg:#fff; --text:#0b1220; --muted:#667085;
-  --card:#f7f8fa; --border:#e5e7eb;
-  --blue:#1d4ed8; --gold:#c9a227;
-  --danger:#b42318; --ok:#027a48; --warn:#b54708;
+/* app/globals.css */
+@import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap');
+
+:root {
+  /* ألوان الهوية البصرية الجديدة - أزرق ملكي وذهبي */
+  --bg-main: #f8f9fa;       /* خلفية عامة فاتحة جداً */
+  --bg-surface: #ffffff;    /* خلفية الكروت */
+  
+  --primary: #1e3a8a;       /* أزرق غامق فخم */
+  --primary-hover: #172554;
+  
+  --accent: #d97706;        /* ذهبي/برتقالي للتميز */
+  
+  --text-main: #111827;     /* أسود غير صريح */
+  --text-secondary: #6b7280;/* رمادي للنصوص الفرعية */
+  --border: #e5e7eb;
+  
+  --success: #059669;       /* أخضر للبيع/متاح */
+  --danger: #dc2626;        /* أحمر للمباع */
+  
+  /* ظلال ناعمة (Soft Shadows) */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1);
 }
 
-*{box-sizing:border-box}
-html,body{margin:0;padding:0;background:var(--bg);color:var(--text);
-  font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,"Apple Color Emoji","Segoe UI Emoji";}
-a{color:inherit;text-decoration:none}
+* { box-sizing: border-box; }
 
-.container{width:min(1100px,calc(100% - 28px));margin:0 auto}
-.row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
-.card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px}
-.muted{color:var(--muted)}
-.input,.select{width:100%;padding:11px 12px;border:1px solid var(--border);border-radius:12px;background:#fff;outline:none}
-.input:focus,.select:focus{border-color:#cbd5ff;box-shadow:0 0 0 4px rgba(29,78,216,.08)}
-.btn{cursor:pointer;border:1px solid var(--border);background:#fff;padding:10px 12px;border-radius:12px}
-.btn:hover{background:#fafafa}
-.btnPrimary{cursor:pointer;border:1px solid transparent;background:var(--blue);color:#fff;padding:10px 12px;border-radius:12px}
-.btnPrimary:hover{filter:brightness(.95)}
-.btnDanger{cursor:pointer;border:1px solid transparent;background:var(--danger);color:#fff;padding:10px 12px;border-radius:12px}
+html, body {
+  margin: 0; padding: 0;
+  background: var(--bg-main);
+  color: var(--text-main);
+  font-family: 'Tajawal', sans-serif; /* تطبيق الخط الجديد */
+  direction: rtl;
+}
 
-.badge{display:inline-flex;align-items:center;padding:4px 10px;border-radius:999px;border:1px solid var(--border);background:#fff;font-size:12px}
-.badge.ok{border-color:rgba(2,122,72,.25);background:rgba(2,122,72,.06);color:var(--ok)}
-.badge.warn{border-color:rgba(181,71,8,.25);background:rgba(181,71,8,.06);color:var(--warn)}
-.badge.sold{border-color:rgba(180,35,24,.25);background:rgba(180,35,24,.06);color:var(--danger)}
+a { text-decoration: none; color: inherit; transition: 0.2s; }
 
-.header{position:sticky;top:0;z-index:20;background:rgba(255,255,255,.92);
-  backdrop-filter:blur(10px);border-bottom:1px solid var(--border)}
-.headerInner{display:flex;align-items:center;justify-content:space-between;padding:12px 0;gap:10px}
-.brand{display:flex;align-items:center;gap:10px}
-.brandMark{width:38px;height:38px;border-radius:12px;background:linear-gradient(135deg,var(--blue),#0ea5e9);
-  position:relative;box-shadow:0 8px 24px rgba(29,78,216,.18)}
-.brandMark:after{content:"";position:absolute;inset:0;background:radial-gradient(circle at 30% 30%,rgba(255,255,255,.35),transparent 55%);border-radius:12px}
-.brandTitle{font-weight:800;letter-spacing:.2px}
-.nav{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+/* تنسيق عام للحاوية */
+.container {
+  width: min(1200px, 92%);
+  margin: 0 auto;
+}
 
-.hero{padding:18px 0 6px}
-.wave{width:100%;height:12px;border-radius:999px;background:linear-gradient(90deg,var(--blue),var(--gold),var(--blue));opacity:.9}
+/* تنسيق الأزرار الافتراضي */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 1px solid var(--border);
+  background: var(--bg-surface);
+}
 
-.grid{display:grid;grid-template-columns:repeat(12,1fr);gap:12px}
-.col-6{grid-column:span 6}.col-4{grid-column:span 4}.col-3{grid-column:span 3}.col-12{grid-column:span 12}
-@media (max-width:900px){.col-6,.col-4,.col-3{grid-column:span 12}}
+.btn:hover { background: #f3f4f6; }
 
-.cards{display:grid;grid-template-columns:repeat(12,1fr);gap:12px}
-.cardItem{grid-column:span 4}
-@media (max-width:900px){.cardItem{grid-column:span 12}}
+.btn-primary {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+.btn-primary:hover { background: var(--primary-hover); }
 
-.listingThumb{width:100%;aspect-ratio:16/10;border-radius:12px;border:1px solid var(--border);
-  background:#fff;overflow:hidden;display:flex;align-items:center;justify-content:center}
-.listingThumb img{width:100%;height:100%;object-fit:cover;display:block}
-
-.footer{padding:26px 0 80px}
-
-.whatsBar{position:fixed;left:10px;right:10px;bottom:10px;z-index:30}
-.whatsInner{width:min(1100px,calc(100% - 28px));margin:0 auto;background:rgba(255,255,255,.95);
-  border:1px solid var(--border);border-radius:14px;padding:10px 12px;display:flex;align-items:center;
-  justify-content:space-between;gap:10px;box-shadow:0 10px 30px rgba(16,24,40,.12)}
+/* تحسين شكل الشبكة (Grid) */
+.grid-listings {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 24px;
+  padding-bottom: 40px;
+}
