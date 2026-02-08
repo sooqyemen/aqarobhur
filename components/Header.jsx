@@ -4,57 +4,104 @@ import { usePathname } from 'next/navigation';
 
 export default function Header() {
   const pathname = usePathname() || '/';
-  const isActive = (href) => (href === '/' ? pathname === '/' : pathname.startsWith(href));
+  
+  const isActive = (path) => pathname === path;
 
   return (
     <header className="header">
-      <div className="container headerInner">
-        <Link className="brand" href="/" aria-label="عقار أبحر - الصفحة الرئيسية">
-          <div className="brandLogo" aria-hidden="true">
-            <img src="/logo-mark.svg" alt="" />
+      <div className="container header-inner">
+        {/* اللوجو */}
+        <Link href="/" className="logo-area">
+          <div className="logo-box">
+            <img src="/logo-mark.svg" alt="شعار" />
           </div>
-          <div>
-            <div className="brandTitle">عقار أبحر</div>
-            <div className="muted" style={{ fontSize: 12 }}>عروض مباشرة • شمال جدة</div>
+          <div className="logo-text">
+            <h1>عقار أبحر</h1>
+            <span>شمال جدة</span>
           </div>
         </Link>
 
-        <nav className="nav">
-          <Link className={isActive('/') ? 'btn btnActive' : 'btn'} href="/" aria-current={isActive('/') ? 'page' : undefined}>الرئيسية</Link>
-          <Link className={isActive('/listings') ? 'btn btnActive' : 'btn'} href="/listings" aria-current={isActive('/listings') ? 'page' : undefined}>كل العروض</Link>
-          <Link className={isActive('/request') ? 'btn btnActive' : 'btn'} href="/request" aria-current={isActive('/request') ? 'page' : undefined}>أرسل طلبك</Link>
-          <Link className={isActive('/admin') ? 'btn btnActive' : 'btn'} href="/admin" aria-current={isActive('/admin') ? 'page' : undefined}>الأدمن</Link>
+        {/* القائمة */}
+        <nav className="nav-links">
+          <Link href="/" className={isActive('/') ? 'link active' : 'link'}>الرئيسية</Link>
+          <Link href="/listings" className={isActive('/listings') ? 'link active' : 'link'}>العروض</Link>
+          <Link href="/request" className={isActive('/request') ? 'link active' : 'link'}>طلب عقار</Link>
         </nav>
+
+        {/* زر جانبي */}
+        <div className="actions">
+          <Link href="/admin" className="btn-admin">دخول الملاك</Link>
+        </div>
       </div>
 
       <style jsx>{`
-        .brand {
+        .header {
+          position: sticky;
+          top: 0;
+          z-index: 50;
+          background: rgba(255, 255, 255, 0.9);
+          backdrop-filter: blur(8px);
+          border-bottom: 1px solid var(--border);
+          height: 72px;
+          display: flex;
+          align-items: center;
+        }
+        .header-inner {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+        }
+        .logo-area {
           display: flex;
           align-items: center;
           gap: 10px;
-          text-decoration: none;
         }
-        .brandLogo {
-          width: 38px;
-          height: 38px;
-          border-radius: 12px;
-          overflow: hidden;
-          border: 1px solid var(--border);
-          background: #fff;
-          box-shadow: 0 8px 24px rgba(16, 24, 40, 0.08);
+        .logo-box {
+          width: 40px; 
+          height: 40px; 
+          border-radius: 8px; 
+          overflow: hidden; 
+          background: #eee;
+        }
+        .logo-box img { width: 100%; height: 100%; object-fit: cover; }
+        
+        .logo-text h1 { margin: 0; font-size: 18px; color: var(--primary); font-weight: 800; }
+        .logo-text span { font-size: 11px; color: var(--text-secondary); }
+
+        .nav-links {
           display: flex;
-          align-items: center;
-          justify-content: center;
+          gap: 4px;
+          background: #f3f4f6;
+          padding: 4px;
+          border-radius: 10px;
         }
-        .brandLogo img {
-          width: 100%;
-          height: 100%;
-          object-fit: cover;
-          display: block;
+        .link {
+          padding: 6px 16px;
+          font-size: 14px;
+          font-weight: 500;
+          color: var(--text-secondary);
+          border-radius: 8px;
         }
-        :global(.btnActive) {
-          border-color: rgba(29, 78, 216, 0.35) !important;
-          background: rgba(29, 78, 216, 0.06) !important;
+        .link.active {
+          background: #fff;
+          color: var(--primary);
+          box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+          font-weight: 700;
+        }
+        .link:hover:not(.active) { color: var(--text-main); }
+
+        .btn-admin {
+          font-size: 13px;
+          color: var(--primary);
+          font-weight: 700;
+          padding: 8px 12px;
+          border-radius: 6px;
+          background: rgba(30, 58, 138, 0.05);
+        }
+        .btn-admin:hover { background: rgba(30, 58, 138, 0.1); }
+
+        @media(max-width: 768px) {
+          .nav-links { display: none; } /* يفضل عمل قائمة موبايل لاحقاً */
         }
       `}</style>
     </header>
