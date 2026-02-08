@@ -1,7 +1,11 @@
+'use client';
+
 import Link from 'next/link';
 
 export default function Footer() {
   const phone = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || '';
+  const waDigits = String(phone).replace(/\D/g, '');
+  const waLink = waDigits ? `https://wa.me/${waDigits}` : '';
 
   return (
     <footer className="footer">
@@ -14,8 +18,10 @@ export default function Footer() {
               <div className="muted" style={{ fontSize: 12 }}>عروض مباشرة • شمال جدة</div>
             </div>
           </div>
-          <p className="muted" style={{ margin: '10px 0 0', lineHeight: 1.8 }}>
-            نوفر لك عروض مختارة، ونستقبل طلبك عبر الموقع أو واتساب، ونرجع لك بأفضل الخيارات حسب الحي والميزانية.
+
+          <p className="muted" style={{ margin: '10px 0 0', lineHeight: 1.85 }}>
+            منصة عروض عقارية مركّزة على شمال جدة (أبحر وما حولها). تصفّح العروض المتاحة أو أرسل طلبك
+            (حي/جزء/ميزانية) ونجهز لك خيارات مناسبة.
           </p>
         </div>
 
@@ -31,24 +37,35 @@ export default function Footer() {
 
         <div className="contact">
           <div className="label muted">التواصل</div>
+
+          <div className="row" style={{ marginTop: 8 }}>
+            {waLink ? (
+              <a className="btnPrimary" href={waLink} target="_blank" rel="noreferrer">
+                واتساب مباشر
+              </a>
+            ) : (
+              <Link className="btnPrimary" href="/request">
+                أرسل طلبك
+              </Link>
+            )}
+
+            <Link className="btn" href="/listings">تصفح العروض</Link>
+          </div>
+
           {phone ? (
-            <div className="muted" style={{ marginTop: 8, fontSize: 13 }}>
+            <div className="muted" style={{ marginTop: 10, fontSize: 13 }}>
               رقم التواصل: {phone}
             </div>
-          ) : (
-            <div className="muted" style={{ marginTop: 8, fontSize: 13 }}>
-              ضع رقم الواتساب في متغير NEXT_PUBLIC_WHATSAPP_NUMBER
-            </div>
-          )}
-          <div className="muted" style={{ marginTop: 8, fontSize: 13, lineHeight: 1.8 }}>
-            العروض المعروضة “مباشر” هي عروض لدينا مباشرة. للطلبات الخاصة (حي/جزء/ميزانية) استخدم صفحة “أرسل طلبك”.
+          ) : null}
+
+          <div className="muted" style={{ marginTop: 10, fontSize: 13, lineHeight: 1.85 }}>
+            العروض المعروضة للزوار تظهر فقط (متاح/محجوز). حالة (مباع/ملغي) تكون مخفية تلقائياً لضمان
+            عدم إحراج العميل.
           </div>
         </div>
       </div>
 
-      <div className="container copy muted">
-        © {new Date().getFullYear()} عقار أبحر — جميع الحقوق محفوظة
-      </div>
+      <div className="container copy muted">© {new Date().getFullYear()} عقار أبحر — جميع الحقوق محفوظة</div>
 
       <style jsx>{`
         .footerGrid {
@@ -60,7 +77,7 @@ export default function Footer() {
         }
         @media (min-width: 900px) {
           .footerGrid {
-            grid-template-columns: 1.6fr 1fr 1fr;
+            grid-template-columns: 1.55fr 1fr 1fr;
             gap: 18px;
             align-items: start;
           }
