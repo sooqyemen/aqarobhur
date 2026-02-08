@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Header from '@/components/Header';
 import { getFirebase } from '@/lib/firebaseClient';
 import { signInWithEmailAndPassword, onAuthStateChanged, signOut } from 'firebase/auth';
+import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { isAdminUser } from '@/lib/admin';
 import { adminCreateListing, adminUpdateListing, fetchListings } from '@/lib/listings';
 import { DEAL_TYPES, NEIGHBORHOODS, PROPERTY_TYPES, STATUS_OPTIONS } from '@/lib/taxonomy';
@@ -20,7 +21,7 @@ function Field({ label, children, hint }) {
 }
 
 export default function AdminPage() {
-  const { auth } = getFirebase();
+  const { auth, storage } = getFirebase();
 
   const [user, setUser] = useState(null);
   const [email, setEmail] = useState('');
@@ -30,6 +31,10 @@ export default function AdminPage() {
 
   const [tab, setTab] = useState('create');
   const [createdId, setCreatedId] = useState('');
+
+  const [selectedFiles, setSelectedFiles] = useState([]);
+  const [uploading, setUploading] = useState(false);
+  const [uploadErr, setUploadErr] = useState('');
 
   const [createForm, setCreateForm] = useState({
     title: '',
@@ -46,12 +51,61 @@ export default function AdminPage() {
     imagesText: '',
   });
 
+  const [selectedFiles, setSelectedFiles] = useState([]);
+  const [uploading, setUploading] = useState(false);
+  const [uploadErr, setUploadErr] = useState('');
+
   const [list, setList] = useState([]);
   const [loadingList, setLoadingList] = useState(false);
 
   const isAdmin = useMemo(() => isAdminUser(user), [user]);
 
   useEffect(() => onAuthStateChanged(auth, (u) => setUser(u || null)), [auth]);
+
+  async function uploadSelectedImages() {
+    setUploadErr('');
+    if (!user) {
+      setUploadErr('لا يمكن رفع الصور قبل تسجيل الدخول.');
+      return;
+    }
+    if (!selectedFiles || selectedFiles.length === 0) {
+      setUploadErr('اختر صورة أو أكثر.');
+      return;
+    }
+    if (!storage) {
+      setUploadErr('Firebase Storage غير مُعدّ. تأكد من NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET وتمكين Storage في Firebase.');
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const urls = [];
+      for (let i = 0; i < selectedFiles.length; i++) {
+        const file = selectedFiles[i];
+        const safeName = String(file.name || 'image')
+          .replace(/\s+/g, '_')
+          .replace(/[^a-zA-Z0-9_\.-]/g, '')
+          .slice(0, 80);
+        const path = `abhur_images/${user.uid}/${Date.now()}_${i}_${safeName}`;
+        const r = storageRef(storage, path);
+        await uploadBytes(r, file, { contentType: file.type || 'image/jpeg' });
+        const url = await getDownloadURL(r);
+        urls.push(url);
+      }
+
+      setCreateForm((p) => {
+        const current = String(p.imagesText || '').trim();
+        const merged = [...(current ? [current] : []), ...urls].join('\n');
+        return { ...p, imagesText: merged };
+      });
+      setSelectedFiles([]);
+    } catch (e) {
+      console.error(e);
+      setUploadErr(e?.message || 'فشل رفع الصور.');
+    } finally {
+      setUploading(false);
+    }
+  }
 
   async function login(e) {
     e.preventDefault();
@@ -261,7 +315,65 @@ export default function AdminPage() {
               </div>
 
               <div className="col-12">
-                <Field label="روابط الصور (كل رابط في سطر)" hint="هذه النسخة تقبل روابط صور جاهزة.">
+                <Field
+                  label="رفع الصور (اختياري)"
+                  hint="اختر صور ثم اضغط (رفع الصور) وسيتم إضافة الروابط تلقائياً في خانة روابط الصور."
+                >
+                  <input
+                    className="input"
+                    type="file"
+                    multiple
+                    accept="image/*"
+                    onChange={(e) => setSelectedFiles(Array.from(e.target.files || []))}
+                  />
+
+                  {selectedFiles.length ? (
+                    <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 8 }}>
+                      {selectedFiles.slice(0, 6).map((f, idx) => {
+                        const src = URL.createObjectURL(f);
+                        return (
+                          <div key={idx} style={{ border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden', background: '#fff' }}>
+                            <img
+                              src={src}
+                              alt={f.name}
+                              style={{ width: '100%', height: 80, objectFit: 'cover', display: 'block' }}
+                              onLoad={() => URL.revokeObjectURL(src)}
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+
+                  <div className="row" style={{ marginTop: 10, justifyContent: 'flex-end' }}>
+                    <button
+                      type="button"
+                      className="btn"
+                      onClick={uploadSelectedImages}
+                      disabled={uploading || busy || !selectedFiles.length}
+                    >
+                      {uploading ? `جاري الرفع… (${selectedFiles.length})` : 'رفع الصور'}
+                    </button>
+                  </div>
+
+                  {uploadErr ? (
+                    <div
+                      style={{
+                        marginTop: 8,
+                        padding: '10px 12px',
+                        borderRadius: 12,
+                        border: '1px solid rgba(180,35,24,.25)',
+                        background: 'rgba(180,35,24,.05)',
+                      }}
+                    >
+                      {uploadErr}
+                    </div>
+                  ) : null}
+                </Field>
+              </div>
+
+              <div className="col-12">
+                <Field label="روابط الصور (كل رابط في سطر)" hint="يمكنك لصق روابط جاهزة، أو استخدم رفع الصور بالأعلى.">
                   <textarea className="input" rows={4} value={createForm.imagesText} onChange={(e) => setCreateForm({ ...createForm, imagesText: e.target.value })} placeholder="https://...
 https://..." />
                 </Field>

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import Header from '@/components/Header';
 import WhatsAppBar from '@/components/WhatsAppBar';
 import ListingCard from '@/components/ListingCard';
@@ -37,8 +38,13 @@ export default function HomePage() {
       <main className="container">
         <section className="hero">
           <div className="wave" />
-          <h1 style={{ margin: '14px 0 6px' }}>عروض عقار أبحر</h1>
-          <div className="muted">أحدث العروض المتاحة في أبحر الشمالية وشمال جدة</div>
+          <h1 style={{ margin: '14px 0 6px' }}>عقار أبحر</h1>
+          <div className="muted">عروض عقارية موثوقة في أبحر الشمالية وشمال جدة</div>
+
+          <div className="row" style={{ marginTop: 12 }}>
+            <Link className="btnPrimary" href="/request">أرسل طلبك الآن</Link>
+            <Link className="btn" href="/listings">تصفح كل العروض</Link>
+          </div>
         </section>
 
         <section className="card" style={{ marginTop: 12 }}>
@@ -52,13 +58,16 @@ export default function HomePage() {
             </div>
             <div className="col-6">
               <div className="muted" style={{ fontSize: 13, marginBottom: 6 }}>معلومة</div>
-              <div className="muted">هذه النسخة تعرض “المتاح/المحجوز” فقط. العروض “المباعة” لا تظهر للزوار.</div>
+              <div className="muted">العروض الظاهرة للزوار: “متاح / محجوز”. العروض “المباعة” لا تظهر.</div>
             </div>
           </div>
         </section>
 
         <section style={{ marginTop: 12 }}>
-          <h2 style={{ margin: '8px 0' }}>أحدث العروض</h2>
+          <div className="row" style={{ justifyContent: 'space-between' }}>
+            <h2 style={{ margin: '8px 0' }}>أحدث العروض</h2>
+            <Link className="btn" href="/listings">عرض الكل</Link>
+          </div>
           {loading ? (
             <div className="muted">جاري تحميل العروض…</div>
           ) : filtered.length === 0 ? (
