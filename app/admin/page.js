@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Header from '@/components/Header';
+import Footer from '@/components/Footer';
 import { getFirebase } from '@/lib/firebaseClient';
 import { signInWithEmailAndPassword, onAuthStateChanged, signOut } from 'firebase/auth';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -422,8 +423,7 @@ https://..." />
             )}
           </section>
         )}
-
-        <footer className="footer muted">الأمان: أنشئ حساب الأدمن في Firebase Auth ولا تضف تسجيل جديد للعموم.</footer>
+        <Footer />
       </main>
     </>
   );
