@@ -51,10 +51,6 @@ export default function AdminPage() {
     imagesText: '',
   });
 
-  const [selectedFiles, setSelectedFiles] = useState([]);
-  const [uploading, setUploading] = useState(false);
-  const [uploadErr, setUploadErr] = useState('');
-
   const [list, setList] = useState([]);
   const [loadingList, setLoadingList] = useState(false);
 
