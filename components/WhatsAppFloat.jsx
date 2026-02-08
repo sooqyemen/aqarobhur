@@ -2,7 +2,7 @@
 'use client';
 
 export default function WhatsAppFloat() {
-  const phoneNumber = '+966500000000';
+  const phoneNumber = '+966597520693';
   const message = 'مرحباً، أريد الاستفسار عن عروض عقار أبحر';
 
   const handleClick = () => {
