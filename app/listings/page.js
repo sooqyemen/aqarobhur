@@ -4,9 +4,8 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import ChipsRow from '@/components/ChipsRow';
 
-// Firebase (modular)
 import { initializeApp, getApps } from 'firebase/app';
-import { getFirestore, collection, getDocs, query, where, orderBy, limit } from 'firebase/firestore';
+import { getFirestore, collection, getDocs, query, orderBy, limit } from 'firebase/firestore';
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || '',
@@ -22,6 +21,7 @@ function getDb() {
   return getFirestore();
 }
 
+// عدّل/زِد الأحياء حسب شغلك
 const NEIGHBORHOODS = [
   'الزمرد',
   'الياقوت',
@@ -30,13 +30,6 @@ const NEIGHBORHOODS = [
   'اللؤلؤ',
   'النور',
   'الدرة',
-  'العبير',
-  'الجزيرة',
-  'اليسر',
-  'الفرقان',
-  'النجمة',
-  'الزهور',
-  'الغدير',
 ];
 
 const DEAL_OPTS = [
@@ -95,21 +88,12 @@ export default function ListingsPage() {
       }
 
       const db = getDb();
-
-      // ✅ جلب آخر 60 عرض (وبعدين نفلتر بالواجهة لتقليل التعقيد)
-      // إذا تبغى فلترة Firestore مباشرة (where متعدد) نقدر نعدّلها لاحقًا.
-      const q = query(
-        collection(db, 'listings'),
-        orderBy('createdAt', 'desc'),
-        limit(60)
-      );
-
+      const q = query(collection(db, 'listings'), orderBy('createdAt', 'desc'), limit(80));
       const snap = await getDocs(q);
       const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 
-      // فلترة بالواجهة حسب طلبك
       const filtered = rows.filter((x) => {
-        // نخفي المباع/الملغي افتراضيًا
+        // لا نعرض المباع/الملغي
         if (x.status && ['sold', 'canceled'].includes(String(x.status))) return false;
 
         if (filters.neighborhood && String(x.neighborhood || '') !== filters.neighborhood) return false;
@@ -144,16 +128,16 @@ export default function ListingsPage() {
           <h1 style={{ margin: '6px 0 4px' }}>جميع العروض</h1>
           <div className="muted">اختر الحي ثم بيع/إيجار ثم نوع العقار</div>
         </div>
-
         <button className="btn" onClick={clearAll} disabled={!filters.neighborhood && !filters.dealType && !filters.propertyType}>
           مسح
         </button>
       </div>
 
-      <section className="card" style={{ marginTop: 12 }}>
-        <div className="grid">
-          <div className="col-12">
-            <div className="muted" style={{ fontSize: 13, marginBottom: 6 }}>الحي</div>
+      {/* ✅ شريط فلترة ثابت */}
+      <section className="filterBar card">
+        <div className="filterGrid">
+          <div className="neigh">
+            <div className="muted label">الحي</div>
             <select
               className="select"
               value={filters.neighborhood}
@@ -167,13 +151,15 @@ export default function ListingsPage() {
             >
               <option value="">اختر الحي</option>
               {NEIGHBORHOODS.map((n) => (
-                <option key={n} value={n}>{n}</option>
+                <option key={n} value={n}>
+                  {n}
+                </option>
               ))}
             </select>
           </div>
 
-          <div className="col-12">
-            <div className="muted" style={{ fontSize: 13, marginBottom: 6 }}>بيع / إيجار</div>
+          <div className="deal">
+            <div className="muted label">بيع / إيجار</div>
             <ChipsRow
               value={filters.dealType}
               options={DEAL_OPTS}
@@ -182,8 +168,8 @@ export default function ListingsPage() {
             />
           </div>
 
-          <div className="col-12">
-            <div className="muted" style={{ fontSize: 13, marginBottom: 6 }}>نوع العقار</div>
+          <div className="ptype">
+            <div className="muted label">نوع العقار</div>
             <ChipsRow
               value={filters.propertyType}
               options={TYPE_OPTS}
@@ -231,14 +217,55 @@ export default function ListingsPage() {
                 </div>
 
                 <div className="row" style={{ marginTop: 10 }}>
-                  <Link className="btn" href={`/listing/${x.id}`}>التفاصيل</Link>
-                  <a className="btnPrimary" href={waLink(x)} target="_blank" rel="noreferrer">واتساب</a>
+                  <Link className="btn" href={`/listing/${x.id}`}>
+                    التفاصيل
+                  </Link>
+                  <a className="btnPrimary" href={waLink(x)} target="_blank" rel="noreferrer">
+                    واتساب
+                  </a>
                 </div>
               </div>
             ))}
           </div>
         )}
       </section>
+
+      <style jsx>{`
+        .filterBar {
+          margin-top: 12px;
+          position: sticky;
+          top: 10px;
+          z-index: 20;
+          backdrop-filter: blur(6px);
+        }
+        .filterGrid {
+          display: grid;
+          grid-template-columns: 1fr;
+          gap: 10px;
+        }
+        .label {
+          font-size: 12px;
+          margin-bottom: 6px;
+        }
+
+        /* على الشاشات الأكبر نخليها صفوف منظمة */
+        @media (min-width: 900px) {
+          .filterGrid {
+            grid-template-columns: 1.1fr 1fr 1fr;
+            align-items: end;
+          }
+        }
+
+        /* على الجوال نخليها مضغوطة */
+        @media (max-width: 640px) {
+          .filterBar {
+            top: 0px;
+          }
+          .label {
+            display: none;
+          }
+        }
+      `}</style>
     </main>
   );
 }
