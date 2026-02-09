@@ -10,16 +10,15 @@ import { DEAL_TYPES, NEIGHBORHOODS, PROPERTY_TYPES } from '@/lib/taxonomy';
 const DEAL_OPTS = DEAL_TYPES.map((d) => ({ label: d.label, value: d.key }));
 const TYPE_OPTS = PROPERTY_TYPES.map((p) => ({ label: p, value: p }));
 
-// مكون داخلي لقراءة الباراميترز من الرابط بأمان
 function ListingsContent() {
   const searchParams = useSearchParams();
 
-  // الحالة الأولية تأتي من الرابط (عشان الربط مع الصفحة الرئيسية)
+  // الحالة الأولية للفلاتر (تأتي من الرابط إذا تم التحويل من الصفحة الرئيسية)
   const [filters, setFilters] = useState({
     neighborhood: searchParams.get('neighborhood') || '',
     dealType: searchParams.get('dealType') || '',
     propertyType: searchParams.get('propertyType') || '',
-    search: '', // بحث نصي (رقم العرض أو العنوان)
+    search: '', // بحث نصي (رقم العرض، المخطط، العنوان)
   });
 
   const [sortOrder, setSortOrder] = useState('newest'); // newest, price_asc, price_desc
@@ -27,21 +26,22 @@ function ListingsContent() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
 
-  // هل الفلاتر مفعلة؟
+  // التحقق هل يوجد فلاتر مفعلة لتنشيط زر "مسح"
   const hasFilter = !!(filters.neighborhood || filters.dealType || filters.propertyType || filters.search);
 
   async function load() {
     setLoading(true);
     setErr('');
     try {
-      // نجلب الكل ثم نفلتر في المتصفح (Client-side) لسرعة التجاوب وتفادي تعقيد الفهارس
+      // نجلب كمية أكبر من البيانات (بدون فلترة السيرفر) ثم نفلتر في المتصفح
+      // هذا يضمن أن اختلاف التسميات البسيط لا يخفي النتائج
       const data = await fetchListings({ filters: {}, onlyPublic: false });
       setItems(Array.isArray(data) ? data : []);
     } catch (e) {
       console.error(e);
       const msg = String(e?.message || '');
       if (msg.includes('Missing or insufficient permissions')) {
-        setErr('تعذر تحميل العروض (صلاحيات). تأكد من تسجيل دخول الأدمن أو قواعد البيانات.');
+        setErr('تعذر تحميل العروض (صلاحيات). تأكد من تسجيل دخول الأدمن أو إعدادات القواعد.');
       } else {
         setErr('حدث خطأ أثناء تحميل البيانات.');
       }
@@ -52,30 +52,43 @@ function ListingsContent() {
 
   useEffect(() => {
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // منطق الفلترة والترتيب
+  // منطق الفلترة "الذكي" والترتيب
   const filtered = useMemo(() => {
     let res = items.filter((x) => {
-      // 1. استبعاد المباع/الملغي للزوار (إلا لو حبيت تظهرهم)
+      // 1. استبعاد المباع/الملغي للزوار
       if (!['available', 'reserved'].includes(String(x.status || ''))) return false;
 
-      // 2. فلتر الحي
-      if (filters.neighborhood && x.neighborhood !== filters.neighborhood) return false;
+      // 2. فلتر الحي (بحث مرن: هل النص يحتوي على الآخر؟)
+      if (filters.neighborhood) {
+        const itemNeigh = String(x.neighborhood || '').trim();
+        const filterNeigh = filters.neighborhood.trim();
+        // المطابقة المرنة: "الشراع" يطابق "حي الشراع" والعكس
+        if (!itemNeigh.includes(filterNeigh) && !filterNeigh.includes(itemNeigh)) {
+           return false;
+        }
+      }
 
-      // 3. فلتر نوع الصفقة
+      // 3. فلتر نوع الصفقة (بيع/إيجار)
       if (filters.dealType && x.dealType !== filters.dealType) return false;
 
-      // 4. فلتر نوع العقار
-      if (filters.propertyType && x.propertyType !== filters.propertyType) return false;
+      // 4. فلتر نوع العقار (بحث جزئي لضمان عدم فقدان النتائج)
+      if (filters.propertyType) {
+         const itemType = String(x.propertyType || '');
+         if (!itemType.includes(filters.propertyType)) return false;
+      }
 
-      // 5. البحث النصي (العنوان أو رقم العرض)
+      // 5. البحث النصي (شامل: العنوان، المعرف، المرجع، المخطط)
       if (filters.search) {
         const q = filters.search.toLowerCase();
         const title = (x.title || '').toLowerCase();
         const id = String(x.id || '');
-        const ref = String(x.ref || ''); // لو عندك حقل مرجع
-        if (!title.includes(q) && !id.includes(q) && !ref.includes(q)) return false;
+        const ref = String(x.ref || ''); 
+        const plan = String(x.plan || '');
+        
+        if (!title.includes(q) && !id.includes(q) && !ref.includes(q) && !plan.includes(q)) return false;
       }
 
       return true;
@@ -89,10 +102,11 @@ function ListingsContent() {
       if (sortOrder === 'price_desc') {
         return (b.price || 0) - (a.price || 0);
       }
-      // الافتراضي: الأحدث (بناءً على createdAt)
-      // نفترض أن البيانات القادمة من Firebase مرتبة، أو نرتبها يدوياً هنا لو احتجنا
-      // return (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0);
-      return 0; 
+      // الافتراضي: الأحدث (بناءً على تاريخ الإنشاء)
+      // إذا كانت التواريخ كـ Timestamps من Firebase
+      const tA = a.createdAt?.seconds || 0;
+      const tB = b.createdAt?.seconds || 0;
+      return tB - tA; 
     });
 
     return res;
@@ -116,12 +130,16 @@ function ListingsContent() {
         <div className="searchBox">
           <input 
             type="text" 
-            placeholder="بحث برقم العرض أو العنوان..." 
+            placeholder="بحث برقم العرض، المخطط..." 
             className="input"
             value={filters.search}
             onChange={(e) => setFilters(p => ({...p, search: e.target.value}))}
           />
-          <svg className="searchIcon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+          {/* أيقونة بحث بسيطة */}
+          <svg className="searchIcon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
         </div>
       </div>
 
@@ -129,7 +147,7 @@ function ListingsContent() {
       <section className="filterBar card">
         <div className="filterGrid">
           
-          {/* الحي */}
+          {/* فلتر الحي */}
           <div className="filterGroup">
             <label className="muted label">الحي</label>
             <select
@@ -144,7 +162,7 @@ function ListingsContent() {
             </select>
           </div>
 
-          {/* نوع الصفقة */}
+          {/* فلتر نوع الصفقة */}
           <div className="filterGroup">
             <label className="muted label">نوع العرض</label>
             <ChipsRow
@@ -154,7 +172,7 @@ function ListingsContent() {
             />
           </div>
 
-          {/* نوع العقار */}
+          {/* فلتر نوع العقار */}
           <div className="filterGroup">
             <label className="muted label">نوع العقار</label>
             <ChipsRow
@@ -165,7 +183,7 @@ function ListingsContent() {
           </div>
         </div>
         
-        {/* سطر التحكم الإضافي (الترتيب + مسح الفلاتر) */}
+        {/* أدوات التحكم (الترتيب + التحديث) */}
         <div className="filterActions">
            <div className="sortGroup">
              <span className="muted label" style={{marginBottom:0}}>الترتيب:</span>
@@ -191,7 +209,7 @@ function ListingsContent() {
         </div>
       </section>
 
-      {/* منطقة عرض النتائج */}
+      {/* منطقة النتائج */}
       <section style={{ marginTop: 20 }}>
         {err ? (
           <div className="card" style={{ background: 'rgba(255,77,77,0.1)', borderColor: 'rgba(255,77,77,0.2)' }}>
@@ -202,12 +220,16 @@ function ListingsContent() {
         ) : filtered.length === 0 ? (
           <div className="card muted" style={{textAlign:'center', padding:40}}>
             لا توجد نتائج تطابق بحثك.
-            {hasFilter && <div style={{marginTop:10, color:'var(--gold)', cursor:'pointer'}} onClick={clearAll}>مسح جميع الفلاتر</div>}
+            {hasFilter && (
+              <div style={{marginTop:10, color:'var(--gold)', cursor:'pointer', fontWeight:'bold'}} onClick={clearAll}>
+                مسح جميع الفلاتر
+              </div>
+            )}
           </div>
         ) : (
           <>
-            <div className="muted" style={{ marginBottom: 10, fontSize: 13 }}>
-              تم العثور على {filtered.length} عقار
+            <div className="muted" style={{ marginBottom: 12, fontSize: 13, display: 'flex', justifyContent: 'space-between' }}>
+              <span>تم العثور على <strong>{filtered.length}</strong> عقار</span>
             </div>
             <div className="cards">
               {filtered.map((item) => (
@@ -225,7 +247,7 @@ function ListingsContent() {
           display: flex;
           flex-direction: column;
           gap: 16px;
-          margin-bottom: 16px;
+          margin-bottom: 20px;
         }
         @media (min-width: 768px) {
           .topHeader {
@@ -238,10 +260,12 @@ function ListingsContent() {
         .searchBox {
           position: relative;
           width: 100%;
-          max-width: 320px;
+          max-width: 350px;
         }
         .searchBox .input {
-          padding-left: 40px; /* مكان الأيقونة */
+          padding-left: 40px; 
+          background: rgba(255,255,255,0.05);
+          border-color: rgba(255,255,255,0.1);
         }
         .searchIcon {
           position: absolute;
@@ -250,16 +274,18 @@ function ListingsContent() {
           transform: translateY(-50%);
           color: var(--muted);
           opacity: 0.7;
+          pointer-events: none;
         }
 
         .filterBar {
           position: sticky;
-          top: 20px; /* Sticky effect */
-          z-index: 20;
+          top: 10px;
+          z-index: 50;
           background: rgba(10, 13, 18, 0.85);
-          backdrop-filter: blur(12px);
-          border: 1px solid var(--border);
-          padding: 16px;
+          backdrop-filter: blur(16px);
+          border: 1px solid rgba(255,255,255,0.1);
+          padding: 18px;
+          box-shadow: 0 10px 30px rgba(0,0,0,0.3);
         }
         
         .filterGrid {
@@ -268,11 +294,11 @@ function ListingsContent() {
           gap: 16px;
           border-bottom: 1px solid rgba(255,255,255,0.08);
           padding-bottom: 16px;
-          margin-bottom: 12px;
+          margin-bottom: 14px;
         }
         @media (min-width: 900px) {
           .filterGrid {
-            grid-template-columns: 1fr 1fr 1fr;
+            grid-template-columns: 1fr 1fr 1.2fr;
             align-items: start;
           }
         }
@@ -282,6 +308,7 @@ function ListingsContent() {
           font-size: 12px;
           margin-bottom: 8px;
           font-weight: 700;
+          letter-spacing: 0.5px;
         }
 
         .filterActions {
@@ -289,19 +316,19 @@ function ListingsContent() {
           justify-content: space-between;
           align-items: center;
           flex-wrap: wrap;
-          gap: 10px;
+          gap: 12px;
         }
         
         .sortGroup {
           display: flex;
           align-items: center;
-          gap: 8px;
+          gap: 10px;
         }
         .sortSelect {
           background: rgba(255,255,255,0.05);
-          border: 1px solid var(--border);
+          border: 1px solid rgba(255,255,255,0.15);
           color: var(--text);
-          padding: 6px 10px;
+          padding: 8px 12px;
           border-radius: 8px;
           font-size: 13px;
           outline: none;
@@ -313,7 +340,7 @@ function ListingsContent() {
 
         .btnsGroup {
           display: flex;
-          gap: 12px;
+          gap: 16px;
         }
         .btnText {
           background: none;
@@ -322,10 +349,10 @@ function ListingsContent() {
           font-size: 13px;
           cursor: pointer;
           transition: color 0.2s;
+          padding: 0;
         }
         .btnText:hover:not(:disabled) {
           color: var(--gold);
-          text-decoration: underline;
         }
         .btnText:disabled {
           opacity: 0.4;
@@ -336,11 +363,10 @@ function ListingsContent() {
   );
 }
 
-// ✅ المكون الرئيسي الذي يغلف المحتوى بـ Suspense
-// هذا ضروري في Next.js عند استخدام useSearchParams لتجنب أخطاء البناء
+// ✅ المكون الرئيسي الذي يغلف المحتوى بـ Suspense لتجنب أخطاء البناء في Next.js
 export default function ListingsPage() {
   return (
-    <Suspense fallback={<div className="container" style={{padding:20}}>جاري التحميل...</div>}>
+    <Suspense fallback={<div className="container" style={{padding:40, textAlign:'center'}}>جاري تحميل الصفحة...</div>}>
       <ListingsContent />
     </Suspense>
   );
