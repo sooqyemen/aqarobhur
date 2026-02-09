@@ -2,11 +2,9 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-
 import ListingCard from '@/components/ListingCard';
-
+import HomeSmartSearch from '@/components/HomeSmartSearch'; // ✅ استيراد مكون البحث الجديد
 import { fetchLatestListings } from '@/lib/listings';
-import { NEIGHBORHOODS } from '@/lib/taxonomy';
 
 export default function HomePage() {
   const [items, setItems] = useState([]);
@@ -17,8 +15,7 @@ export default function HomePage() {
     setLoading(true);
     setErr('');
     try {
-      // ✅ لا نجلب legacy (collection: listings) لأنه غالبًا مقفول بالقواعد ويسبب "permissions" للزوار
-      // ✅ نجلب بدون فلترة Firestore (لتجنب الحاجة لـIndex) ثم نخفي غير العامة بالواجهة
+      // ✅ جلب البيانات بدون Legacy لتجنب مشاكل الصلاحيات
       const data = await fetchLatestListings({ n: 12, onlyPublic: false, includeLegacy: false });
       setItems(Array.isArray(data) ? data : []);
     } catch (e) {
@@ -49,43 +46,18 @@ export default function HomePage() {
     <div className="container" style={{ paddingTop: 16 }}>
         <section className="hero card">
           <div className="heroTop">
-            <div>
+            <div className="heroContent">
               <div className="kicker">عروض مباشرة • شمال جدة</div>
               <h1 className="h1">عقار أبحر</h1>
               <p className="muted p">
-                تصفح أحدث العروض أو أرسل طلبك (حي/جزء/ميزانية) ونرجع لك بخيارات مناسبة.
+                الوجهة الأولى للعقارات المميزة في شمال جدة. تصفح أحدث الفرص أو ابحث في حيك المفضل.
               </p>
 
-              <div className="heroBtns">
-                <Link className="btnPrimary" href="/listings">تصفح كل العروض</Link>
-                <Link className="btn" href="/request">أرسل طلبك</Link>
-                <button className="btn" onClick={load} disabled={loading}>تحديث</button>
-              </div>
-
-              <div className="wave" aria-hidden="true" />
-            </div>
-
-            <div className="stats">
-              <div className="stat card">
-                <div className="muted">أحدث العروض</div>
-                <div className="num">{loading ? '—' : String(publicItems.length)}</div>
-              </div>
-              <div className="stat card">
-                <div className="muted">الأحياء</div>
-                <div className="num">{NEIGHBORHOODS.length}</div>
-              </div>
-              <div className="stat card">
-                <div className="muted">الرد</div>
-                <div className="num">سريع</div>
+              {/* ✅ تم استبدال الأزرار القديمة بمكون البحث الذكي */}
+              <div style={{ marginTop: 24, marginBottom: 10 }}>
+                <HomeSmartSearch />
               </div>
             </div>
-          </div>
-
-          <div className="heroNotes">
-            <span className="badge ok">مباشر</span>
-            <span className="badge">بيع / إيجار</span>
-            <span className="badge warn">محجوز</span>
-            <span className="badge sold">مباع (مخفي للزوار)</span>
           </div>
         </section>
 
@@ -95,13 +67,16 @@ export default function HomePage() {
           </section>
         ) : null}
 
-        <section style={{ marginTop: 12 }}>
+        <section style={{ marginTop: 24 }}>
           <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-end' }}>
             <div>
               <h2 className="h2">أحدث العروض</h2>
               <div className="muted" style={{ fontSize: 13 }}>آخر ما تم إضافته في قاعدة البيانات</div>
             </div>
-            <Link className="btn" href="/listings">عرض الكل</Link>
+            <div className="row">
+               <button className="btn" onClick={load} disabled={loading}>تحديث</button>
+               <Link className="btn" href="/listings">عرض الكل</Link>
+            </div>
           </div>
 
           {loading ? (
@@ -119,12 +94,12 @@ export default function HomePage() {
           )}
         </section>
 
-        <section className="cta card" style={{ marginTop: 12 }}>
+        <section className="cta card" style={{ marginTop: 24 }}>
           <div className="ctaInner">
             <div>
               <h2 className="h2" style={{ margin: 0 }}>ما لقيت اللي تبيه؟</h2>
               <div className="muted" style={{ marginTop: 6, lineHeight: 1.8 }}>
-                ارسل طلبك الآن (الحي/الجزء/نوع العقار/الميزانية) ونجهز لك 3–4 خيارات مناسبة.
+                ارسل طلبك الآن (الحي/الجزء/نوع العقار/الميزانية) ونجهز لك خيارات مناسبة.
               </div>
             </div>
             <div className="row">
@@ -134,26 +109,23 @@ export default function HomePage() {
           </div>
         </section>
 
-      
       <style jsx>{`
         .hero {
-          padding: 14px;
+          padding: 24px;
           background:
-            radial-gradient(circle at 12% 5%, rgba(214,179,91,.18), transparent 55%),
-            radial-gradient(circle at 88% 40%, rgba(79,117,255,.16), transparent 58%),
-            rgba(255,255,255,.03);
+            radial-gradient(circle at 12% 5%, rgba(214,179,91,.15), transparent 55%),
+            radial-gradient(circle at 88% 40%, rgba(79,117,255,.12), transparent 58%),
+            rgba(255,255,255,.02);
           border: 1px solid rgba(255,255,255,.10);
+          min-height: 420px; /* زيادة الارتفاع ليستوعب البحث */
+          display: flex;
+          flex-direction: column;
+          justify-content: center;
         }
-        .heroTop {
-          display: grid;
-          grid-template-columns: 1fr;
-          gap: 14px;
-        }
-        @media (min-width: 900px) {
-          .heroTop {
-            grid-template-columns: 1.4fr 0.9fr;
-            align-items: start;
-          }
+        .heroContent {
+          max-width: 800px;
+          margin: 0 auto;
+          text-align: center;
         }
         .kicker {
           display: inline-flex;
@@ -161,76 +133,55 @@ export default function HomePage() {
           gap: 8px;
           font-weight: 900;
           font-size: 12px;
-          padding: 6px 10px;
+          padding: 6px 12px;
           border-radius: 999px;
           border: 1px solid rgba(214,179,91,.30);
           background: rgba(214,179,91,.08);
-          width: fit-content;
+          color: var(--gold);
+          margin-bottom: 12px;
         }
         .h1 {
-          margin: 10px 0 6px;
-          font-size: 32px;
+          margin: 10px 0 10px;
+          font-size: 36px;
           line-height: 1.15;
           font-weight: 950;
         }
         .h2 {
           margin: 0;
-          font-size: 18px;
+          font-size: 20px;
           font-weight: 950;
         }
         .p {
-          margin: 0;
-          font-size: 14px;
+          margin: 0 auto;
+          font-size: 16px;
           line-height: 1.8;
-        }
-        .heroBtns {
-          display: flex;
-          gap: 10px;
-          flex-wrap: wrap;
-          margin-top: 12px;
-        }
-        .wave {
-          margin-top: 12px;
-        }
-        .stats {
-          display: grid;
-          grid-template-columns: repeat(3, 1fr);
-          gap: 10px;
-        }
-        .stat {
-          padding: 12px;
-          background: rgba(255,255,255,.04);
-          border-color: rgba(255,255,255,.10);
-        }
-        .num {
-          margin-top: 6px;
-          font-weight: 950;
-          font-size: 22px;
-        }
-        .heroNotes {
-          display: flex;
-          gap: 8px;
-          flex-wrap: wrap;
-          margin-top: 12px;
+          max-width: 500px;
+          color: var(--muted);
         }
         .errBox {
           margin-top: 12px;
           border-color: rgba(255,77,77, 0.25);
           background: rgba(255,77,77, 0.08);
+          color: #ffcccc;
+          padding: 12px;
         }
         .cta {
           background: linear-gradient(135deg, rgba(214,179,91,.10), rgba(255,255,255,.03));
           border-color: rgba(214,179,91,.18);
+          padding: 30px;
         }
         .ctaInner {
-          display: grid;
-          grid-template-columns: 1fr;
-          gap: 12px;
+          display: flex;
+          flex-direction: column;
+          gap: 16px;
           align-items: center;
+          text-align: center;
         }
-        @media (min-width: 900px) {
+        @media (min-width: 768px) {
           .ctaInner {
-            grid-template-columns: 1.2fr 0.8fr;
+            flex-direction: row;
+            text-align: right;
+            justify-content: space-between;
           }
         }
       `}</style>
