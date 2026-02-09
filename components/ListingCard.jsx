@@ -10,13 +10,17 @@ function dealLabel(dealType) {
 }
 
 export default function ListingCard({ item }) {
+  // ✅ بعض الداتا القديمة قد لا تحتوي id بشكل صحيح
+  // نخلي الرابط يعتمد على أكثر من حقل مع ترميز آمن للـURL
+  const safeId = item?.id || item?.docId || item?.docID || item?.listingId || item?._id || '';
+  const href = safeId ? `/listing/${encodeURIComponent(String(safeId))}` : '#';
   const thumb = item?.images?.[0] || '';
   const meta = [item?.neighborhood, item?.plan ? `مخطط ${item.plan}` : '', item?.part ? `جزء ${item.part}` : '']
     .filter(Boolean)
     .join(' • ');
 
   return (
-    <Link href={`/listing/${item.id}`} className="card listingCard" aria-label={item?.title || 'عرض عقاري'}>
+    <Link href={href} className="card listingCard" aria-label={item?.title || 'عرض عقاري'}>
       <div className="thumb">
         {thumb ? (
           <img src={thumb} alt={item.title || 'صورة العرض'} loading="lazy" />

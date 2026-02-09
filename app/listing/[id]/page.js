@@ -6,17 +6,37 @@ import { fetchListingById } from '@/lib/listings';
 import { formatPriceSAR, statusBadge } from '@/lib/format';
 
 export default function ListingDetails({ params }) {
-  const id = params?.id;
+  const rawId = params?.id;
+  const id = useMemo(() => {
+    try {
+      return rawId ? decodeURIComponent(String(rawId)) : '';
+    } catch (_) {
+      return rawId ? String(rawId) : '';
+    }
+  }, [rawId]);
   const [item, setItem] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState('');
 
   useEffect(() => {
     let live = true;
     (async () => {
       try {
         setLoading(true);
+        setErr('');
         const data = await fetchListingById(id);
         if (live) setItem(data);
+      } catch (e) {
+        console.error(e);
+        const msg = String(e?.message || '');
+        if (live) {
+          setItem(null);
+          if (msg.includes('Missing or insufficient permissions') || e?.code === 'permission-denied') {
+            setErr('لا توجد صلاحية لعرض هذا العرض الآن.');
+          } else {
+            setErr(msg || 'تعذر تحميل العرض حالياً');
+          }
+        }
       } finally {
         if (live) setLoading(false);
       }
@@ -36,6 +56,8 @@ export default function ListingDetails({ params }) {
     <div className="container" style={{ paddingTop: 16 }}>
         {loading ? (
           <div className="muted">جاري التحميل…</div>
+        ) : err ? (
+          <div className="card">{err}</div>
         ) : !item ? (
           <div className="card">العرض غير موجود.</div>
         ) : (
