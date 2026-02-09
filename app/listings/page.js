@@ -1,373 +1,270 @@
-'use client';
+import { notFound } from 'next/navigation';
+import { fetchListingById } from '@/lib/listings';
+import { formatPriceSAR, statusBadge } from '@/lib/format';
+import WhatsAppBar, { buildWhatsAppLink } from '@/components/WhatsAppBar';
 
-import { useEffect, useMemo, useState, Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
-import ListingCard from '@/components/ListingCard';
-import ChipsRow from '@/components/ChipsRow';
-import { fetchListings } from '@/lib/listings';
-import { DEAL_TYPES, NEIGHBORHOODS, PROPERTY_TYPES } from '@/lib/taxonomy';
-
-const DEAL_OPTS = DEAL_TYPES.map((d) => ({ label: d.label, value: d.key }));
-const TYPE_OPTS = PROPERTY_TYPES.map((p) => ({ label: p, value: p }));
-
-function ListingsContent() {
-  const searchParams = useSearchParams();
-
-  // الحالة الأولية للفلاتر (تأتي من الرابط إذا تم التحويل من الصفحة الرئيسية)
-  const [filters, setFilters] = useState({
-    neighborhood: searchParams.get('neighborhood') || '',
-    dealType: searchParams.get('dealType') || '',
-    propertyType: searchParams.get('propertyType') || '',
-    search: '', // بحث نصي (رقم العرض، المخطط، العنوان)
-  });
-
-  const [sortOrder, setSortOrder] = useState('newest'); // newest, price_asc, price_desc
-  const [items, setItems] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState('');
-
-  // التحقق هل يوجد فلاتر مفعلة لتنشيط زر "مسح"
-  const hasFilter = !!(filters.neighborhood || filters.dealType || filters.propertyType || filters.search);
-
-  async function load() {
-    setLoading(true);
-    setErr('');
-    try {
-      // نجلب كمية أكبر من البيانات (بدون فلترة السيرفر) ثم نفلتر في المتصفح
-      // هذا يضمن أن اختلاف التسميات البسيط لا يخفي النتائج
-      const data = await fetchListings({ filters: {}, onlyPublic: false });
-      setItems(Array.isArray(data) ? data : []);
-    } catch (e) {
-      console.error(e);
-      const msg = String(e?.message || '');
-      if (msg.includes('Missing or insufficient permissions')) {
-        setErr('تعذر تحميل العروض (صلاحيات). تأكد من تسجيل دخول الأدمن أو إعدادات القواعد.');
-      } else {
-        setErr('حدث خطأ أثناء تحميل البيانات.');
-      }
-    } finally {
-      setLoading(false);
-    }
+// إعداد Metadata للصفحة (لتحسين SEO وعناوين الروابط)
+export async function generateMetadata(props) {
+  const params = await props.params; // ✅ الحل للمشكلة: انتظار الباراميترز
+  const item = await fetchListingById(params.id);
+  
+  if (!item) {
+    return { title: 'العرض غير موجود | عقار أبحر' };
   }
 
-  useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  return {
+    title: `${item.title} | عقار أبحر`,
+    description: item.description?.substring(0, 160) || 'عرض عقاري مميز في أبحر الشمالية',
+  };
+}
 
-  // منطق الفلترة "الذكي" والترتيب
-  const filtered = useMemo(() => {
-    let res = items.filter((x) => {
-      // 1. استبعاد المباع/الملغي للزوار
-      if (!['available', 'reserved'].includes(String(x.status || ''))) return false;
+export default async function ListingPage(props) {
+  // ✅ الخطوة الحاسمة: فك الباراميترز بشكل غير متزامن
+  const params = await props.params;
+  const { id } = params;
 
-      // 2. فلتر الحي (بحث مرن: هل النص يحتوي على الآخر؟)
-      if (filters.neighborhood) {
-        const itemNeigh = String(x.neighborhood || '').trim();
-        const filterNeigh = filters.neighborhood.trim();
-        // المطابقة المرنة: "الشراع" يطابق "حي الشراع" والعكس
-        if (!itemNeigh.includes(filterNeigh) && !filterNeigh.includes(itemNeigh)) {
-           return false;
-        }
-      }
+  // جلب البيانات
+  const item = await fetchListingById(id);
 
-      // 3. فلتر نوع الصفقة (بيع/إيجار)
-      if (filters.dealType && x.dealType !== filters.dealType) return false;
-
-      // 4. فلتر نوع العقار (بحث جزئي لضمان عدم فقدان النتائج)
-      if (filters.propertyType) {
-         const itemType = String(x.propertyType || '');
-         if (!itemType.includes(filters.propertyType)) return false;
-      }
-
-      // 5. البحث النصي (شامل: العنوان، المعرف، المرجع، المخطط)
-      if (filters.search) {
-        const q = filters.search.toLowerCase();
-        const title = (x.title || '').toLowerCase();
-        const id = String(x.id || '');
-        const ref = String(x.ref || ''); 
-        const plan = String(x.plan || '');
-        
-        if (!title.includes(q) && !id.includes(q) && !ref.includes(q) && !plan.includes(q)) return false;
-      }
-
-      return true;
-    });
-
-    // الترتيب
-    res.sort((a, b) => {
-      if (sortOrder === 'price_asc') {
-        return (a.price || 0) - (b.price || 0);
-      }
-      if (sortOrder === 'price_desc') {
-        return (b.price || 0) - (a.price || 0);
-      }
-      // الافتراضي: الأحدث (بناءً على تاريخ الإنشاء)
-      // إذا كانت التواريخ كـ Timestamps من Firebase
-      const tA = a.createdAt?.seconds || 0;
-      const tB = b.createdAt?.seconds || 0;
-      return tB - tA; 
-    });
-
-    return res;
-  }, [items, filters, sortOrder]);
-
-  function clearAll() {
-    setFilters({ neighborhood: '', dealType: '', propertyType: '', search: '' });
-  }
-
-  return (
-    <div className="container" style={{ paddingTop: 20, paddingBottom: 40 }}>
-      
-      {/* رأس الصفحة مع البحث النصي */}
-      <div className="topHeader">
-        <div>
-          <h1 className="pageTitle">كل العروض</h1>
-          <div className="muted" style={{fontSize: 13}}>ابحث وتصفح العقارات المتاحة</div>
-        </div>
-        
-        {/* مربع بحث سريع */}
-        <div className="searchBox">
-          <input 
-            type="text" 
-            placeholder="بحث برقم العرض، المخطط..." 
-            className="input"
-            value={filters.search}
-            onChange={(e) => setFilters(p => ({...p, search: e.target.value}))}
-          />
-          {/* أيقونة بحث بسيطة */}
-          <svg className="searchIcon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="11" cy="11" r="8"></circle>
-            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-          </svg>
+  // إذا لم يتم العثور على العقار
+  if (!item) {
+    return (
+      <div className="container" style={{ padding: '80px 20px', textAlign: 'center' }}>
+        <div className="card" style={{ maxWidth: 500, margin: '0 auto', padding: 40 }}>
+          <h1 style={{ fontSize: 24, marginBottom: 10 }}>العرض غير موجود</h1>
+          <p className="muted">ربما تم حذف هذا العرض أو أن الرابط غير صحيح.</p>
+          <a href="/listings" className="btnPrimary" style={{ marginTop: 20, display: 'inline-block' }}>
+            تصفح كل العروض
+          </a>
         </div>
       </div>
+    );
+  }
 
-      {/* شريط الفلاتر */}
-      <section className="filterBar card">
-        <div className="filterGrid">
-          
-          {/* فلتر الحي */}
-          <div className="filterGroup">
-            <label className="muted label">الحي</label>
-            <select
-              className="select"
-              value={filters.neighborhood}
-              onChange={(e) => setFilters(p => ({ ...p, neighborhood: e.target.value }))}
-            >
-              <option value="">كل الأحياء</option>
-              {NEIGHBORHOODS.map((n) => (
-                <option key={n} value={n}>{n}</option>
-              ))}
-            </select>
-          </div>
+  // تجهيز رابط الواتساب
+  const waText = `السلام عليكم، بخصوص العرض: ${item.title} (${item.neighborhood}) - الكود: ${id}`;
+  const phone = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || '';
+  const waLink = buildWhatsAppLink({ phone, text: waText });
 
-          {/* فلتر نوع الصفقة */}
-          <div className="filterGroup">
-            <label className="muted label">نوع العرض</label>
-            <ChipsRow
-              value={filters.dealType}
-              options={DEAL_OPTS}
-              onChange={(v) => setFilters((p) => ({ ...p, dealType: v }))}
-            />
-          </div>
+  return (
+    <div className="container" style={{ padding: '30px 20px 80px' }}>
+      
+      {/* رأس الصفحة وزر الرجوع */}
+      <div style={{ marginBottom: 20 }}>
+        <a href="/listings" className="muted" style={{ fontSize: 14 }}>← العودة للعروض</a>
+      </div>
 
-          {/* فلتر نوع العقار */}
-          <div className="filterGroup">
-            <label className="muted label">نوع العقار</label>
-            <ChipsRow
-              value={filters.propertyType}
-              options={TYPE_OPTS}
-              onChange={(v) => setFilters((p) => ({ ...p, propertyType: v }))}
-            />
-          </div>
-        </div>
+      <div className="listingGrid">
         
-        {/* أدوات التحكم (الترتيب + التحديث) */}
-        <div className="filterActions">
-           <div className="sortGroup">
-             <span className="muted label" style={{marginBottom:0}}>الترتيب:</span>
-             <select 
-               className="sortSelect"
-               value={sortOrder}
-               onChange={(e) => setSortOrder(e.target.value)}
-             >
-               <option value="newest">الأحدث</option>
-               <option value="price_asc">السعر: الأقل أولاً</option>
-               <option value="price_desc">السعر: الأعلى أولاً</option>
-             </select>
-           </div>
+        {/* القسم الأيمن: تفاصيل العقار */}
+        <div className="mainContent">
+          <div className="card">
+            
+            {/* العنوان والحالة */}
+            <div className="headerRow">
+              <h1 className="title">{item.title}</h1>
+              <div className="badges">
+                {statusBadge(item.status)}
+                {item.propertyType && <span className="badge">{item.propertyType}</span>}
+              </div>
+            </div>
 
-           <div className="btnsGroup">
-             <button className="btnText" onClick={clearAll} disabled={!hasFilter}>
-               مسح الفلاتر ✕
-             </button>
-             <button className="btnText" onClick={load} disabled={loading}>
-               تحديث ↻
-             </button>
-           </div>
-        </div>
-      </section>
+            {/* السعر */}
+            <div className="priceBox">
+              <span className="muted label">السعر المطلوب</span>
+              <div className="price">{formatPriceSAR(item.price)}</div>
+            </div>
 
-      {/* منطقة النتائج */}
-      <section style={{ marginTop: 20 }}>
-        {err ? (
-          <div className="card" style={{ background: 'rgba(255,77,77,0.1)', borderColor: 'rgba(255,77,77,0.2)' }}>
-            {err}
+            {/* المواصفات السريعة */}
+            <div className="specsGrid">
+              <div className="specItem">
+                <span className="muted label">الحي</span>
+                <span className="val">{item.neighborhood || '—'}</span>
+              </div>
+              <div className="specItem">
+                <span className="muted label">المساحة</span>
+                <span className="val">{item.area ? `${item.area} م²` : '—'}</span>
+              </div>
+              <div className="specItem">
+                <span className="muted label">نوع الصفقة</span>
+                <span className="val">
+                  {item.dealType === 'sale' ? 'بيع' : item.dealType === 'rent' ? 'إيجار' : item.dealType}
+                </span>
+              </div>
+              <div className="specItem">
+                <span className="muted label">المخطط / الجزء</span>
+                <span className="val">
+                  {[item.plan, item.part].filter(Boolean).join(' / ') || '—'}
+                </span>
+              </div>
+            </div>
+
+            <hr className="divider" />
+
+            {/* الوصف */}
+            <div className="description">
+              <h3>التفاصيل</h3>
+              <p>{item.description || 'لا يوجد وصف إضافي.'}</p>
+            </div>
+
+            {/* أزرار التواصل */}
+            <div className="actionBtns">
+              <a href={waLink} target="_blank" rel="noreferrer" className="btnPrimary fullWidth">
+                تواصل واتساب
+              </a>
+              <a href={`tel:${phone}`} className="btn fullWidth">
+                اتصال هاتفي
+              </a>
+            </div>
+
           </div>
-        ) : loading ? (
-          <div className="card muted" style={{textAlign:'center', padding:40}}>جاري تحميل العروض...</div>
-        ) : filtered.length === 0 ? (
-          <div className="card muted" style={{textAlign:'center', padding:40}}>
-            لا توجد نتائج تطابق بحثك.
-            {hasFilter && (
-              <div style={{marginTop:10, color:'var(--gold)', cursor:'pointer', fontWeight:'bold'}} onClick={clearAll}>
-                مسح جميع الفلاتر
+        </div>
+
+        {/* القسم الأيسر: الصور */}
+        <div className="mediaContent">
+          <div className="card imageCard">
+            {item.images && item.images.length > 0 ? (
+              <div className="gallery">
+                {item.images.map((img, idx) => (
+                  <div key={idx} className="imgWrapper">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={img} alt={`${item.title} - ${idx + 1}`} />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="noImg">
+                <div style={{ fontSize: 40, marginBottom: 10 }}>📷</div>
+                <div className="muted">لا توجد صور لهذا العرض</div>
               </div>
             )}
           </div>
-        ) : (
-          <>
-            <div className="muted" style={{ marginBottom: 12, fontSize: 13, display: 'flex', justifyContent: 'space-between' }}>
-              <span>تم العثور على <strong>{filtered.length}</strong> عقار</span>
-            </div>
-            <div className="cards">
-              {filtered.map((item) => (
-                <div key={item.id} className="cardItem">
-                  <ListingCard item={item} />
-                </div>
-              ))}
-            </div>
-          </>
-        )}
-      </section>
+        </div>
+
+      </div>
 
       <style jsx>{`
-        .topHeader {
-          display: flex;
-          flex-direction: column;
-          gap: 16px;
-          margin-bottom: 20px;
-        }
-        @media (min-width: 768px) {
-          .topHeader {
-            flex-direction: row;
-            justify-content: space-between;
-            align-items: flex-end;
-          }
-        }
-        
-        .searchBox {
-          position: relative;
-          width: 100%;
-          max-width: 350px;
-        }
-        .searchBox .input {
-          padding-left: 40px; 
-          background: rgba(255,255,255,0.05);
-          border-color: rgba(255,255,255,0.1);
-        }
-        .searchIcon {
-          position: absolute;
-          left: 12px;
-          top: 50%;
-          transform: translateY(-50%);
-          color: var(--muted);
-          opacity: 0.7;
-          pointer-events: none;
-        }
-
-        .filterBar {
-          position: sticky;
-          top: 10px;
-          z-index: 50;
-          background: rgba(10, 13, 18, 0.85);
-          backdrop-filter: blur(16px);
-          border: 1px solid rgba(255,255,255,0.1);
-          padding: 18px;
-          box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-        }
-        
-        .filterGrid {
+        .listingGrid {
           display: grid;
           grid-template-columns: 1fr;
-          gap: 16px;
-          border-bottom: 1px solid rgba(255,255,255,0.08);
-          padding-bottom: 16px;
-          margin-bottom: 14px;
+          gap: 20px;
         }
         @media (min-width: 900px) {
-          .filterGrid {
-            grid-template-columns: 1fr 1fr 1.2fr;
+          .listingGrid {
+            grid-template-columns: 1fr 1.2fr; /* الصور تأخذ مساحة أكبر */
             align-items: start;
           }
+          /* نعكس الترتيب في الديسك توب عشان الصور تكون يسار والتفاصيل يمين */
+          .mainContent { order: 1; }
+          .mediaContent { order: 2; }
         }
 
-        .label {
-          display: block;
-          font-size: 12px;
-          margin-bottom: 8px;
-          font-weight: 700;
-          letter-spacing: 0.5px;
+        .headerRow {
+          margin-bottom: 20px;
         }
-
-        .filterActions {
+        .title {
+          font-size: 24px;
+          font-weight: 900;
+          margin: 0 0 10px 0;
+          line-height: 1.3;
+        }
+        .badges {
           display: flex;
-          justify-content: space-between;
-          align-items: center;
+          gap: 8px;
           flex-wrap: wrap;
-          gap: 12px;
-        }
-        
-        .sortGroup {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-        }
-        .sortSelect {
-          background: rgba(255,255,255,0.05);
-          border: 1px solid rgba(255,255,255,0.15);
-          color: var(--text);
-          padding: 8px 12px;
-          border-radius: 8px;
-          font-size: 13px;
-          outline: none;
-          cursor: pointer;
-        }
-        .sortSelect:focus {
-          border-color: var(--gold);
         }
 
-        .btnsGroup {
-          display: flex;
-          gap: 16px;
+        .priceBox {
+          background: rgba(214,179,91,0.08);
+          border: 1px solid rgba(214,179,91,0.2);
+          border-radius: 12px;
+          padding: 16px;
+          margin-bottom: 24px;
         }
-        .btnText {
-          background: none;
-          border: none;
-          color: var(--muted);
-          font-size: 13px;
-          cursor: pointer;
-          transition: color 0.2s;
-          padding: 0;
-        }
-        .btnText:hover:not(:disabled) {
+        .price {
+          font-size: 28px;
+          font-weight: 950;
           color: var(--gold);
         }
-        .btnText:disabled {
-          opacity: 0.4;
-          cursor: default;
+
+        .specsGrid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 16px;
+          margin-bottom: 24px;
+        }
+        .specItem {
+          display: flex;
+          flex-direction: column;
+        }
+        .val {
+          font-weight: 700;
+          font-size: 16px;
+        }
+        .label {
+          font-size: 12px;
+          margin-bottom: 4px;
+        }
+
+        .divider {
+          border: 0;
+          border-top: 1px solid var(--border);
+          margin: 20px 0;
+        }
+
+        .description h3 {
+          font-size: 18px;
+          margin-bottom: 10px;
+        }
+        .description p {
+          line-height: 1.8;
+          color: rgba(244,246,251,0.85);
+          white-space: pre-line; /* يحافظ على الأسطر الجديدة */
+        }
+
+        .actionBtns {
+          display: flex;
+          gap: 10px;
+          margin-top: 30px;
+        }
+        .fullWidth {
+          flex: 1;
+          text-align: center;
+          justify-content: center;
+        }
+
+        /* معرض الصور */
+        .imageCard {
+          padding: 10px;
+          overflow: hidden;
+        }
+        .gallery {
+          display: grid;
+          gap: 10px;
+          grid-template-columns: 1fr;
+        }
+        .imgWrapper {
+          border-radius: 12px;
+          overflow: hidden;
+          border: 1px solid var(--border);
+          aspect-ratio: 16/10;
+        }
+        .imgWrapper img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+          display: block;
+        }
+        .noImg {
+          aspect-ratio: 16/10;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          background: rgba(255,255,255,0.03);
+          border-radius: 12px;
         }
       `}</style>
     </div>
-  );
-}
-
-// ✅ المكون الرئيسي الذي يغلف المحتوى بـ Suspense لتجنب أخطاء البناء في Next.js
-export default function ListingsPage() {
-  return (
-    <Suspense fallback={<div className="container" style={{padding:40, textAlign:'center'}}>جاري تحميل الصفحة...</div>}>
-      <ListingsContent />
-    </Suspense>
   );
 }
