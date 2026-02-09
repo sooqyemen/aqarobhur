@@ -33,7 +33,14 @@ export default function ListingsPage() {
       setItems(Array.isArray(data) ? data : []);
     } catch (e) {
       console.error(e);
-      setErr(e?.message || 'حصل خطأ غير متوقع');
+      const msg = String(e?.message || '');
+      if (msg.includes('Missing or insufficient permissions')) {
+        setErr('تعذر تحميل العروض حالياً (صلاحيات). إذا كنت الأدمن سجّل دخولك، أو تأكد من قواعد Firestore.');
+      } else if (msg.includes('requires an index') || msg.includes('create it here')) {
+        setErr('تعذر تحميل العروض حالياً لأن قاعدة البيانات تحتاج فهرس (Index). افتح الرابط في رسالة الخطأ وأنشئ الفهرس ثم انتظر تفعيله.');
+      } else {
+        setErr(msg || 'حصل خطأ غير متوقع');
+      }
     } finally {
       setLoading(false);
     }
