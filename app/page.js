@@ -34,7 +34,7 @@ export default function HomePage() {
 
   return (
     <div className="container">
-      {/* ✅ شبكات الأحياء مثل حراج */}
+      {/* ✅ شبكات الأحياء */}
       <NeighborhoodGrid />
 
       {/* ✅ شريط سريع */}
@@ -43,6 +43,15 @@ export default function HomePage() {
         <Link href="/listings?dealType=sale" className="pill">بيع</Link>
         <Link href="/listings?dealType=rent" className="pill">إيجار</Link>
         <Link href="/map" className="pill">الخريطة</Link>
+      </div>
+
+      {/* ✅ شريط البحث */}
+      <div className="searchBar">
+        <input 
+          type="text" 
+          placeholder="أبحث عن حي / مخطط / جزء..." 
+          className="searchInput"
+        />
       </div>
 
       <div className="sectionHead">
@@ -64,7 +73,40 @@ export default function HomePage() {
         </div>
       )}
 
+      {/* ✅ معلومات الاتصال */}
+      <div className="contactInfo">
+        <div className="contactText">واتساب: 966597520693</div>
+        <div className="copyright">© 2026 عقار أبحر</div>
+      </div>
+
       <style jsx>{`
+        .container {
+          direction: rtl;
+          padding: 16px;
+          max-width: 1200px;
+          margin: 0 auto;
+        }
+        
+        .searchBar {
+          margin: 20px 0;
+        }
+        
+        .searchInput {
+          width: 100%;
+          padding: 14px 16px;
+          border: 1px solid #ddd;
+          border-radius: 12px;
+          font-size: 16px;
+          background: #f9f9f9;
+          direction: rtl;
+        }
+        
+        .searchInput:focus {
+          outline: none;
+          border-color: #1a73e8;
+          background: #fff;
+        }
+        
         .quickBar{
           margin-top:14px;
           display:flex;
@@ -91,6 +133,38 @@ export default function HomePage() {
         .h2{margin:0;font-size:16px;font-weight:900}
         .more{text-decoration:none;color:var(--primary);font-weight:900;font-size:13px}
         .list{margin-top:12px;display:flex;flex-direction:column;gap:10px;margin-bottom:18px}
+        
+        .card {
+          background: #fff;
+          border: 1px solid #e0e0e0;
+          border-radius: 12px;
+          margin: 10px 0;
+        }
+        
+        .muted {
+          color: #666;
+          text-align: center;
+          font-size: 14px;
+        }
+        
+        .contactInfo {
+          margin-top: 40px;
+          padding-top: 20px;
+          border-top: 1px solid #eee;
+          text-align: center;
+        }
+        
+        .contactText {
+          font-size: 16px;
+          font-weight: 700;
+          color: #333;
+          margin-bottom: 8px;
+        }
+        
+        .copyright {
+          font-size: 14px;
+          color: #666;
+        }
       `}</style>
     </div>
   );
