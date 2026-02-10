@@ -9,123 +9,42 @@ export default function Footer() {
 
   return (
     <footer className="footer">
-      <div className="container footerGrid">
-        <div className="about">
-          <div className="brandLine">
-            <div className="mark" aria-hidden="true" />
-            <div>
-              <div className="title">عقار أبحر</div>
-              <div className="muted" style={{ fontSize: 12 }}>عروض مباشرة • شمال جدة</div>
-            </div>
-          </div>
-
-          <p className="muted" style={{ margin: '10px 0 0', lineHeight: 1.85 }}>
-            منصة عروض عقارية مركّزة على شمال جدة (أبحر وما حولها). تصفّح العروض المتاحة أو أرسل طلبك
-            (حي/جزء/ميزانية) ونجهز لك خيارات مناسبة.
-          </p>
-        </div>
-
+      <div className="container inner">
         <div className="links">
-          <div className="label muted">روابط سريعة</div>
-          <div className="linkGrid">
-            <Link className="fLink" href="/">الرئيسية</Link>
-            <Link className="fLink" href="/listings">كل العروض</Link>
-            <Link className="fLink" href="/request">أرسل طلبك</Link>
-          </div>
+          <Link href="/" className="a">الرئيسية</Link>
+          <Link href="/listings" className="a">كل العروض</Link>
+          <Link href="/request" className="a">أرسل طلبك</Link>
+          <Link href="/map" className="a">الخريطة</Link>
         </div>
 
         <div className="contact">
-          <div className="label muted">التواصل</div>
+          {waLink ? (
+            <a className="wa" href={waLink} target="_blank" rel="noreferrer">واتساب: {waDigits}</a>
+          ) : (
+            <span className="muted">رقم الواتساب غير مضبوط</span>
+          )}
+        </div>
 
-          <div className="row" style={{ marginTop: 8 }}>
-            {waLink ? (
-              <a className="btnPrimary" href={waLink} target="_blank" rel="noreferrer">
-                واتساب مباشر
-              </a>
-            ) : (
-              <Link className="btnPrimary" href="/request">
-                أرسل طلبك
-              </Link>
-            )}
-
-            <Link className="btn" href="/listings">تصفح العروض</Link>
-          </div>
-
-          {phone ? (
-            <div className="muted" style={{ marginTop: 10, fontSize: 13 }}>
-              رقم التواصل: {phone}
-            </div>
-          ) : null}
-
-          <div className="muted" style={{ marginTop: 10, fontSize: 13, lineHeight: 1.85 }}>
-            العروض المعروضة للزوار تظهر فقط (متاح/محجوز). حالة (مباع/ملغي) تكون مخفية تلقائياً لضمان
-            عدم إحراج العميل.
-          </div>
+        <div className="copy muted">
+          © {new Date().getFullYear()} عقار أبحر
         </div>
       </div>
 
-      <div className="container copy muted">© {new Date().getFullYear()} عقار أبحر — جميع الحقوق محفوظة</div>
-
       <style jsx>{`
-        .footerGrid {
-          display: grid;
-          grid-template-columns: 1fr;
-          gap: 14px;
-          padding: 18px 0;
-          border-top: 1px solid rgba(255,255,255,.08);
+        .footer{
+          margin-top: 18px;
+          border-top: 1px solid var(--border);
+          background: var(--bg2);
         }
-        @media (min-width: 900px) {
-          .footerGrid {
-            grid-template-columns: 1.55fr 1fr 1fr;
-            gap: 18px;
-            align-items: start;
-          }
-        }
-        .brandLine {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-        }
-        .mark {
-          width: 42px;
-          height: 42px;
-          border-radius: 14px;
-          background: linear-gradient(180deg, rgba(214,179,91,.95), rgba(180,137,45,.92));
-          box-shadow: 0 12px 30px rgba(214,179,91,.18);
-          border: 1px solid rgba(214,179,91,.35);
-        }
-        .title {
-          font-weight: 950;
-          letter-spacing: 0.2px;
-        }
-        .label {
-          font-size: 12px;
-          margin-bottom: 8px;
-        }
-        .linkGrid {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 8px;
-        }
-        .fLink {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          border: 1px solid rgba(255,255,255,.10);
-          background: rgba(255,255,255,.05);
-          border-radius: 12px;
-          padding: 10px 12px;
-          font-weight: 900;
-        }
-        .fLink:hover {
-          background: rgba(255,255,255,.08);
-          border-color: rgba(255,255,255,.16);
-        }
-        .copy {
-          padding: 10px 0 18px;
-          border-top: 1px dashed rgba(255,255,255,.10);
-          font-size: 12px;
-          text-align: center;
+        .inner{padding:18px 0}
+        .links{display:flex;flex-wrap:wrap;gap:12px}
+        .a{text-decoration:none;color:var(--text);font-weight:900;font-size:13px}
+        .a:hover{color:var(--primary)}
+        .contact{margin-top:10px}
+        .wa{color:var(--primary);font-weight:900;text-decoration:none}
+        .copy{margin-top:10px;font-size:12px}
+        @media (max-width: 980px){
+          .footer{padding-bottom: 90px;} /* مساحة إضافية فوق شريط الجوال */
         }
       `}</style>
     </footer>

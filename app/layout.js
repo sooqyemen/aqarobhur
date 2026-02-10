@@ -1,6 +1,7 @@
 import './globals.css';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
+import MobileNav from '@/components/MobileNav';
 import WhatsAppBar from '@/components/WhatsAppBar';
 
 export const metadata = {
@@ -18,6 +19,7 @@ export default function RootLayout({ children }) {
             {children}
           </main>
           <Footer />
+          <MobileNav />
           <WhatsAppBar />
         </div>
       </body>

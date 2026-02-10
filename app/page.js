@@ -1,266 +1,97 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 
 import ListingCard from '@/components/ListingCard';
+import NeighborhoodGrid from '@/components/NeighborhoodGrid';
 
 import { fetchLatestListings } from '@/lib/listings';
-import { NEIGHBORHOODS, FEATURED_NEIGHBORHOODS } from '@/lib/taxonomy';
 
 export default function HomePage() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
 
-  async function load() {
-    setLoading(true);
-    setErr('');
-    try {
-      // ✅ نجلب العروض العامة فقط (متاح/محجوز) وبدون legacy
-      const data = await fetchLatestListings({ n: 12, onlyPublic: true, includeLegacy: false });
-      setItems(Array.isArray(data) ? data : []);
-    } catch (e) {
-      console.error(e);
-      const msg = String(e?.message || '');
-      if (msg.includes('Missing or insufficient permissions')) {
-        setErr('تعذر تحميل العروض حالياً (صلاحيات). إذا كنت الأدمن سجّل دخولك، أو انتظر اكتمال الإعدادات.');
-      } else if (msg.includes('requires an index') || msg.includes('create it here')) {
-        setErr('تعذر تحميل العروض حالياً لأن قاعدة البيانات تحتاج فهرس (Index). افتح الرابط في رسالة الخطأ وأنشئ الفهرس ثم انتظر تفعيله.');
-      } else {
-        setErr(msg || 'حصل خطأ غير متوقع');
-      }
-    } finally {
-      setLoading(false);
-    }
-  }
-
   useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    let alive = true;
+    (async () => {
+      try {
+        const res = await fetchLatestListings(12);
+        if (!alive) return;
+        setItems(res || []);
+      } catch (e) {
+        if (!alive) return;
+        setErr('تعذر تحميل أحدث العروض.');
+      } finally {
+        if (alive) setLoading(false);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
   }, []);
 
-  const publicItems = useMemo(() => {
-    return items.filter((x) => ['available', 'reserved'].includes(String(x.status || '')));
-  }, [items]);
-
   return (
-    <div className="container" style={{ paddingTop: 16 }}>
-        <section className="hero card">
-          <div className="heroTop">
-            <div>
-              <div className="kicker">عروض مباشرة • شمال جدة</div>
-              <h1 className="h1">عقار أبحر</h1>
-              <p className="muted p">
-                تصفح أحدث العروض أو أرسل طلبك (حي/جزء/ميزانية) ونرجع لك بخيارات مناسبة.
-              </p>
+    <div className="container">
+      {/* ✅ شبكات الأحياء مثل حراج */}
+      <NeighborhoodGrid />
 
-              <div className="heroBtns">
-                <Link className="btnPrimary" href="/listings">تصفح كل العروض</Link>
-                <Link className="btn" href="/request">أرسل طلبك</Link>
-                <button className="btn" onClick={load} disabled={loading}>تحديث</button>
-              </div>
+      {/* ✅ شريط سريع */}
+      <div className="quickBar">
+        <Link href="/listings" className="pill">كل العروض</Link>
+        <Link href="/listings?dealType=sale" className="pill">بيع</Link>
+        <Link href="/listings?dealType=rent" className="pill">إيجار</Link>
+        <Link href="/map" className="pill">الخريطة</Link>
+      </div>
 
-              <div className="wave" aria-hidden="true" />
-            </div>
+      <div className="sectionHead">
+        <h2 className="h2">أحدث العروض</h2>
+        <Link href="/listings" className="more">تصفح الكل</Link>
+      </div>
 
-            <div className="stats">
-              <div className="stat card">
-                <div className="muted">أحدث العروض</div>
-                <div className="num">{loading ? '—' : String(publicItems.length)}</div>
-              </div>
-              <div className="stat card">
-                <div className="muted">الأحياء</div>
-                <div className="num">{NEIGHBORHOODS.length}</div>
-              </div>
-              <div className="stat card">
-                <div className="muted">الرد</div>
-                <div className="num">سريع</div>
-              </div>
-            </div>
-          </div>
+      {err ? <div className="card" style={{ padding: 14 }}>{err}</div> : null}
 
-          <div className="heroNeighborhoods">
-            <div style={{ fontWeight: 950, marginBottom: 8 }}>الأحياء المميزة</div>
-            <div className="chipsNavOuter" aria-label="الأحياء المميزة">
-              <div className="chipsNavInner">
-                {FEATURED_NEIGHBORHOODS.map((n) => (
-                  <Link key={n.key} className="btn chipNavBtn" href={`/neighborhood/${n.key}`}>{n.label}</Link>
-                ))}
-              </div>
-            </div>
-            <div className="muted" style={{ marginTop: 8, fontSize: 12, lineHeight: 1.7 }}>
-              اختر الحي → ثم اختر (بيع/إيجار) → بعدها اختر الفئة.
-            </div>
-          </div>
-        </section>
+      {loading ? (
+        <div className="muted" style={{ padding: '10px 0' }}>جاري التحميل...</div>
+      ) : items.length === 0 ? (
+        <div className="card" style={{ padding: 16 }}>لا توجد عروض حتى الآن.</div>
+      ) : (
+        <div className="list">
+          {items.map((it) => (
+            <ListingCard key={it.id || it.docId || Math.random()} item={it} />
+          ))}
+        </div>
+      )}
 
-        {err ? (
-          <section className="card errBox">
-            {err}
-          </section>
-        ) : null}
-
-        <section style={{ marginTop: 12 }}>
-          <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-end' }}>
-            <div>
-              <h2 className="h2">أحدث العروض</h2>
-              <div className="muted" style={{ fontSize: 13 }}>آخر ما تم إضافته في قاعدة البيانات</div>
-            </div>
-            <Link className="btn" href="/listings">عرض الكل</Link>
-          </div>
-
-          {loading ? (
-            <div className="card muted" style={{ marginTop: 10 }}>جاري التحميل…</div>
-          ) : publicItems.length === 0 ? (
-            <div className="card muted" style={{ marginTop: 10 }}>لا توجد عروض متاحة حالياً.</div>
-          ) : (
-            <div className="cards" style={{ marginTop: 10 }}>
-              {publicItems.map((item) => (
-                <div key={item.id} className="cardItem">
-                  <ListingCard item={item} />
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-
-        <section className="cta card" style={{ marginTop: 12 }}>
-          <div className="ctaInner">
-            <div>
-              <h2 className="h2" style={{ margin: 0 }}>ما لقيت اللي تبيه؟</h2>
-              <div className="muted" style={{ marginTop: 6, lineHeight: 1.8 }}>
-                ارسل طلبك الآن (الحي/الجزء/نوع العقار/الميزانية) ونجهز لك 3–4 خيارات مناسبة.
-              </div>
-            </div>
-            <div className="row">
-              <Link className="btnPrimary" href="/request">أرسل طلبك الآن</Link>
-              <Link className="btn" href="/listings">تصفح العروض</Link>
-            </div>
-          </div>
-        </section>
-
-      
       <style jsx>{`
-        .hero {
-          padding: 14px;
-          background:
-            radial-gradient(circle at 12% 5%, rgba(214,179,91,.18), transparent 55%),
-            radial-gradient(circle at 88% 40%, rgba(79,117,255,.16), transparent 58%),
-            rgba(255,255,255,.03);
-          border: 1px solid rgba(255,255,255,.10);
+        .quickBar{
+          margin-top:14px;
+          display:flex;
+          gap:10px;
+          flex-wrap:wrap;
         }
-        .heroTop {
-          display: grid;
-          grid-template-columns: 1fr;
-          gap: 14px;
+        .pill{
+          background: rgba(30,115,216,.10);
+          border:1px solid rgba(30,115,216,.18);
+          color: var(--primary2);
+          padding:8px 12px;
+          border-radius:999px;
+          text-decoration:none;
+          font-weight:900;
+          font-size:13px;
         }
-        @media (min-width: 900px) {
-          .heroTop {
-            grid-template-columns: 1.4fr 0.9fr;
-            align-items: start;
-          }
+        .sectionHead{
+          margin-top:18px;
+          display:flex;
+          align-items:center;
+          justify-content:space-between;
+          gap:12px;
         }
-        .kicker {
-          display: inline-flex;
-          align-items: center;
-          gap: 8px;
-          font-weight: 900;
-          font-size: 12px;
-          padding: 6px 10px;
-          border-radius: 999px;
-          border: 1px solid rgba(214,179,91,.30);
-          background: rgba(214,179,91,.08);
-          width: fit-content;
-        }
-        .h1 {
-          margin: 10px 0 6px;
-          font-size: 32px;
-          line-height: 1.15;
-          font-weight: 950;
-        }
-        .h2 {
-          margin: 0;
-          font-size: 18px;
-          font-weight: 950;
-        }
-        .p {
-          margin: 0;
-          font-size: 14px;
-          line-height: 1.8;
-        }
-        .heroBtns {
-          display: flex;
-          gap: 10px;
-          flex-wrap: wrap;
-          margin-top: 12px;
-        }
-        .wave {
-          margin-top: 12px;
-        }
-        .stats {
-          display: grid;
-          grid-template-columns: repeat(3, 1fr);
-          gap: 10px;
-        }
-        .stat {
-          padding: 12px;
-          background: rgba(255,255,255,.04);
-          border-color: rgba(255,255,255,.10);
-        }
-        .num {
-          margin-top: 6px;
-          font-weight: 950;
-          font-size: 22px;
-        }
-        .heroNeighborhoods {
-          margin-top: 12px;
-        }
-        .errBox {
-          margin-top: 12px;
-          border-color: rgba(255,77,77, 0.25);
-          background: rgba(255,77,77, 0.08);
-        }
-        .cta {
-          background: linear-gradient(135deg, rgba(214,179,91,.10), rgba(255,255,255,.03));
-          border-color: rgba(214,179,91,.18);
-        }
-        .ctaInner {
-          display: grid;
-          grid-template-columns: 1fr;
-          gap: 12px;
-          align-items: center;
-        }
-        @media (min-width: 900px) {
-          .ctaInner {
-            grid-template-columns: 1.2fr 0.8fr;
-          }
-        }
-      
-        .chipsNavOuter {
-          width: 100%;
-          overflow-x: auto;
-          -webkit-overflow-scrolling: touch;
-          scrollbar-width: none;
-          scroll-snap-type: x mandatory;
-          padding-bottom: 4px;
-        }
-        .chipsNavOuter::-webkit-scrollbar { height: 0; }
-        .chipsNavInner {
-          display: flex;
-          gap: 8px;
-          white-space: nowrap;
-          padding: 2px 2px;
-        }
-        .chipNavBtn {
-          flex: 0 0 auto;
-          scroll-snap-align: start;
-          border-radius: 999px;
-          padding: 9px 12px;
-          font-weight: 900;
-          font-size: 13px;
-        }
-`}</style>
+        .h2{margin:0;font-size:16px;font-weight:900}
+        .more{text-decoration:none;color:var(--primary);font-weight:900;font-size:13px}
+        .list{margin-top:12px;display:flex;flex-direction:column;gap:10px;margin-bottom:18px}
+      `}</style>
     </div>
   );
 }

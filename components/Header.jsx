@@ -1,165 +1,113 @@
 'use client';
+
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
+import { useEffect, useMemo, useState } from 'react';
 
 export default function Header() {
   const pathname = usePathname() || '/';
-  const [menuOpen, setMenuOpen] = useState(false);
+  const router = useRouter();
+  const [q, setQ] = useState('');
 
   const isActive = (href) => (href === '/' ? pathname === '/' : pathname.startsWith(href));
 
-  // اغلق القائمة الجانبية عند تغيير الصفحة
   useEffect(() => {
-    setMenuOpen(false);
+    // لو رجع المستخدم للصفحة الرئيسية نخلي البحث فاضي
+    if (pathname === '/') setQ('');
   }, [pathname]);
 
+  function onSubmit(e) {
+    e.preventDefault();
+    const query = String(q || '').trim();
+    if (!query) {
+      router.push('/listings');
+      return;
+    }
+    router.push(`/listings?q=${encodeURIComponent(query)}`);
+  }
+
   return (
-    <header className="header">
-      <div className="container headerInner">
-        <Link className="brand" href="/" aria-label="عقار أبحر - الصفحة الرئيسية">
-          <div className="brandLogo" aria-hidden="true">
+    <header className="topbar">
+      <div className="container topbarInner">
+        <Link className="brand" href="/" aria-label="عقار أبحر - الرئيسية">
+          <span className="brandMark" aria-hidden="true">
             <img src="/logo-mark.svg" alt="" />
-          </div>
-          <div>
-            <div className="brandTitle">عقار أبحر</div>
-            <div className="muted" style={{ fontSize: 12 }}>عروض مباشرة • شمال جدة</div>
-          </div>
+          </span>
+          <span className="brandText">
+            <span className="brandTitle">عقار أبحر</span>
+            <span className="brandSub muted">شمال جدة</span>
+          </span>
         </Link>
 
-        {/* ✅ سطح المكتب: تظهر كل الروابط بما فيها الأدمن */}
-        <nav className="nav navDesktop" aria-label="التنقل">
-          <Link className={isActive('/') ? 'btn btnActive' : 'btn'} href="/" aria-current={isActive('/') ? 'page' : undefined}>الرئيسية</Link>
-          <Link className={isActive('/listings') ? 'btn btnActive' : 'btn'} href="/listings" aria-current={isActive('/listings') ? 'page' : undefined}>كل العروض</Link>
-          <Link className={isActive('/map') ? 'btn btnActive' : 'btn'} href="/map" aria-current={isActive('/map') ? 'page' : undefined}>الخريطة</Link>
-          <Link className={isActive('/request') ? 'btn btnActive' : 'btn'} href="/request" aria-current={isActive('/request') ? 'page' : undefined}>أرسل طلبك</Link>
-          <Link className={isActive('/admin') ? 'btn btnActive' : 'btn'} href="/admin" aria-current={isActive('/admin') ? 'page' : undefined}>الأدمن</Link>
-        </nav>
+        <form className="search" onSubmit={onSubmit} role="search" aria-label="بحث">
+          <input
+            className="searchInput"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="ابحث عن حي / مخطط / جزء..."
+            aria-label="ابحث"
+          />
+          <button className="searchBtn" type="submit" aria-label="بحث">بحث</button>
+        </form>
 
-        {/* ✅ الجوال: 3 روابط فقط + قائمة جانبية للأدمن */}
-        <nav className="nav navMobile" aria-label="التنقل للجوال">
-          <Link className={isActive('/') ? 'btn btnActive' : 'btn'} href="/" aria-current={isActive('/') ? 'page' : undefined}>الرئيسية</Link>
-          <Link className={isActive('/listings') ? 'btn btnActive' : 'btn'} href="/listings" aria-current={isActive('/listings') ? 'page' : undefined}>العروض</Link>
-          <Link className={isActive('/request') ? 'btn btnActive' : 'btn'} href="/request" aria-current={isActive('/request') ? 'page' : undefined}>أرسل طلبك</Link>
-          <button
-            type="button"
-            className="btn menuBtn"
-            onClick={() => setMenuOpen(true)}
-            aria-haspopup="dialog"
-            aria-expanded={menuOpen ? 'true' : 'false'}
-            aria-label="فتح القائمة"
-          >
-            ☰
-          </button>
+        {/* سطح المكتب فقط */}
+        <nav className="topLinks" aria-label="روابط سريعة">
+          <Link className={isActive('/listings') ? 'link active' : 'link'} href="/listings">كل العروض</Link>
+          <Link className={isActive('/map') ? 'link active' : 'link'} href="/map">الخريطة</Link>
+          <Link className={isActive('/request') ? 'link active' : 'link'} href="/request">أرسل طلبك</Link>
+          <Link className={isActive('/account') ? 'link active' : 'link'} href="/account">الحساب</Link>
         </nav>
       </div>
 
-      {/* القائمة الجانبية للجوال */}
-      {menuOpen ? (
-        <div className="drawerOverlay" role="dialog" aria-modal="true" onClick={() => setMenuOpen(false)}>
-          <div className="drawer" onClick={(e) => e.stopPropagation()}>
-            <div className="drawerHeader">
-              <div>
-                <div style={{ fontWeight: 900 }}>القائمة</div>
-                <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>روابط إضافية</div>
-              </div>
-              <button type="button" className="btn" onClick={() => setMenuOpen(false)}>إغلاق</button>
-            </div>
-
-            <div className="drawerLinks">
-              <Link className={isActive('/') ? 'btn btnActive' : 'btn'} href="/">الرئيسية</Link>
-              <Link className={isActive('/listings') ? 'btn btnActive' : 'btn'} href="/listings">كل العروض</Link>
-              <Link className={isActive('/map') ? 'btn btnActive' : 'btn'} href="/map">الخريطة</Link>
-              <Link className={isActive('/request') ? 'btn btnActive' : 'btn'} href="/request">أرسل طلبك</Link>
-              <div style={{ height: 8 }} />
-              <Link className={isActive('/admin') ? 'btn btnActive' : 'btn'} href="/admin">تسجيل دخول الأدمن</Link>
-              <div className="muted" style={{ fontSize: 12, marginTop: 10 }}>
-                ملاحظة: رابط الأدمن مخفي من الشريط في الجوال ويظهر هنا فقط.
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
       <style jsx>{`
-        .brand {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          text-decoration: none;
+        .topbar{
+          position:sticky;top:0;z-index:50;
+          background: var(--primary);
+          border-bottom: 1px solid rgba(255,255,255,.18);
         }
-        .brandLogo {
-          width: 38px;
-          height: 38px;
-          border-radius: 12px;
-          overflow: hidden;
-          border: 1px solid rgba(214,179,91,.45);
-          background: linear-gradient(180deg, rgba(214,179,91,.95), rgba(180,137,45,.92));
-          box-shadow: 0 12px 28px rgba(214,179,91,.18);
-          display: flex;
-          align-items: center;
-          justify-content: center;
+        .topbarInner{
+          display:flex;align-items:center;gap:12px;
+          padding:10px 0;
         }
-        .brandLogo img {
-          width: 100%;
-          height: 100%;
-          object-fit: cover;
-          display: block;
+        .brand{display:flex;align-items:center;gap:10px;color:#fff;text-decoration:none}
+        .brandMark{
+          width:38px;height:38px;border-radius:12px;
+          background: rgba(255,255,255,.14);
+          display:flex;align-items:center;justify-content:center;
+          overflow:hidden;
         }
-
-        .navMobile { display: none; }
-        .navDesktop { display: flex; }
-
-        @media (max-width: 780px) {
-          .navDesktop { display: none; }
-          .navMobile {
-            display: flex;
-            gap: 8px;
-            flex-wrap: nowrap;
-            align-items: center;
-          }
-          .navMobile :global(.btn) {
-            padding: 8px 10px;
-            border-radius: 999px;
-            white-space: nowrap;
-          }
-          .menuBtn { padding: 8px 12px; }
+        .brandMark img{width:26px;height:26px;object-fit:contain;filter:drop-shadow(0 6px 16px rgba(0,0,0,.18))}
+        .brandText{display:flex;flex-direction:column;line-height:1.1}
+        .brandTitle{font-weight:900;font-size:16px}
+        .brandSub{font-size:12px;color:rgba(255,255,255,.82)}
+        .search{
+          flex:1;display:flex;align-items:center;gap:8px;
+          background: rgba(255,255,255,.16);
+          border:1px solid rgba(255,255,255,.22);
+          padding:6px;border-radius:14px;
         }
-
-        .drawerOverlay {
-          position: fixed;
-          inset: 0;
-          z-index: 60;
-          background: rgba(0,0,0,.55);
-          backdrop-filter: blur(6px);
-          display: flex;
-          justify-content: flex-end;
+        .searchInput{
+          flex:1;border:0;outline:0;background:transparent;color:#fff;
+          font-size:14px;padding:6px 10px;
         }
-        .drawer {
-          width: min(330px, 86vw);
-          height: 100%;
-          background: rgba(10,13,18,.96);
-          border-left: 1px solid rgba(255,255,255,.12);
-          padding: 14px;
-          box-shadow: 0 20px 80px rgba(0,0,0,.55);
+        .searchInput::placeholder{color:rgba(255,255,255,.72)}
+        .searchBtn{
+          border:0;cursor:pointer;
+          background:#fff;color:var(--primary2);
+          font-weight:800;border-radius:12px;
+          padding:8px 12px;
         }
-        .drawerHeader {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 10px;
-          padding-bottom: 12px;
-          border-bottom: 1px solid rgba(255,255,255,.10);
+        .topLinks{display:none;gap:14px;align-items:center}
+        .link{color:rgba(255,255,255,.85);text-decoration:none;font-weight:700;font-size:13px}
+        .link:hover{color:#fff}
+        .active{color:#fff;text-decoration:underline;text-underline-offset:6px}
+        @media (min-width: 980px){
+          .topLinks{display:flex}
+          .brandTitle{font-size:17px}
         }
-        .drawerLinks {
-          padding-top: 12px;
-          display: grid;
-          gap: 10px;
-        }
-        .drawerLinks :global(.btn) {
-          width: 100%;
-          justify-content: center;
-          border-radius: 12px;
+        @media (max-width: 520px){
+          .brandText{display:none}
+          .searchBtn{display:none}
         }
       `}</style>
     </header>

@@ -22,55 +22,37 @@ export default function ChipsRow({ value, options, onChange, disabled }) {
       </div>
 
       <style jsx>{`
-        .chipsOuter {
-          width: 100%;
-          overflow-x: auto;
-          -webkit-overflow-scrolling: touch;
-          padding-bottom: 2px;
-        }
-        .chipsInner {
-          display: flex;
-          gap: 8px;
-          white-space: nowrap;
-        }
-
-        .chip {
-          flex: 0 0 auto;
-          border: 1px solid var(--border);
-          background: rgba(255,255,255,0.04);
-          color: var(--text);
-          padding: 8px 12px;
-          border-radius: 999px;
-          font-weight: 900;
-          cursor: pointer;
-          transition: transform 120ms ease, background 120ms ease, border-color 120ms ease;
-        }
-        .chip:hover {
-          transform: translateY(-1px);
-          background: rgba(255,255,255,0.06);
-          border-color: rgba(255,255,255,0.18);
-        }
-
-        .chipActive {
-          border-color: rgba(214,179,91,0.55);
-          background: rgba(214,179,91,0.12);
-          color: #f6f0df;
-        }
-
-        .chipsOuter[aria-disabled='true'] {
-          opacity: 0.55;
-        }
-        .chip:disabled {
-          cursor: not-allowed;
-        }
-
-        @media (max-width: 640px) {
-          .chip {
-            padding: 7px 10px;
-            font-weight: 850;
-          }
-        }
-      `}</style>
+.chipsOuter {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 2px;
+}
+.chipsInner {
+  display: flex;
+  gap: 8px;
+  white-space: nowrap;
+}
+.chip {
+  flex: 0 0 auto;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+  font-weight: 900;
+  padding: 8px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.chipActive {
+  border-color: rgba(30,115,216,.28);
+  background: rgba(30,115,216,.10);
+  color: var(--primary2);
+}
+.chip:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+`}</style>
     </div>
   );
 }
