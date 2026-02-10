@@ -2,14 +2,37 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    match /abhur_listings/{docId} {
-      allow read: if true;
-      allow create, update, delete: if request.auth != null;
+    // ✅ أدمن (Bootstrap) – عدّل الإيميلات حسب حساباتك
+    function isAdmin() {
+      return request.auth != null
+        && request.auth.token.email != null
+        && request.auth.token.email in [
+          'aqarobhr@gmail.com',
+          'aqarobhur@gmail.com'
+        ];
     }
 
+    // ✅ العرض المسموح للزوار: متاح/محجوز فقط + غير مخفي
+    function isPublicListing() {
+      return (resource.data.status in ['available', 'reserved'])
+        && !(resource.data.hidden == true);
+    }
+
+    // العروض الأساسية
+    match /abhur_listings/{docId} {
+      allow read: if isPublicListing() || isAdmin();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // الطلبات (الزوار ينشئون فقط – الأدمن يقرأ/يحدث)
     match /abhur_requests/{docId} {
       allow create: if true;
-      allow read, update, delete: if request.auth != null;
+      allow read, update, delete: if isAdmin();
+    }
+
+    // legacy (إن وُجد): للأدمن فقط
+    match /listings/{docId} {
+      allow read, write: if isAdmin();
     }
   }
 }

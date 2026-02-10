@@ -31,7 +31,6 @@ export default function Footer() {
             <Link className="fLink" href="/">الرئيسية</Link>
             <Link className="fLink" href="/listings">كل العروض</Link>
             <Link className="fLink" href="/request">أرسل طلبك</Link>
-            <Link className="fLink" href="/admin">الأدمن</Link>
           </div>
         </div>
 

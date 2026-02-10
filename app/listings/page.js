@@ -1,45 +1,45 @@
 'use client';
 
-import { useEffect, useMemo, useState, Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
+
 import ListingCard from '@/components/ListingCard';
-import ChipsRow from '@/components/ChipsRow';
+
 import { fetchListings } from '@/lib/listings';
-import { DEAL_TYPES, NEIGHBORHOODS, PROPERTY_TYPES } from '@/lib/taxonomy';
+import {
+  DEAL_TYPES,
+  NEIGHBORHOODS,
+  PROPERTY_CLASSES,
+  getPropertyTypesByClass,
+  inferPropertyClass,
+  normalizeNeighborhoodName,
+} from '@/lib/taxonomy';
 
-const DEAL_OPTS = DEAL_TYPES.map((d) => ({ label: d.label, value: d.key }));
-const TYPE_OPTS = PROPERTY_TYPES.map((p) => ({ label: p, value: p }));
-
-function ListingsContent() {
-  const searchParams = useSearchParams();
-
-  const [filters, setFilters] = useState({
-    neighborhood: searchParams.get('neighborhood') || '',
-    dealType: searchParams.get('dealType') || '',
-    propertyType: searchParams.get('propertyType') || '',
-    search: '',
-  });
-
-  const [sortOrder, setSortOrder] = useState('newest');
+export default function ListingsPage() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
 
-  const hasFilter = !!(filters.neighborhood || filters.dealType || filters.propertyType || filters.search);
+  // filters
+  const [neighborhood, setNeighborhood] = useState('');
+  const [dealType, setDealType] = useState('');
+  const [propertyType, setPropertyType] = useState('');
+  const [propertyClass, setPropertyClass] = useState('');
+  const [showClassFilter, setShowClassFilter] = useState(false);
 
   async function load() {
     setLoading(true);
     setErr('');
     try {
-      const data = await fetchListings({ filters: {}, onlyPublic: false });
+      const data = await fetchListings({ onlyPublic: true, includeLegacy: false, max: 260 });
       setItems(Array.isArray(data) ? data : []);
     } catch (e) {
       console.error(e);
       const msg = String(e?.message || '');
       if (msg.includes('Missing or insufficient permissions')) {
-        setErr('تعذر تحميل العروض (صلاحيات). تأكد من تسجيل دخول الأدمن أو إعدادات القواعد.');
+        setErr('تعذر تحميل العروض حالياً (صلاحيات).');
       } else {
-        setErr('حدث خطأ أثناء تحميل البيانات.');
+        setErr(msg || 'حصل خطأ غير متوقع');
       }
     } finally {
       setLoading(false);
@@ -51,293 +51,181 @@ function ListingsContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const typeOptions = useMemo(() => getPropertyTypesByClass(propertyClass), [propertyClass]);
+
+  // إذا تغيرت سكني/تجاري واحتمال الفئة الحالية صارت غير موجودة
+  useEffect(() => {
+    if (propertyType && !typeOptions.includes(propertyType)) {
+      setPropertyType('');
+    }
+  }, [propertyType, typeOptions]);
+
   const filtered = useMemo(() => {
-    let res = items.filter((x) => {
-      if (!['available', 'reserved'].includes(String(x.status || ''))) return false;
+    const nTarget = normalizeNeighborhoodName(neighborhood);
 
-      if (filters.neighborhood) {
-        const itemNeigh = String(x.neighborhood || '').trim();
-        const filterNeigh = filters.neighborhood.trim();
-        if (!itemNeigh.includes(filterNeigh) && !filterNeigh.includes(itemNeigh)) {
-           return false;
-        }
+    return (items || []).filter((x) => {
+      if (nTarget && normalizeNeighborhoodName(x.neighborhood) !== nTarget) return false;
+      if (dealType && String(x.dealType || '') !== dealType) return false;
+
+      if (propertyClass) {
+        const cls = String(x.propertyClass || '').trim() || inferPropertyClass(x.propertyType);
+        if (cls !== propertyClass) return false;
       }
 
-      if (filters.dealType && x.dealType !== filters.dealType) return false;
-
-      if (filters.propertyType) {
-         const itemType = String(x.propertyType || '');
-         if (!itemType.includes(filters.propertyType)) return false;
-      }
-
-      if (filters.search) {
-        const q = filters.search.toLowerCase();
-        const title = (x.title || '').toLowerCase();
-        const id = String(x.id || '');
-        const ref = String(x.ref || ''); 
-        const plan = String(x.plan || '');
-        
-        if (!title.includes(q) && !id.includes(q) && !ref.includes(q) && !plan.includes(q)) return false;
-      }
-
+      if (propertyType && String(x.propertyType || '') !== propertyType) return false;
       return true;
     });
-
-    res.sort((a, b) => {
-      if (sortOrder === 'price_asc') return (a.price || 0) - (b.price || 0);
-      if (sortOrder === 'price_desc') return (b.price || 0) - (a.price || 0);
-      const tA = a.createdAt?.seconds || 0;
-      const tB = b.createdAt?.seconds || 0;
-      return tB - tA; 
-    });
-
-    return res;
-  }, [items, filters, sortOrder]);
-
-  function clearAll() {
-    setFilters({ neighborhood: '', dealType: '', propertyType: '', search: '' });
-  }
+  }, [items, neighborhood, dealType, propertyType, propertyClass]);
 
   return (
-    <div className="container" style={{ paddingTop: 20, paddingBottom: 40 }}>
-      <div className="topHeader">
+    <div className="container" style={{ paddingTop: 16 }}>
+      <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-end' }}>
         <div>
-          <h1 className="pageTitle">كل العروض</h1>
-          <div className="muted" style={{fontSize: 13}}>ابحث وتصفح العقارات المتاحة</div>
+          <h1 className="h1">كل العروض</h1>
+          <div className="muted" style={{ fontSize: 13 }}>
+            المتاح/المحجوز فقط يظهر للزوار.
+          </div>
         </div>
-        
-        <div className="searchBox">
-          <input 
-            type="text" 
-            placeholder="بحث برقم العرض، المخطط..." 
-            className="input"
-            value={filters.search}
-            onChange={(e) => setFilters(p => ({...p, search: e.target.value}))}
-          />
-          <svg className="searchIcon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="11" cy="11" r="8"></circle>
-            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-          </svg>
+        <div className="row">
+          <button className="btn" onClick={load} disabled={loading}>تحديث</button>
+          <Link className="btn" href="/request">أرسل طلبك</Link>
         </div>
       </div>
 
-      <section className="filterBar card">
-        <div className="filterGrid">
-          <div className="filterGroup">
-            <label className="muted label">الحي</label>
-            <select
-              className="select"
-              value={filters.neighborhood}
-              onChange={(e) => setFilters(p => ({ ...p, neighborhood: e.target.value }))}
-            >
-              <option value="">كل الأحياء</option>
+      <section className="card" style={{ marginTop: 12 }}>
+        <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ fontWeight: 950 }}>الفلاتر</div>
+          <button className="btn" type="button" onClick={() => setShowClassFilter((v) => !v)} aria-expanded={showClassFilter ? 'true' : 'false'}>
+            🎛️ سكني/تجاري
+          </button>
+        </div>
+
+        <div className="grid" style={{ marginTop: 10, gap: 10 }}>
+          <div>
+            <div className="muted" style={{ fontSize: 13, marginBottom: 6 }}>الحي</div>
+            <select className="input" value={neighborhood} onChange={(e) => setNeighborhood(e.target.value)}>
+              <option value="">الكل</option>
               {NEIGHBORHOODS.map((n) => (
                 <option key={n} value={n}>{n}</option>
               ))}
             </select>
           </div>
 
-          <div className="filterGroup">
-            <label className="muted label">نوع العرض</label>
-            <ChipsRow
-              value={filters.dealType}
-              options={DEAL_OPTS}
-              onChange={(v) => setFilters((p) => ({ ...p, dealType: v }))}
-            />
+          <div>
+            <div className="muted" style={{ fontSize: 13, marginBottom: 6 }}>بيع/إيجار</div>
+            <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+              {DEAL_TYPES.map((t) => (
+                <button
+                  key={t.key}
+                  type="button"
+                  className={dealType === t.key ? 'btnPrimary' : 'btn'}
+                  onClick={() => setDealType((v) => (v === t.key ? '' : t.key))}
+                >
+                  {t.label}
+                </button>
+              ))}
+              {dealType ? (
+                <button type="button" className="btn" onClick={() => setDealType('')}>مسح</button>
+              ) : null}
+            </div>
           </div>
 
-          <div className="filterGroup">
-            <label className="muted label">نوع العقار</label>
-            <ChipsRow
-              value={filters.propertyType}
-              options={TYPE_OPTS}
-              onChange={(v) => setFilters((p) => ({ ...p, propertyType: v }))}
-            />
+          {showClassFilter ? (
+            <div>
+              <div className="muted" style={{ fontSize: 13, marginBottom: 6 }}>نوع العقار</div>
+              <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  className={!propertyClass ? 'btnPrimary' : 'btn'}
+                  onClick={() => setPropertyClass('')}
+                >
+                  الكل
+                </button>
+                {PROPERTY_CLASSES.map((c) => (
+                  <button
+                    key={c.key}
+                    type="button"
+                    className={propertyClass === c.key ? 'btnPrimary' : 'btn'}
+                    onClick={() => setPropertyClass(c.key)}
+                  >
+                    {c.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          <div>
+            <div className="muted" style={{ fontSize: 13, marginBottom: 6 }}>الفئة</div>
+            <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+              {typeOptions.map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  className={propertyType === t ? 'btnPrimary' : 'btn'}
+                  onClick={() => setPropertyType((v) => (v === t ? '' : t))}
+                >
+                  {t}
+                </button>
+              ))}
+              {propertyType ? (
+                <button type="button" className="btn" onClick={() => setPropertyType('')}>مسح</button>
+              ) : null}
+            </div>
           </div>
         </div>
-        
-        <div className="filterActions">
-           <div className="sortGroup">
-             <span className="muted label" style={{marginBottom:0}}>الترتيب:</span>
-             <select 
-               className="sortSelect"
-               value={sortOrder}
-               onChange={(e) => setSortOrder(e.target.value)}
-             >
-               <option value="newest">الأحدث</option>
-               <option value="price_asc">السعر: الأقل أولاً</option>
-               <option value="price_desc">السعر: الأعلى أولاً</option>
-             </select>
-           </div>
 
-           <div className="btnsGroup">
-             <button className="btnText" onClick={clearAll} disabled={!hasFilter}>
-               مسح الفلاتر ✕
-             </button>
-             <button className="btnText" onClick={load} disabled={loading}>
-               تحديث ↻
-             </button>
-           </div>
+        <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', marginTop: 12 }}>
+          <div className="muted" style={{ fontSize: 13 }}>النتائج: {loading ? '—' : String(filtered.length)}</div>
+          <button
+            className="btn"
+            type="button"
+            onClick={() => {
+              setNeighborhood('');
+              setDealType('');
+              setPropertyType('');
+              setPropertyClass('');
+            }}
+          >
+            مسح كل الفلاتر
+          </button>
         </div>
       </section>
 
-      <section style={{ marginTop: 20 }}>
-        {err ? (
-          <div className="card" style={{ background: 'rgba(255,77,77,0.1)', borderColor: 'rgba(255,77,77,0.2)' }}>
-            {err}
-          </div>
-        ) : loading ? (
-          <div className="card muted" style={{textAlign:'center', padding:40}}>جاري تحميل العروض...</div>
+      {err ? (
+        <section className="card" style={{ marginTop: 12, borderColor: 'rgba(255,77,77,.25)', background: 'rgba(255,77,77,.08)' }}>
+          {err}
+        </section>
+      ) : null}
+
+      <section style={{ marginTop: 12 }}>
+        {loading ? (
+          <div className="card muted">جاري التحميل…</div>
         ) : filtered.length === 0 ? (
-          <div className="card muted" style={{textAlign:'center', padding:40}}>
-            لا توجد نتائج تطابق بحثك.
-            {hasFilter && (
-              <div style={{marginTop:10, color:'var(--gold)', cursor:'pointer', fontWeight:'bold'}} onClick={clearAll}>
-                مسح جميع الفلاتر
-              </div>
-            )}
+          <div className="card muted">
+            لا توجد عروض مطابقة.
+            <div style={{ marginTop: 10 }}>
+              <Link className="btnPrimary" href="/request">أرسل طلبك الآن</Link>
+            </div>
           </div>
         ) : (
-          <>
-            <div className="muted" style={{ marginBottom: 12, fontSize: 13, display: 'flex', justifyContent: 'space-between' }}>
-              <span>تم العثور على <strong>{filtered.length}</strong> عقار</span>
-            </div>
-            <div className="cards">
-              {filtered.map((item) => (
-                <div key={item.id} className="cardItem">
-                  <ListingCard item={item} />
-                </div>
-              ))}
-            </div>
-          </>
+          <div className="cards">
+            {filtered.map((item) => (
+              <div key={item.id} className="cardItem">
+                <ListingCard item={item} />
+              </div>
+            ))}
+          </div>
         )}
       </section>
 
       <style jsx>{`
-        .topHeader {
-          display: flex;
-          flex-direction: column;
-          gap: 16px;
-          margin-bottom: 20px;
-        }
-        @media (min-width: 768px) {
-          .topHeader {
-            flex-direction: row;
-            justify-content: space-between;
-            align-items: flex-end;
-          }
-        }
-        
-        .searchBox {
-          position: relative;
-          width: 100%;
-          max-width: 350px;
-        }
-        .searchBox .input {
-          padding-left: 40px; 
-          background: rgba(255,255,255,0.05);
-          border-color: rgba(255,255,255,0.1);
-        }
-        .searchIcon {
-          position: absolute;
-          left: 12px;
-          top: 50%;
-          transform: translateY(-50%);
-          color: var(--muted);
-          opacity: 0.7;
-          pointer-events: none;
-        }
-
-        .filterBar {
-          position: sticky;
-          top: 10px;
-          z-index: 50;
-          background: rgba(10, 13, 18, 0.85);
-          backdrop-filter: blur(16px);
-          border: 1px solid rgba(255,255,255,0.1);
-          padding: 18px;
-          box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-        }
-        
-        .filterGrid {
-          display: grid;
-          grid-template-columns: 1fr;
-          gap: 16px;
-          border-bottom: 1px solid rgba(255,255,255,0.08);
-          padding-bottom: 16px;
-          margin-bottom: 14px;
-        }
-        @media (min-width: 900px) {
-          .filterGrid {
-            grid-template-columns: 1fr 1fr 1.2fr;
-            align-items: start;
-          }
-        }
-
-        .label {
-          display: block;
-          font-size: 12px;
-          margin-bottom: 8px;
-          font-weight: 700;
-          letter-spacing: 0.5px;
-        }
-
-        .filterActions {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          flex-wrap: wrap;
-          gap: 12px;
-        }
-        
-        .sortGroup {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-        }
-        .sortSelect {
-          background: rgba(255,255,255,0.05);
-          border: 1px solid rgba(255,255,255,0.15);
-          color: var(--text);
-          padding: 8px 12px;
-          border-radius: 8px;
-          font-size: 13px;
-          outline: none;
-          cursor: pointer;
-        }
-        .sortSelect:focus {
-          border-color: var(--gold);
-        }
-
-        .btnsGroup {
-          display: flex;
-          gap: 16px;
-        }
-        .btnText {
-          background: none;
-          border: none;
-          color: var(--muted);
-          font-size: 13px;
-          cursor: pointer;
-          transition: color 0.2s;
-          padding: 0;
-        }
-        .btnText:hover:not(:disabled) {
-          color: var(--gold);
-        }
-        .btnText:disabled {
-          opacity: 0.4;
-          cursor: default;
+        .h1 {
+          margin: 0;
+          font-size: 26px;
+          font-weight: 950;
         }
       `}</style>
     </div>
-  );
-}
-
-export default function ListingsPage() {
-  return (
-    <Suspense fallback={<div className="container" style={{padding:40, textAlign:'center'}}>جاري تحميل الصفحة...</div>}>
-      <ListingsContent />
-    </Suspense>
   );
 }

@@ -6,7 +6,7 @@ import { signInWithEmailAndPassword, onAuthStateChanged, signOut } from 'firebas
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { isAdminUser } from '@/lib/admin';
 import { adminCreateListing, adminUpdateListing, fetchListings } from '@/lib/listings';
-import { DEAL_TYPES, NEIGHBORHOODS, PROPERTY_TYPES, STATUS_OPTIONS } from '@/lib/taxonomy';
+import { DEAL_TYPES, NEIGHBORHOODS, PROPERTY_TYPES, STATUS_OPTIONS, PROPERTY_CLASSES } from '@/lib/taxonomy';
 import { formatPriceSAR, statusBadge } from '@/lib/format';
 
 function Field({ label, children, hint }) {
@@ -42,6 +42,7 @@ export default function AdminPage() {
     part: '',
     dealType: 'sale',
     propertyType: 'أرض',
+    propertyClass: '',
     area: '',
     price: '',
     status: 'available',
@@ -271,6 +272,15 @@ export default function AdminPage() {
                 <Field label="نوع العقار">
                   <select className="select" value={createForm.propertyType} onChange={(e) => setCreateForm({ ...createForm, propertyType: e.target.value })}>
                     {PROPERTY_TYPES.map(p => <option key={p} value={p}>{p}</option>)}
+                  </select>
+                </Field>
+              </div>
+
+              <div className="col-3">
+                <Field label="سكني/تجاري" hint="اختياري — إذا تركته (تلقائي) سيتحدد حسب نوع العقار.">
+                  <select className="select" value={createForm.propertyClass} onChange={(e) => setCreateForm({ ...createForm, propertyClass: e.target.value })}>
+                    <option value="">تلقائي</option>
+                    {PROPERTY_CLASSES.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}
                   </select>
                 </Field>
               </div>
