@@ -1,146 +1,252 @@
 'use client';
 
-export default function ListingCard({ item }) {
-  // استخدم نفس المكون مع prop مختلف
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
+
+import ListingCard from '@/components/ListingCard';
+import NeighborhoodGrid from '@/components/NeighborhoodGrid';
+
+import { fetchLatestListings } from '@/lib/listings';
+
+export default function HomePage() {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState('');
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const res = await fetchLatestListings(12);
+        if (!alive) return;
+        setItems(res || []);
+      } catch (e) {
+        if (!alive) return;
+        setErr('تعذر تحميل أحدث العروض.');
+      } finally {
+        if (alive) setLoading(false);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   return (
-    <a href={`/listing/${item.id}`} className="harajCard" aria-label={item.title}>
-      <div className="harajCardInner">
-        {/* النص (يمين) */}
-        <div className="harajBody">
-          <div className="harajTitle">{item.title || 'بدون عنوان'}</div>
-
-          <div className="harajMeta">
-            <span className="harajMetaItem">{item.district || '—'}</span>
-            <span className="harajDot">•</span>
-            <span className="harajMetaItem">
-              {item.createdAt ? new Date(item.createdAt).toLocaleDateString('ar-SA') : '—'}
-            </span>
-          </div>
-
-          {item.tags?.length ? (
-            <div className="harajTags">
-              {item.tags.slice(0, 3).map((t, i) => (
-                <span key={i} className="harajTag">{t}</span>
-              ))}
-            </div>
-          ) : null}
-
-          <div className="harajPrice">
-            {item.price ? `${item.price.toLocaleString()} ريال` : '—'}
-          </div>
-        </div>
-
-        {/* الصورة (يسار) */}
-        <div className="harajThumb">
-          {item.imageUrl ? (
-            <img src={item.imageUrl} alt="" loading="lazy" />
-          ) : (
-            <div className="harajNoImg">
-              <span>بدون صورة</span>
-            </div>
-          )}
-        </div>
+    <div className="container">
+      {/* ✅ شريط البحث */}
+      <div className="searchBar">
+        <input 
+          type="text" 
+          placeholder="أبحث عن حي / مخطط / جزء..." 
+          className="searchInput"
+        />
       </div>
 
+      {/* ✅ أحياء مميزة */}
+      <NeighborhoodGrid />
+
+      {/* ✅ شريط سريع */}
+      <div className="quickBar">
+        <Link href="/listings" className="pill active">كل العروض</Link>
+        <Link href="/listings?dealType=sale" className="pill">بيع</Link>
+        <Link href="/listings?dealType=rent" className="pill">إيجار</Link>
+        <Link href="/map" className="pill">الخريطة</Link>
+      </div>
+
+      {/* ✅ أحدث العروض */}
+      <div className="sectionHead">
+        <h2 className="h2">أحدث العروض</h2>
+        <Link href="/listings" className="more">تصفح الكل</Link>
+      </div>
+
+      {err ? <div className="card" style={{ padding: 14 }}>{err}</div> : null}
+
+      {loading ? (
+        <div className="muted" style={{ padding: '10px 0' }}>جاري التحميل...</div>
+      ) : items.length === 0 ? (
+        <div className="card" style={{ padding: 16 }}>لا توجد عروض حتى الآن.</div>
+      ) : (
+        <div className="list">
+          {items.map((it) => (
+            <ListingCard key={it.id || it.docId || Math.random()} item={it} />
+          ))}
+        </div>
+      )}
+
+      {/* ✅ معلومات الاتصال */}
+      <div className="contactInfo">
+        <div className="contactText">
+          <strong>واتساب:</strong> 966597520693
+        </div>
+        <div className="copyright">© 2026 عقار أبحر</div>
+      </div>
+
+      {/* ✅ قائمة التصفح السفلية */}
+      <nav className="bottomNav">
+        <Link href="/" className="navLink active">الرئيسية</Link>
+        <Link href="/listings" className="navLink">كل العروض</Link>
+        <Link href="/request" className="navLink">أرسل طلبك</Link>
+        <Link href="/map" className="navLink">الخريطة</Link>
+        <Link href="/account" className="navLink">الحساب</Link>
+      </nav>
+
       <style jsx>{`
-        .harajCard {
-          display: block;
-          text-decoration: none;
-          color: inherit;
-          background: #fff;
-          border: 1px solid rgba(0,0,0,0.06);
-          border-radius: 14px;
-          overflow: hidden;
-        }
-        .harajCardInner {
-          display: flex;
-          flex-direction: row-reverse;
-          gap: 12px;
-          padding: 12px;
-          align-items: stretch;
-        }
-
-        .harajBody {
-          flex: 1;
-          min-width: 0;
+        .container {
           direction: rtl;
-          text-align: right;
+          padding: 16px;
+          max-width: 1200px;
+          margin: 0 auto;
+          min-height: 100vh;
+          background: #f8f9fa;
         }
-
-        .harajTitle {
+        
+        .searchBar {
+          margin: 10px 0 20px 0;
+        }
+        
+        .searchInput {
+          width: 100%;
+          padding: 14px 16px;
+          border: 1px solid #e0e0e0;
+          border-radius: 12px;
           font-size: 16px;
-          font-weight: 800;
-          line-height: 1.35;
-          display: -webkit-box;
-          -webkit-line-clamp: 2;
-          -webkit-box-orient: vertical;
-          overflow: hidden;
+          background: #fff;
+          direction: rtl;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.05);
         }
-
-        .harajMeta {
-          margin-top: 6px;
-          font-size: 12px;
-          color: rgba(0,0,0,0.55);
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          flex-wrap: wrap;
+        
+        .searchInput:focus {
+          outline: none;
+          border-color: #1a73e8;
+          box-shadow: 0 2px 12px rgba(30, 115, 216, 0.15);
         }
-        .harajDot { opacity: 0.7; }
-        .harajMetaItem { white-space: nowrap; }
-
-        .harajTags {
-          margin-top: 8px;
-          display: flex;
-          gap: 6px;
-          flex-wrap: wrap;
+        
+        .quickBar{
+          margin: 20px 0;
+          display:flex;
+          gap:10px;
+          flex-wrap:wrap;
         }
-        .harajTag {
-          font-size: 12px;
-          padding: 6px 10px;
-          border-radius: 999px;
-          background: rgba(0,0,0,0.04);
-          border: 1px solid rgba(0,0,0,0.05);
+        .pill{
+          background: rgba(30,115,216,.10);
+          border:1px solid rgba(30,115,216,.18);
+          color: #1a73e8;
+          padding:10px 16px;
+          border-radius:999px;
+          text-decoration:none;
+          font-weight:700;
+          font-size:14px;
+          transition: all 0.2s;
         }
-
-        .harajPrice {
-          margin-top: 10px;
-          font-size: 15px;
-          font-weight: 900;
+        .pill.active {
+          background: #1a73e8;
+          color: white;
+        }
+        .pill:hover {
+          background: rgba(30,115,216,0.15);
+        }
+        .pill.active:hover {
+          background: #0d62d9;
+        }
+        
+        .sectionHead{
+          margin: 24px 0 16px 0;
+          display:flex;
+          align-items:center;
+          justify-content:space-between;
+          gap:12px;
+        }
+        .h2{
+          margin:0;
+          font-size:18px;
+          font-weight:900;
           color: #111;
         }
-
-        .harajThumb {
-          width: 110px;
-          flex: 0 0 110px;
+        .more{
+          text-decoration:none;
+          color: #1a73e8;
+          font-weight:700;
+          font-size:14px;
+        }
+        
+        .list{
+          margin-top: 12px;
+          display:flex;
+          flex-direction:column;
+          gap:12px;
+          margin-bottom: 24px;
+        }
+        
+        .card {
+          background: #fff;
+          border: 1px solid #e0e0e0;
           border-radius: 12px;
-          overflow: hidden;
-          background: rgba(0,0,0,0.03);
-          border: 1px solid rgba(0,0,0,0.05);
+          margin: 10px 0;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.05);
         }
-        .harajThumb img {
-          width: 100%;
-          height: 100%;
-          object-fit: cover;
-          display: block;
+        
+        .muted {
+          color: #666;
+          text-align: center;
+          font-size: 14px;
+          padding: 20px;
         }
-
-        .harajNoImg {
-          width: 100%;
-          height: 100%;
-          min-height: 84px;
+        
+        .contactInfo {
+          margin: 40px 0 80px 0;
+          padding: 20px;
+          background: #fff;
+          border-radius: 12px;
+          text-align: center;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+          border: 1px solid #e0e0e0;
+        }
+        
+        .contactText {
+          font-size: 16px;
+          color: #333;
+          margin-bottom: 10px;
+        }
+        
+        .copyright {
+          font-size: 14px;
+          color: #666;
+        }
+        
+        .bottomNav {
+          position: fixed;
+          bottom: 0;
+          left: 0;
+          right: 0;
+          background: #fff;
+          border-top: 1px solid #e0e0e0;
           display: flex;
-          align-items: center;
-          justify-content: center;
-          color: rgba(0,0,0,0.55);
+          justify-content: space-around;
+          padding: 12px 0;
+          z-index: 1000;
+        }
+        
+        .navLink {
+          text-decoration: none;
+          color: #666;
           font-size: 12px;
+          font-weight: 500;
+          text-align: center;
+          flex: 1;
+        }
+        
+        .navLink.active {
+          color: #1a73e8;
           font-weight: 700;
         }
-
-        .harajCard:active {
-          transform: scale(0.995);
+        
+        @media (min-width: 768px) {
+          .bottomNav {
+            display: none;
+          }
         }
       `}</style>
-    </a>
+    </div>
   );
 }
