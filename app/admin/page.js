@@ -45,6 +45,8 @@ export default function AdminPage() {
     propertyClass: '',
     area: '',
     price: '',
+    lat: '',
+    lng: '',
     status: 'available',
     direct: true,
     description: '',
@@ -133,7 +135,7 @@ export default function AdminPage() {
       });
 
       setCreatedId(id);
-      setCreateForm({ ...createForm, title:'', plan:'', part:'', area:'', price:'', description:'', imagesText:'' });
+      setCreateForm({ ...createForm, title:'', plan:'', part:'', area:'', price:'', lat:'', lng:'', description:'', imagesText:'' });
     } catch (err) {
       alert('حصل خطأ أثناء إضافة العرض. راجع إعداد Firebase وقواعد Firestore.');
       console.error(err);
@@ -296,6 +298,22 @@ export default function AdminPage() {
                   <input className="input" inputMode="numeric" value={createForm.price} onChange={(e) => setCreateForm({ ...createForm, price: e.target.value })} placeholder="مثال: 1200000" />
                 </Field>
               </div>
+
+              <div className="col-3">
+                <Field
+                  label="خط العرض (lat) — اختياري"
+                  hint="لو أضفت lat/lng سيظهر العرض على صفحة الخريطة."
+                >
+                  <input className="input" inputMode="decimal" value={createForm.lat} onChange={(e) => setCreateForm({ ...createForm, lat: e.target.value })} placeholder="مثال: 21.7001" />
+                </Field>
+              </div>
+
+              <div className="col-3">
+                <Field label="خط الطول (lng) — اختياري">
+                  <input className="input" inputMode="decimal" value={createForm.lng} onChange={(e) => setCreateForm({ ...createForm, lng: e.target.value })} placeholder="مثال: 39.1234" />
+                </Field>
+              </div>
+
 
               <div className="col-3">
                 <Field label="الحالة">

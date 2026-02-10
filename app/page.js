@@ -82,10 +82,12 @@ export default function HomePage() {
 
           <div className="heroNeighborhoods">
             <div style={{ fontWeight: 950, marginBottom: 8 }}>الأحياء المميزة</div>
-            <div className="row" style={{ gap: 8 }}>
-              {FEATURED_NEIGHBORHOODS.map((n) => (
-                <Link key={n.key} className="btn" href={`/neighborhood/${n.key}`}>{n.label}</Link>
-              ))}
+            <div className="chipsNavOuter" aria-label="الأحياء المميزة">
+              <div className="chipsNavInner">
+                {FEATURED_NEIGHBORHOODS.map((n) => (
+                  <Link key={n.key} className="btn chipNavBtn" href={`/neighborhood/${n.key}`}>{n.label}</Link>
+                ))}
+              </div>
             </div>
             <div className="muted" style={{ marginTop: 8, fontSize: 12, lineHeight: 1.7 }}>
               اختر الحي → ثم اختر (بيع/إيجار) → بعدها اختر الفئة.
@@ -234,7 +236,31 @@ export default function HomePage() {
             grid-template-columns: 1.2fr 0.8fr;
           }
         }
-      `}</style>
+      
+        .chipsNavOuter {
+          width: 100%;
+          overflow-x: auto;
+          -webkit-overflow-scrolling: touch;
+          scrollbar-width: none;
+          scroll-snap-type: x mandatory;
+          padding-bottom: 4px;
+        }
+        .chipsNavOuter::-webkit-scrollbar { height: 0; }
+        .chipsNavInner {
+          display: flex;
+          gap: 8px;
+          white-space: nowrap;
+          padding: 2px 2px;
+        }
+        .chipNavBtn {
+          flex: 0 0 auto;
+          scroll-snap-align: start;
+          border-radius: 999px;
+          padding: 9px 12px;
+          font-weight: 900;
+          font-size: 13px;
+        }
+`}</style>
     </div>
   );
 }

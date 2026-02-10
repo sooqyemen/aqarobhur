@@ -31,6 +31,7 @@ export default function Header() {
         <nav className="nav navDesktop" aria-label="التنقل">
           <Link className={isActive('/') ? 'btn btnActive' : 'btn'} href="/" aria-current={isActive('/') ? 'page' : undefined}>الرئيسية</Link>
           <Link className={isActive('/listings') ? 'btn btnActive' : 'btn'} href="/listings" aria-current={isActive('/listings') ? 'page' : undefined}>كل العروض</Link>
+          <Link className={isActive('/map') ? 'btn btnActive' : 'btn'} href="/map" aria-current={isActive('/map') ? 'page' : undefined}>الخريطة</Link>
           <Link className={isActive('/request') ? 'btn btnActive' : 'btn'} href="/request" aria-current={isActive('/request') ? 'page' : undefined}>أرسل طلبك</Link>
           <Link className={isActive('/admin') ? 'btn btnActive' : 'btn'} href="/admin" aria-current={isActive('/admin') ? 'page' : undefined}>الأدمن</Link>
         </nav>
@@ -68,6 +69,7 @@ export default function Header() {
             <div className="drawerLinks">
               <Link className={isActive('/') ? 'btn btnActive' : 'btn'} href="/">الرئيسية</Link>
               <Link className={isActive('/listings') ? 'btn btnActive' : 'btn'} href="/listings">كل العروض</Link>
+              <Link className={isActive('/map') ? 'btn btnActive' : 'btn'} href="/map">الخريطة</Link>
               <Link className={isActive('/request') ? 'btn btnActive' : 'btn'} href="/request">أرسل طلبك</Link>
               <div style={{ height: 8 }} />
               <Link className={isActive('/admin') ? 'btn btnActive' : 'btn'} href="/admin">تسجيل دخول الأدمن</Link>

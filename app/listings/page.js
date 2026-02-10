@@ -88,6 +88,7 @@ export default function ListingsPage() {
         </div>
         <div className="row">
           <button className="btn" onClick={load} disabled={loading}>تحديث</button>
+          <Link className="btn" href={`/map?neighborhood=${encodeURIComponent(neighborhood)}&dealType=${encodeURIComponent(dealType)}&propertyType=${encodeURIComponent(propertyType)}&propertyClass=${encodeURIComponent(propertyClass)}`}>الخريطة</Link>
           <Link className="btn" href="/request">أرسل طلبك</Link>
         </div>
       </div>
