@@ -1,14 +1,13 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 
 import ChipsRow from '@/components/ChipsRow';
 import ListingCard from '@/components/ListingCard';
 import { fetchListings } from '@/lib/listings';
-import { DEAL_TYPES, NEIGHBORHOODS, PROPERTY_CLASSES, PROPERTY_TYPES } from '@/lib/taxonomy';
+import { NEIGHBORHOODS } from '@/lib/taxonomy';
 
 function escapeHtml(s) {
   return String(s || '')
@@ -42,50 +41,44 @@ function loadGoogleMaps(apiKey) {
   });
 }
 
+// نقاط ألوان خفيفة للأحياء (بدون رموز)
+const NEIGHBORHOOD_COLORS = {
+  الزمرد: '#34A853',
+  الياقوت: '#4285F4',
+  الصواري: '#EA4335',
+  الشراع: '#FBBC05',
+  اللؤلؤ: '#7B1FA2',
+  النور: '#00796B',
+  الفنار: '#0B57D0',
+  البحيرات: '#6D4C41',
+};
+
 export default function MapClient() {
   const sp = useSearchParams();
 
   const initialNeighborhood = sp.get('neighborhood') || '';
-  const initialDealType = sp.get('dealType') || '';
-  const initialPropertyType = sp.get('propertyType') || '';
-  const initialPropertyClass = sp.get('propertyClass') || '';
 
   const [neighborhood, setNeighborhood] = useState(initialNeighborhood);
-  const [dealType, setDealType] = useState(initialDealType);
-  const [propertyType, setPropertyType] = useState(initialPropertyType);
-  const [propertyClass, setPropertyClass] = useState(initialPropertyClass);
-
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
 
-  // ✅ Fullscreen Overlay
+  // ✅ Fullscreen بدون أي Overlay مُظلِّل
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [canPortal, setCanPortal] = useState(false);
 
-  const mapHostRef = useRef(null);
   const mapDivRef = useRef(null);
-  const placeholderRef = useRef(null);
-  const lastParentRef = useRef(null);
-  const lastNextSiblingRef = useRef(null);
-
   const mapRef = useRef(null);
-  const markersRef = useRef([]);
   const infoRef = useRef(null);
+  const markersRef = useRef([]);
   const markerByIdRef = useRef({});
 
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
 
-  useEffect(() => setCanPortal(true), []);
-
   const filters = useMemo(() => {
     const f = {};
     if (neighborhood) f.neighborhood = neighborhood;
-    if (dealType) f.dealType = dealType;
-    if (propertyType) f.propertyType = propertyType;
-    if (propertyClass) f.propertyClass = propertyClass;
     return f;
-  }, [neighborhood, dealType, propertyType, propertyClass]);
+  }, [neighborhood]);
 
   const filteredItemsWithCoords = useMemo(() => {
     return (items || []).filter((it) => {
@@ -99,11 +92,15 @@ export default function MapClient() {
     setErr('');
     setLoading(true);
     try {
-      const data = await fetchListings({ onlyPublic: true, filters, includeLegacy: false, max: 500 });
+      const data = await fetchListings({
+        onlyPublic: true,
+        filters,
+        includeLegacy: false,
+        max: 500,
+      });
       setItems(Array.isArray(data) ? data : []);
     } catch (e) {
-      const msg = String(e?.message || '');
-      setErr(msg || 'حصل خطأ أثناء جلب العروض.');
+      setErr(String(e?.message || 'حصل خطأ أثناء جلب العروض.'));
       setItems([]);
     } finally {
       setLoading(false);
@@ -115,7 +112,7 @@ export default function MapClient() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters]);
 
-  // ✅ init map
+  // ✅ init map مرة واحدة
   useEffect(() => {
     let cancelled = false;
 
@@ -150,11 +147,36 @@ export default function MapClient() {
     };
   }, [apiKey]);
 
+  // ✅ عند فتح/إغلاق Fullscreen: نخفي سكرول الخلفية + resize للخريطة
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+
+    const prevOverflow = document.body.style.overflow;
+    if (isFullscreen) {
+      document.body.style.overflow = 'hidden';
+      document.body.classList.add('isMapFullscreen');
+    } else {
+      document.body.style.overflow = prevOverflow || '';
+      document.body.classList.remove('isMapFullscreen');
+    }
+
+    const map = mapRef.current;
+    if (map && window.google?.maps) {
+      const t = setTimeout(() => {
+        try {
+          window.google.maps.event.trigger(map, 'resize');
+        } catch {}
+      }, 120);
+      return () => clearTimeout(t);
+    }
+  }, [isFullscreen]);
+
   // ✅ markers
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !window.google?.maps) return;
 
+    // clear
     markersRef.current.forEach((m) => m.setMap(null));
     markersRef.current = [];
     markerByIdRef.current = {};
@@ -179,12 +201,12 @@ export default function MapClient() {
 
       marker.addListener('click', () => {
         const html = `
-          <div style="direction:rtl; font-family: Arial, sans-serif; max-width: 220px;">
+          <div style="direction:rtl; font-family: Arial, sans-serif; max-width: 240px;">
             <div style="font-weight: 800; margin-bottom: 6px;">${escapeHtml(it.title || 'عرض')}</div>
-            <div style="opacity: .85; font-size: 12px; margin-bottom: 6px;">
+            <div style="opacity: .85; font-size: 12px; margin-bottom: 8px;">
               ${escapeHtml(it.neighborhood || '')} ${escapeHtml(it.plan || '')} ${escapeHtml(it.part || '')}
             </div>
-            <a href="/listing/${encodeURIComponent(it.id)}" style="color:#0b57d0; text-decoration:none; font-weight:700;">فتح التفاصيل</a>
+            <a href="/listing/${encodeURIComponent(it.id)}" style="color:#0b57d0; text-decoration:none; font-weight:800;">فتح التفاصيل</a>
           </div>
         `;
         infoRef.current.setContent(html);
@@ -193,6 +215,7 @@ export default function MapClient() {
     });
 
     map.fitBounds(bounds);
+
     if (list.length === 1) {
       map.setZoom(15);
       map.setCenter({ lat: Number(list[0].lat), lng: Number(list[0].lng) });
@@ -203,98 +226,39 @@ export default function MapClient() {
     const map = mapRef.current;
     const marker = markerByIdRef.current[id];
     if (!map || !marker || !window.google?.maps) return;
+
     map.setZoom(Math.max(map.getZoom(), 15));
     map.panTo(marker.getPosition());
     window.google.maps.event.trigger(marker, 'click');
   }
 
-  // ✅ move mapHost to body in fullscreen
-  useEffect(() => {
-    if (!canPortal) return;
-    if (typeof document === 'undefined') return;
-    if (!mapHostRef.current) return;
-
-    const mapHost = mapHostRef.current;
-    const map = mapRef.current;
-
-    if (isFullscreen) {
-      lastParentRef.current = mapHost.parentNode;
-      lastNextSiblingRef.current = mapHost.nextSibling;
-
-      document.body.classList.add('isMapFullscreen');
-      document.body.style.overflow = 'hidden';
-
-      document.body.appendChild(mapHost);
-
-      const t = setTimeout(() => {
-        try {
-          window.google?.maps?.event?.trigger(map, 'resize');
-        } catch {}
-      }, 120);
-      return () => clearTimeout(t);
-    }
-
-    document.body.classList.remove('isMapFullscreen');
-    document.body.style.overflow = '';
-
-    const parent = lastParentRef.current;
-    if (parent) {
-      if (lastNextSiblingRef.current) parent.insertBefore(mapHost, lastNextSiblingRef.current);
-      else parent.appendChild(mapHost);
-    } else if (placeholderRef.current) {
-      placeholderRef.current.appendChild(mapHost);
-    }
-
-    const t = setTimeout(() => {
-      try {
-        window.google?.maps?.event?.trigger(map, 'resize');
-      } catch {}
-    }, 120);
-    return () => clearTimeout(t);
-  }, [isFullscreen, canPortal]);
-
-  const neighborhoodOptions = useMemo(
-    () => [{ value: '', label: 'كل الأحياء' }, ...NEIGHBORHOODS.map((n) => ({ value: n, label: n }))],
-    []
-  );
-  const dealTypeOptions = useMemo(
-    () => [{ value: '', label: 'بيع/إيجار' }, ...DEAL_TYPES.map((d) => ({ value: d.key, label: d.label }))],
-    []
-  );
-  const classOptions = useMemo(
-    () => [{ value: '', label: 'سكني/تجاري' }, ...PROPERTY_CLASSES.map((c) => ({ value: c.key, label: c.label }))],
-    []
-  );
-  const typeOptions = useMemo(
-    () => [{ value: '', label: 'كل الأنواع' }, ...PROPERTY_TYPES.map((t) => ({ value: t, label: t }))],
-    []
-  );
-
-  const Overlay = () => {
-    if (!canPortal) return null;
-    return createPortal(
-      <div className="fsOverlay" role="dialog" aria-label="الخريطة ملء الشاشة">
-        <div className="fsTop">
-          <button className="xBtn" onClick={() => setIsFullscreen(false)} aria-label="إغلاق">✕</button>
-          <div className="topCenter">
-            <ChipsRow value={neighborhood} options={neighborhoodOptions} onChange={setNeighborhood} />
-          </div>
-          <div className="topRight" />
-        </div>
-      </div>,
-      document.body
-    );
-  };
+  const neighborhoodOptions = useMemo(() => {
+    const base = [{ value: '', label: 'كل الأحياء' }];
+    const opts = (NEIGHBORHOODS || []).map((n) => {
+      const col = NEIGHBORHOOD_COLORS[n] || '#94A3B8';
+      return {
+        value: n,
+        label: (
+          <span className="chipLabel">
+            <span className="dot" style={{ background: col }} />
+            <span>{n}</span>
+          </span>
+        ),
+      };
+    });
+    return base.concat(opts);
+  }, []);
 
   return (
     <div className="container" style={{ paddingTop: 16 }}>
       <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-end' }}>
         <div>
-          <h1 className="h1">الخريطة</h1>
+          <h1 className="h1" style={{ margin: 0 }}>الخريطة</h1>
           <div className="muted" style={{ fontSize: 13 }}>
             تظهر فقط العروض التي تحتوي على إحداثيات (lat/lng).
           </div>
         </div>
+
         <div className="row">
           <Link className="btn" href="/listings">رجوع</Link>
           <button className="btn" onClick={load} disabled={loading}>تحديث</button>
@@ -302,113 +266,142 @@ export default function MapClient() {
       </div>
 
       {!apiKey ? (
-        <section className="card" style={{ marginTop: 12 }}>
-          <div style={{ fontWeight: 900, marginBottom: 6 }}>مفتاح Google Maps غير موجود</div>
-          <div className="muted" style={{ lineHeight: 1.7 }}>
-            أضف <b>NEXT_PUBLIC_GOOGLE_MAPS_API_KEY</b> في Vercel/المحلي.
-          </div>
+        <section className="card" style={{ marginTop: 12, padding: 14 }}>
+          <div style={{ fontWeight: 950, marginBottom: 6 }}>مفتاح Google Maps غير موجود</div>
+          <div className="muted">أضف <b>NEXT_PUBLIC_GOOGLE_MAPS_API_KEY</b> في Vercel/المحلي.</div>
         </section>
       ) : null}
 
-      <section className="card" style={{ marginTop: 12 }}>
-        <div style={{ fontWeight: 900, marginBottom: 10 }}>الفلاتر</div>
-
-        <div className="grid" style={{ alignItems: 'end' }}>
-          <div className="col-12">
-            <div className="muted" style={{ fontSize: 13, marginBottom: 6 }}>الحي</div>
-            <ChipsRow value={neighborhood} options={neighborhoodOptions} onChange={setNeighborhood} />
-          </div>
-
-          <div className="col-12" style={{ marginTop: 10 }}>
-            <div className="muted" style={{ fontSize: 13, marginBottom: 6 }}>بيع/إيجار</div>
-            <ChipsRow value={dealType} options={dealTypeOptions} onChange={setDealType} />
-          </div>
-
-          <div className="col-12" style={{ marginTop: 10 }}>
-            <div className="muted" style={{ fontSize: 13, marginBottom: 6 }}>سكني/تجاري</div>
-            <ChipsRow
-              value={propertyClass}
-              options={classOptions}
-              onChange={(v) => {
-                setPropertyClass(v);
-                setPropertyType('');
-              }}
-            />
-          </div>
-
-          <div className="col-12" style={{ marginTop: 10 }}>
-            <div className="muted" style={{ fontSize: 13, marginBottom: 6 }}>نوع العقار</div>
-            <ChipsRow value={propertyType} options={typeOptions} onChange={setPropertyType} />
-          </div>
-        </div>
-      </section>
-
       {err ? (
-        <section className="card" style={{ marginTop: 12 }}>
+        <section className="card" style={{ marginTop: 12, padding: 14 }}>
           <div className="badge err">{err}</div>
         </section>
       ) : null}
 
-      <section className="card" style={{ marginTop: 12 }}>
-        <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ fontWeight: 900 }}>الخريطة</div>
-          <div className="row" style={{ gap: 10 }}>
-            <div className="muted" style={{ fontSize: 13 }}>عدد العلامات: {filteredItemsWithCoords.length}</div>
-            <button className="btn" onClick={() => setIsFullscreen(true)}>ملء الشاشة</button>
-          </div>
+      {/* ✅ شريط علوي (بدون تظليل على الخريطة) */}
+      <div className={`topBar ${isFullscreen ? 'topBarFs' : ''}`}>
+        <button
+          className="xBtn"
+          onClick={() => (isFullscreen ? setIsFullscreen(false) : window.history.back())}
+          aria-label="إغلاق"
+        >
+          ✕
+        </button>
+
+        <div className="barCenter">
+          <ChipsRow value={neighborhood} options={neighborhoodOptions} onChange={setNeighborhood} />
         </div>
 
-        <div ref={placeholderRef} />
-
-        <div ref={mapHostRef} className="mapHost">
-          <div ref={mapDivRef} className="mapBox" />
-          {!mapRef.current ? <div className="mapLoading">جاري تحميل الخريطة…</div> : null}
-        </div>
-      </section>
-
-      <section style={{ marginTop: 12 }}>
-        <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ fontWeight: 900 }}>العروض على الخريطة</div>
-          {loading ? <div className="muted">تحميل…</div> : null}
-        </div>
-
-        {loading ? null : filteredItemsWithCoords.length === 0 ? (
-          <div className="card muted" style={{ marginTop: 10 }}>
-            لا توجد عروض بإحداثيات ضمن الفلاتر الحالية.
-          </div>
+        {!isFullscreen ? (
+          <button className="fsBtn" onClick={() => setIsFullscreen(true)}>ملء الشاشة</button>
         ) : (
-          <div style={{ marginTop: 10, display: 'grid', gap: 10 }}>
-            {filteredItemsWithCoords.slice(0, 40).map((it) => (
-              <div key={it.id} className="card">
-                <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{ fontWeight: 900 }}>{it.title || 'عرض'}</div>
-                  <button className="btn" onClick={() => focusOn(it.id)}>عرض</button>
-                </div>
-                <div style={{ marginTop: 8 }}>
-                  <ListingCard item={it} compact />
-                </div>
-              </div>
-            ))}
-          </div>
+          <div style={{ width: 44 }} />
         )}
-      </section>
+      </div>
 
-      {isFullscreen ? <Overlay /> : null}
+      {/* ✅ الخريطة */}
+      <div className={`mapHost ${isFullscreen ? 'mapHostFs' : ''}`}>
+        <div ref={mapDivRef} className="mapBox" />
+        {!mapRef.current ? <div className="mapLoading">جاري تحميل الخريطة…</div> : null}
+      </div>
+
+      {/* ✅ قائمة مصغرة أسفل الخريطة (تختفي في fullscreen) */}
+      {!isFullscreen ? (
+        <section style={{ marginTop: 12 }}>
+          <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ fontWeight: 950 }}>العروض</div>
+            {loading ? (
+              <div className="muted">تحميل…</div>
+            ) : (
+              <div className="muted">عدد العلامات: {filteredItemsWithCoords.length}</div>
+            )}
+          </div>
+
+          {loading ? null : filteredItemsWithCoords.length === 0 ? (
+            <div className="card muted" style={{ marginTop: 10, padding: 14 }}>
+              لا توجد عروض بإحداثيات ضمن الحي المختار.
+            </div>
+          ) : (
+            <div style={{ marginTop: 10, display: 'grid', gap: 10 }}>
+              {filteredItemsWithCoords.slice(0, 25).map((it) => (
+                <div key={it.id} className="card">
+                  <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ fontWeight: 950 }}>{it.title || 'عرض'}</div>
+                    <button className="btn" onClick={() => focusOn(it.id)}>عرض</button>
+                  </div>
+                  <div style={{ marginTop: 8 }}>
+                    <ListingCard item={it} compact />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      ) : null}
 
       <style jsx>{`
-        .mapHost {
-          margin-top: 10px;
-          height: 60vh;
-          min-height: 360px;
+        .topBar {
+          margin-top: 12px;
+          background: rgba(10, 13, 18, 0.92);
+          border: 1px solid rgba(255, 255, 255, 0.14);
+          border-radius: 16px;
+          padding: 10px;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          backdrop-filter: blur(16px);
+          box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+        }
+
+        /* ✅ وقت fullscreen: الشريط يثبت فوق الخريطة */
+        .topBarFs {
+          position: fixed;
+          top: 12px;
+          left: 12px;
+          right: 12px;
+          z-index: 1000002;
+        }
+
+        .xBtn {
+          width: 44px;
+          height: 44px;
           border-radius: 14px;
+          border: 1px solid rgba(255, 255, 255, 0.14);
+          background: rgba(255, 255, 255, 0.06);
+          color: #fff;
+          font-weight: 950;
+          cursor: pointer;
+        }
+
+        .barCenter {
+          flex: 1;
+          min-width: 0;
+        }
+
+        .fsBtn {
+          border: 1px solid rgba(255, 255, 255, 0.14);
+          background: rgba(255, 255, 255, 0.06);
+          color: #fff;
+          border-radius: 14px;
+          padding: 12px 12px;
+          font-weight: 950;
+          cursor: pointer;
+          white-space: nowrap;
+        }
+
+        .mapHost {
+          margin-top: 12px;
+          height: 60vh;
+          min-height: 380px;
+          border-radius: 16px;
           overflow: hidden;
-          border: 1px solid var(--border);
+          border: 1px solid rgba(255, 255, 255, 0.10);
           background: #0b1220;
           position: relative;
         }
 
-        /* ✅ عندما تكون الخريطة ملء الشاشة (العنصر انتقل للـbody) */
-        :global(body.isMapFullscreen .mapHost) {
+        /* ✅ Fullscreen حقيقي بدون Overlay مظلل */
+        .mapHostFs {
           position: fixed;
           inset: 0;
           height: 100vh;
@@ -416,7 +409,7 @@ export default function MapClient() {
           margin: 0;
           border-radius: 0;
           border: none;
-          z-index: 999998;
+          z-index: 1000000; /* أقل من topBarFs، أعلى من أي شيء */
         }
 
         .mapBox {
@@ -430,54 +423,22 @@ export default function MapClient() {
           display: flex;
           align-items: center;
           justify-content: center;
-          font-weight: 900;
+          font-weight: 950;
           color: #e2e8f0;
-          background: rgba(0, 0, 0, 0.35);
+          background: rgba(0, 0, 0, 0.18); /* خفيف جدًا فقط أثناء التحميل */
         }
 
-        :global(.fsOverlay) {
-          position: fixed;
-          inset: 0;
-          z-index: 999999;
-          background: rgba(10, 13, 18, 0.92);
-        }
-
-        :global(.fsTop) {
-          position: fixed;
-          left: 12px;
-          right: 12px;
-          top: 12px;
-          z-index: 1000000;
-          display: flex;
+        .chipLabel {
+          display: inline-flex;
           align-items: center;
-          gap: 10px;
-          padding: 10px;
-          border-radius: 16px;
-          background: rgba(10, 13, 18, 0.92);
-          border: 1px solid rgba(255, 255, 255, 0.14);
-          backdrop-filter: blur(16px);
-          box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+          gap: 8px;
         }
-
-        :global(.xBtn) {
-          width: 44px;
-          height: 44px;
-          border-radius: 14px;
-          border: 1px solid rgba(255, 255, 255, 0.14);
-          background: rgba(255, 255, 255, 0.06);
-          color: var(--text);
-          font-weight: 900;
-          cursor: pointer;
-        }
-
-        :global(.topCenter) {
-          flex: 1;
-          min-width: 0;
-        }
-
-        :global(.topRight) {
-          width: 44px;
-          height: 44px;
+        .dot {
+          width: 10px;
+          height: 10px;
+          border-radius: 999px;
+          display: inline-block;
+          box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.10);
         }
       `}</style>
     </div>
