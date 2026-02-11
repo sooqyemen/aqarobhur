@@ -1,7 +1,6 @@
 'use client';
 
 import Link from 'next/link';
-import { buildWhatsAppLink } from './WhatsAppBar';
 
 export default function Footer() {
   const phone = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || '966597520693';
@@ -19,11 +18,12 @@ export default function Footer() {
   return (
     <footer className="footer">
       <div className="container">
-        <div className="footerContent">
+        {/* الصف العلوي: شعار + معلومات الاتصال + روابط سريعة */}
+        <div className="footerMain">
           {/* الشعار */}
-          <div className="footerSection brand">
+          <div className="brand">
             <div className="footerLogo">
-              <span className="logoMark">🏠</span>
+              <span className="logoIcon">🏠</span>
               <div className="logoText">
                 <h3 className="logoTitle">عقار أبحر</h3>
                 <span className="logoSubtitle">شمال جدة</span>
@@ -31,39 +31,33 @@ export default function Footer() {
             </div>
           </div>
 
-          {/* معلومات الاتصال - داخل أيقونات */}
-          <div className="footerSection contact">
-            <h4 className="sectionTitle">تواصل معنا</h4>
-            <div className="contactPills">
-              <a href={whatsappLink} className="contactPill" target="_blank" rel="noopener noreferrer">
-                <span className="pillIcon">📱</span>
-                <span className="pillText">{phone}</span>
-              </a>
-              <div className="contactPill">
-                <span className="pillIcon">📧</span>
-                <span className="pillText">info@aqarobhur.com</span>
-              </div>
-              <div className="contactPill">
-                <span className="pillIcon">🕐</span>
-                <span className="pillText">9ص - 12م</span>
-              </div>
+          {/* معلومات الاتصال - أفقية */}
+          <div className="contactRow">
+            <a href={whatsappLink} className="contactItem" target="_blank" rel="noopener noreferrer">
+              <span className="contactIcon">📱</span>
+              <span className="contactValue">{phone}</span>
+            </a>
+            <div className="contactItem">
+              <span className="contactIcon">📧</span>
+              <span className="contactValue">info@aqarobhur.com</span>
+            </div>
+            <div className="contactItem">
+              <span className="contactIcon">🕐</span>
+              <span className="contactValue">9ص - 12م</span>
             </div>
           </div>
 
-          {/* روابط سريعة - داخل أيقونات */}
-          <div className="footerSection quick">
-            <h4 className="sectionTitle">روابط سريعة</h4>
-            <div className="quickPills">
-              {mainLinks.map((link) => (
-                <Link key={link.href} href={link.href} className="quickPill">
-                  {link.label}
-                </Link>
-              ))}
-            </div>
+          {/* الروابط السريعة - أفقية */}
+          <div className="quickRow">
+            {mainLinks.map((link) => (
+              <Link key={link.href} href={link.href} className="quickLink">
+                {link.label}
+              </Link>
+            ))}
           </div>
         </div>
 
-        {/* حقوق النشر فقط - بدون أي إضافات */}
+        {/* حقوق النشر - سطر واحد فقط */}
         <div className="copyright">
           <p>© {new Date().getFullYear()} عقار أبحر. جميع الحقوق محفوظة.</p>
         </div>
@@ -73,7 +67,7 @@ export default function Footer() {
         .footer {
           background: var(--bg2);
           border-top: 1px solid var(--border);
-          padding: 30px 0 20px;
+          padding: 25px 0 15px;
           margin-top: 40px;
           color: var(--text);
         }
@@ -84,36 +78,36 @@ export default function Footer() {
           padding: 0 20px;
         }
 
-        .footerContent {
-          display: grid;
-          grid-template-columns: 1fr;
-          gap: 30px;
-          margin-bottom: 30px;
+        /* الصف الرئيسي - ترتيب أفقي للأقسام */
+        .footerMain {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          justify-content: space-between;
+          gap: 20px 40px;
+          margin-bottom: 25px;
         }
 
-        @media (min-width: 768px) {
-          .footerContent {
-            grid-template-columns: 1fr 1.2fr 1fr;
-            align-items: start;
-          }
+        /* الشعار - مضغوط */
+        .brand {
+          flex-shrink: 0;
         }
 
-        /* الشعار */
         .footerLogo {
           display: flex;
           align-items: center;
-          gap: 10px;
+          gap: 8px;
         }
 
-        .logoMark {
-          width: 42px;
-          height: 42px;
-          border-radius: 10px;
+        .logoIcon {
+          width: 36px;
+          height: 36px;
+          border-radius: 8px;
           background: linear-gradient(135deg, var(--primary), var(--primary2));
           display: flex;
           align-items: center;
           justify-content: center;
-          font-size: 22px;
+          font-size: 20px;
           box-shadow: var(--shadow-primary);
         }
 
@@ -139,39 +133,19 @@ export default function Footer() {
           font-weight: 700;
         }
 
-        /* عناوين الأقسام - صغيرة ومضغوطة */
-        .sectionTitle {
-          font-size: 15px;
-          font-weight: 800;
-          margin: 0 0 15px 0;
-          color: var(--text);
-          position: relative;
-          padding-bottom: 6px;
-        }
-
-        .sectionTitle::after {
-          content: '';
-          position: absolute;
-          bottom: 0;
-          right: 0;
-          width: 30px;
-          height: 2px;
-          background: var(--primary);
-          border-radius: 2px;
-        }
-
-        /* حبوب الاتصال - أيقونة + نص داخل شكل بيضاوي */
-        .contactPills {
+        /* معلومات الاتصال - أفقية */
+        .contactRow {
           display: flex;
-          flex-direction: column;
-          gap: 12px;
+          flex-wrap: wrap;
+          gap: 12px 20px;
+          align-items: center;
         }
 
-        .contactPill {
+        .contactItem {
           display: inline-flex;
           align-items: center;
-          gap: 8px;
-          padding: 8px 14px;
+          gap: 6px;
+          padding: 6px 12px;
           background: rgba(214, 179, 91, 0.08);
           border: 1px solid var(--border);
           border-radius: 40px;
@@ -180,32 +154,33 @@ export default function Footer() {
           font-size: 13px;
           font-weight: 500;
           transition: all 0.2s ease;
-          width: fit-content;
+          white-space: nowrap;
         }
 
-        .contactPill:hover {
+        .contactItem:hover {
           background: var(--primary-light);
           border-color: var(--primary);
           color: var(--primary);
           transform: translateY(-2px);
         }
 
-        .pillIcon {
+        .contactIcon {
           font-size: 16px;
         }
 
-        .pillText {
+        .contactValue {
           line-height: 1;
         }
 
-        /* حبوب الروابط السريعة - كل رابط داخل كبسولة */
-        .quickPills {
+        /* الروابط السريعة - أفقية */
+        .quickRow {
           display: flex;
           flex-wrap: wrap;
           gap: 10px;
+          align-items: center;
         }
 
-        .quickPill {
+        .quickLink {
           padding: 6px 16px;
           background: rgba(255, 255, 255, 0.05);
           border: 1px solid var(--border);
@@ -215,64 +190,77 @@ export default function Footer() {
           font-size: 13px;
           font-weight: 500;
           transition: all 0.2s ease;
+          white-space: nowrap;
         }
 
-        .quickPill:hover {
+        .quickLink:hover {
           background: var(--primary);
           border-color: var(--primary);
           color: #fff;
           transform: translateY(-2px);
         }
 
-        /* حقوق النشر - سطر واحد فقط */
+        /* حقوق النشر */
         .copyright {
           border-top: 1px solid var(--border);
-          padding-top: 20px;
+          padding-top: 15px;
           text-align: center;
         }
 
         .copyright p {
           margin: 0;
-          font-size: 13px;
+          font-size: 12px;
           color: var(--muted);
         }
 
-        /* تجاوب للشاشات الصغيرة */
-        @media (max-width: 767px) {
-          .footer {
-            padding: 25px 0 15px;
-          }
-
-          .footerContent {
-            gap: 25px;
+        /* ========== التجاوب مع الشاشات المتوسطة والصغيرة ========== */
+        @media (max-width: 900px) {
+          .footerMain {
+            flex-direction: column;
+            align-items: stretch;
+            gap: 20px;
           }
 
           .brand {
-            text-align: center;
-          }
-
-          .footerLogo {
+            display: flex;
             justify-content: center;
           }
 
-          .sectionTitle::after {
-            right: 50%;
-            transform: translateX(50%);
-          }
-
-          .contactPill,
-          .quickPills {
+          .contactRow,
+          .quickRow {
             justify-content: center;
           }
 
-          .contactPills {
-            align-items: center;
+          .contactItem,
+          .quickLink {
+            white-space: nowrap;
+          }
+        }
+
+        @media (max-width: 480px) {
+          .contactRow {
+            flex-direction: column;
+            align-items: stretch;
+          }
+
+          .contactItem {
+            justify-content: center;
+            white-space: normal;
+            width: 100%;
+          }
+
+          .quickRow {
+            justify-content: center;
+          }
+
+          .quickLink {
+            white-space: nowrap;
           }
         }
 
         /* تحسين الوصول */
-        .quickPill:focus-visible,
-        .contactPill:focus-visible {
+        .quickLink:focus-visible,
+        .contactItem:focus-visible {
           outline: 2px solid var(--primary);
           outline-offset: 3px;
         }
