@@ -72,6 +72,19 @@ export default function ListingDetails({ params }) {
                   {item.neighborhood || '—'} • {item.plan || '—'} • {item.part || '—'}
                 </div>
 
+                {item.locationUrl ? (
+                  <div className="muted" style={{ marginTop: 8 }}>
+                    <a
+                      href={String(item.locationUrl)}
+                      target="_blank"
+                      rel="noreferrer"
+                      style={{ textDecoration: 'underline', color: 'var(--primary)' }}
+                    >
+                      فتح موقع العقار على الخريطة
+                    </a>
+                  </div>
+                ) : null}
+
                 <div style={{ marginTop: 10, fontSize: 22, fontWeight: 900 }}>
                   {formatPriceSAR(item.price)}
                 </div>

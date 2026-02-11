@@ -127,8 +127,8 @@ export default function ListingsPage() {
         <div className="card" style={{ padding: 16, marginTop: 12 }}>لا توجد إعلانات ضمن الفلاتر الحالية.</div>
       ) : (
         <div className="list">
-          {items.map((it) => (
-            <ListingCard key={it.id || it.docId || Math.random()} item={it} />
+          {items.map((it, idx) => (
+            <ListingCard key={it.id || it.docId || `idx-${idx}`} item={it} compact />
           ))}
         </div>
       )}

@@ -215,6 +215,12 @@ a {
   color: var(--danger);
 }
 
+.badge.rent {
+  border-color: rgba(59, 130, 246, 0.25);
+  background: rgba(59, 130, 246, 0.08);
+  color: rgba(147, 197, 253, 1);
+}
+
 /* تنسيقات الشبكة */
 .grid {
   display: grid;

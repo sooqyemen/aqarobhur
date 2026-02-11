@@ -19,6 +19,29 @@ function Field({ label, children, hint }) {
   );
 }
 
+function extractLatLngFromUrl(url) {
+  try {
+    const u = String(url || '').trim();
+    if (!u) return null;
+
+    // شكل: .../@21.5,39.1,17z
+    const m1 = u.match(/@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/);
+    if (m1) return { lat: Number(m1[1]), lng: Number(m1[2]) };
+
+    // شكل: q=21.5,39.1
+    const m2 = u.match(/[?&]q=(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/);
+    if (m2) return { lat: Number(m2[1]), lng: Number(m2[2]) };
+
+    // شكل: ll=21.5,39.1
+    const m3 = u.match(/[?&]ll=(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/);
+    if (m3) return { lat: Number(m3[1]), lng: Number(m3[2]) };
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export default function AdminPage() {
   const { auth, storage } = getFirebase();
 
@@ -45,6 +68,7 @@ export default function AdminPage() {
     propertyClass: '',
     area: '',
     price: '',
+    locationUrl: '',
     lat: '',
     lng: '',
     status: 'available',
@@ -75,11 +99,17 @@ export default function AdminPage() {
       return;
     }
 
+    // حماية من اختيار عدد كبير بالخطأ
+    const files = Array.isArray(selectedFiles) ? selectedFiles.slice(0, 30) : [];
+    if (Array.isArray(selectedFiles) && selectedFiles.length > files.length) {
+      setUploadErr('تم اختيار صور كثيرة. سيتم رفع جزء منها فقط.');
+    }
+
     setUploading(true);
     try {
       const urls = [];
-      for (let i = 0; i < selectedFiles.length; i++) {
-        const file = selectedFiles[i];
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
         const safeName = String(file.name || 'image')
           .replace(/\s+/g, '_')
           .replace(/[^a-zA-Z0-9_\.-]/g, '')
@@ -135,7 +165,7 @@ export default function AdminPage() {
       });
 
       setCreatedId(id);
-      setCreateForm({ ...createForm, title:'', plan:'', part:'', area:'', price:'', lat:'', lng:'', description:'', imagesText:'' });
+      setCreateForm({ ...createForm, title:'', plan:'', part:'', area:'', price:'', locationUrl:'', lat:'', lng:'', description:'', imagesText:'' });
     } catch (err) {
       alert('حصل خطأ أثناء إضافة العرض. راجع إعداد Firebase وقواعد Firestore.');
       console.error(err);
@@ -299,6 +329,30 @@ export default function AdminPage() {
                 </Field>
               </div>
 
+              <div className="col-6">
+                <Field
+                  label="رابط الموقع (اختياري)"
+                  hint="يمكنك وضع رابط من خرائط Google. إذا كان الرابط يحتوي على الإحداثيات سيتم تعبئتها تلقائياً." 
+                >
+                  <input
+                    className="input"
+                    value={createForm.locationUrl}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      const parsed = extractLatLngFromUrl(v);
+                      setCreateForm((p) => ({
+                        ...p,
+                        locationUrl: v,
+                        // لو الرابط يحوي إحداثيات نعبّيها تلقائياً (بدون إجبار)
+                        lat: parsed && Number.isFinite(parsed.lat) ? String(parsed.lat) : p.lat,
+                        lng: parsed && Number.isFinite(parsed.lng) ? String(parsed.lng) : p.lng,
+                      }));
+                    }}
+                    placeholder="مثال: https://maps.app.goo.gl/..."
+                  />
+                </Field>
+              </div>
+
               <div className="col-3">
                 <Field
                   label="خط العرض (lat) — اختياري"
@@ -339,7 +393,15 @@ export default function AdminPage() {
                     type="file"
                     multiple
                     accept="image/*"
-                    onChange={(e) => setSelectedFiles(Array.from(e.target.files || []))}
+                    onChange={(e) => {
+                      setUploadErr('');
+                      const files = Array.from(e.target.files || []);
+                      const picked = files.slice(0, 30);
+                      if (files.length > picked.length) {
+                        setUploadErr('تم اختيار صور كثيرة.');
+                      }
+                      setSelectedFiles(picked);
+                    }}
                   />
 
                   {selectedFiles.length ? (
@@ -367,7 +429,7 @@ export default function AdminPage() {
                       onClick={uploadSelectedImages}
                       disabled={uploading || busy || !selectedFiles.length}
                     >
-                      {uploading ? `جاري الرفع… (${selectedFiles.length})` : 'رفع الصور'}
+                      {uploading ? 'جاري الرفع…' : 'رفع الصور'}
                     </button>
                   </div>
 
@@ -433,7 +495,7 @@ https://..." />
                       <button className="btn" onClick={() => adminUpdateListing(item.id, { status:'available' }).then(loadList)}>متاح</button>
                       <button className="btn" onClick={() => adminUpdateListing(item.id, { status:'reserved' }).then(loadList)}>محجوز</button>
                       <button className="btnDanger" onClick={() => adminUpdateListing(item.id, { status:'sold' }).then(loadList)}>مباع</button>
-                      <button className="btn" onClick={() => adminUpdateListing(item.id, { status:'canceled' }).then(loadList)}>ملغي</button>
+                      <button className="btn" onClick={() => adminUpdateListing(item.id, { status:'rented' }).then(loadList)}>مؤجر</button>
                     </div>
                   </div>
                 ))}
