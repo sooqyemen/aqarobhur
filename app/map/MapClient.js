@@ -41,7 +41,7 @@ function loadGoogleMaps(apiKey) {
   });
 }
 
-// ألوان صغيرة للأحياء (أيقونة نقطية داخل الشيب)
+// ✅ نقطة لونية صغيرة (بدون رموز)
 const NEIGHBORHOOD_COLORS = {
   الزمرد: '#34A853',
   الياقوت: '#4285F4',
@@ -56,7 +56,6 @@ const NEIGHBORHOOD_COLORS = {
 export default function MapPage() {
   const sp = useSearchParams();
 
-  // ✅ دعم query params القادمة من صفحة /listings
   const initialNeighborhood = sp.get('neighborhood') || '';
   const initialDealType = sp.get('dealType') || '';
   const initialPropertyType = sp.get('propertyType') || '';
@@ -71,7 +70,7 @@ export default function MapPage() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
 
-  // ✅ وضع ملء الشاشة للخريطة (مثل سوق اليمن)
+  // ✅ Fullscreen مثل سوق اليمن
   const [isFullscreen, setIsFullscreen] = useState(false);
   const lastViewportRef = useRef({ bounds: null, center: null, zoom: null });
 
@@ -115,7 +114,6 @@ export default function MapPage() {
     }
   }
 
-  // جلب البيانات عند تغيّر الفلاتر
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -134,13 +132,12 @@ export default function MapPage() {
         if (cancelled) return;
 
         if (!mapRef.current) {
-          // ✅ مركز جدة الافتراضي
           mapRef.current = new window.google.maps.Map(mapElRef.current, {
             center: { lat: 21.543333, lng: 39.172778 },
             zoom: 11,
             mapTypeControl: false,
             streetViewControl: false,
-            // نستخدم وضع ملء الشاشة الخاص بنا بدل زر Google الافتراضي
+            // ✅ نستخدم Fullscreen خاص بنا
             fullscreenControl: false,
           });
           infoRef.current = new window.google.maps.InfoWindow();
@@ -157,15 +154,19 @@ export default function MapPage() {
     };
   }, [apiKey]);
 
-  // ✅ تفعيل/إلغاء وضع ملء الشاشة + ضبط إعادة التحجيم لخريطة Google
+  // ✅ عند فتح/إغلاق Fullscreen: نخفي تمرير الصفحة + نضيف class لخفاء MobileNav
   useEffect(() => {
     if (typeof document === 'undefined') return;
 
-    const prev = document.body.style.overflow;
-    if (isFullscreen) document.body.style.overflow = 'hidden';
-    else document.body.style.overflow = prev || '';
+    const prevOverflow = document.body.style.overflow;
+    if (isFullscreen) {
+      document.body.style.overflow = 'hidden';
+      document.body.classList.add('isMapFullscreen');
+    } else {
+      document.body.style.overflow = prevOverflow || '';
+      document.body.classList.remove('isMapFullscreen');
+    }
 
-    // بعد تغيير الحجم لازم نعمل resize للخريطة ثم نرجع نفس نطاق العرض
     const map = mapRef.current;
     if (map && window.google && window.google.maps) {
       const t = setTimeout(() => {
@@ -178,25 +179,17 @@ export default function MapPage() {
             map.setZoom(vp.zoom);
           }
         } catch {}
-      }, 50);
+      }, 80);
 
-      return () => {
-        clearTimeout(t);
-        document.body.style.overflow = prev || '';
-      };
+      return () => clearTimeout(t);
     }
-
-    return () => {
-      document.body.style.overflow = prev || '';
-    };
   }, [isFullscreen]);
 
-  // تحديث الماركرز مع تغيّر البيانات
+  // تحديث الماركرز
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
 
-    // امسح القديم
     markersRef.current.forEach((m) => m.setMap(null));
     markersRef.current = [];
     markerByIdRef.current = {};
@@ -234,9 +227,8 @@ export default function MapPage() {
       });
     });
 
-    // زوم على كل العلامات
     map.fitBounds(bounds);
-    // حفظ نطاق العرض الحالي للرجوع له بعد فتح/إغلاق ملء الشاشة
+
     try {
       lastViewportRef.current = {
         bounds,
@@ -245,11 +237,9 @@ export default function MapPage() {
       };
     } catch {}
 
-    // إذا كانت علامة واحدة فقط
     if (list.length === 1) {
       map.setZoom(15);
       map.setCenter({ lat: Number(list[0].lat), lng: Number(list[0].lng) });
-
       try {
         lastViewportRef.current = {
           bounds: null,
@@ -270,8 +260,10 @@ export default function MapPage() {
     window.google.maps.event.trigger(marker, 'click');
   }
 
+  // ✅ خيارات الأحياء مع نقطة ملوّنة
   const neighborhoodOptions = useMemo(() => {
     const base = [{ value: '', label: 'كل الأحياء' }];
+
     const opts = NEIGHBORHOODS.map((n) => {
       const col = NEIGHBORHOOD_COLORS[n] || '#94A3B8';
       return {
@@ -284,81 +276,38 @@ export default function MapPage() {
         ),
       };
     });
+
     return base.concat(opts);
   }, []);
 
+  // (اختياري) تبقيها – أو نلغيها بالكامل إذا تبغى نفس سوق اليمن 100%
   const dealTypeOptions = useMemo(
     () => [{ value: '', label: 'بيع/إيجار' }, ...DEAL_TYPES.map((d) => ({ value: d.key, label: d.label }))],
     []
   );
-
   const classOptions = useMemo(
     () => [{ value: '', label: 'سكني/تجاري' }, ...PROPERTY_CLASSES.map((c) => ({ value: c.key, label: c.label }))],
     []
   );
-
   const typeOptions = useMemo(
     () => [{ value: '', label: 'كل الأنواع' }, ...PROPERTY_TYPES.map((t) => ({ value: t, label: t }))],
     []
   );
 
   return (
-    <div className="container" style={{ paddingTop: 16 }}>
-      <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-end' }}>
-        <div>
-          <h1 className="h1">خريطة العروض</h1>
-          <div className="muted" style={{ fontSize: 13 }}>
-            تظهر فقط العروض التي تحتوي على إحداثيات (lat/lng). أضفها من صفحة الأدمن عند إنشاء العرض.
-          </div>
+    <div className="container" style={{ paddingTop: 14 }}>
+      {/* ✅ شريط علوي نظيف (مثل سوق اليمن) */}
+      <div className={`topBar ${isFullscreen ? 'topBarFs' : ''}`}>
+        <button className="xBtn" onClick={() => (isFullscreen ? setIsFullscreen(false) : window.history.back())} aria-label="إغلاق">
+          ✕
+        </button>
+
+        <div className="barCenter">
+          <ChipsRow value={neighborhood} options={neighborhoodOptions} onChange={setNeighborhood} />
         </div>
-        <div className="row">
-          <Link className="btn" href="/listings">رجوع للعروض</Link>
-          <button className="btn" onClick={load} disabled={loading}>تحديث</button>
-        </div>
+
+        <button className="fsBtn" onClick={() => setIsFullscreen(true)}>ملء الشاشة</button>
       </div>
-
-      {!apiKey ? (
-        <section className="card" style={{ marginTop: 12 }}>
-          <div style={{ fontWeight: 900, marginBottom: 6 }}>مفتاح Google Maps غير موجود</div>
-          <div className="muted" style={{ lineHeight: 1.7 }}>
-            أضف متغير البيئة <b>NEXT_PUBLIC_GOOGLE_MAPS_API_KEY</b> في Vercel/المحلي، وفعّل Google Maps JavaScript API في Google Cloud.
-          </div>
-        </section>
-      ) : null}
-
-      <section className="card" style={{ marginTop: 12 }}>
-        <div style={{ fontWeight: 900, marginBottom: 10 }}>الفلاتر</div>
-
-        <div className="grid" style={{ alignItems: 'end' }}>
-          <div className="col-12">
-            <div className="muted" style={{ fontSize: 13, marginBottom: 6 }}>الحي</div>
-            <ChipsRow value={neighborhood} options={neighborhoodOptions} onChange={setNeighborhood} />
-          </div>
-
-          <div className="col-12" style={{ marginTop: 10 }}>
-            <div className="muted" style={{ fontSize: 13, marginBottom: 6 }}>بيع/إيجار</div>
-            <ChipsRow value={dealType} options={dealTypeOptions} onChange={setDealType} />
-          </div>
-
-          <div className="col-12" style={{ marginTop: 10 }}>
-            <div className="muted" style={{ fontSize: 13, marginBottom: 6 }}>سكني/تجاري</div>
-            <ChipsRow
-              value={propertyClass}
-              options={classOptions}
-              onChange={(v) => {
-                setPropertyClass(v);
-                // لو غيّر التصنيف، نفضي النوع لتفادي تعارض (اختياري)
-                setPropertyType('');
-              }}
-            />
-          </div>
-
-          <div className="col-12" style={{ marginTop: 10 }}>
-            <div className="muted" style={{ fontSize: 13, marginBottom: 6 }}>نوع العقار</div>
-            <ChipsRow value={propertyType} options={typeOptions} onChange={setPropertyType} />
-          </div>
-        </div>
-      </section>
 
       {err ? (
         <section className="card" style={{ marginTop: 12 }}>
@@ -366,110 +315,70 @@ export default function MapPage() {
         </section>
       ) : null}
 
-      <section className="card" style={{ marginTop: 12 }}>
-        <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ fontWeight: 900 }}>الخريطة</div>
-          <div className="row" style={{ gap: 10, alignItems: 'center' }}>
-            <div className="muted" style={{ fontSize: 13 }}>عدد العلامات: {filteredItemsWithCoords.length}</div>
-            <button className="btn" type="button" onClick={() => setIsFullscreen(true)}>
-              ملء الشاشة
-            </button>
-          </div>
-        </div>
+      {/* ✅ الخريطة هي الأساس (بدون لوحة فلاتر ضخمة) */}
+      <div className={`mapShell ${isFullscreen ? 'mapShellFs' : ''}`}>
+        <div
+          ref={mapElRef}
+          className="mapBox"
+          onClick={() => {
+            if (!isFullscreen) setIsFullscreen(true);
+          }}
+        />
+      </div>
 
-        <div className="mapWrap" style={{ marginTop: 10 }}>
-          <div
-            ref={mapElRef}
-            className={`mapBox ${isFullscreen ? 'mapBoxFullscreen' : ''}`}
-            style={{ height: isFullscreen ? '100vh' : '60vh', minHeight: isFullscreen ? undefined : 360 }}
-            onClick={() => {
-              // حسب طلبك: النقر على الخريطة يفتح ملء الشاشة
-              if (!isFullscreen) setIsFullscreen(true);
-            }}
-          />
-        </div>
-      </section>
-
-      {isFullscreen ? (
-        <div className="mapFullscreenTop" role="dialog" aria-label="الخريطة ملء الشاشة">
-          <button
-            type="button"
-            className="fsClose"
-            onClick={() => setIsFullscreen(false)}
-            aria-label="إغلاق"
-          >
-            ✕
-          </button>
-          <div className="fsTitle">الخريطة</div>
-          <div className="fsChips">
-            <ChipsRow value={neighborhood} options={neighborhoodOptions} onChange={setNeighborhood} />
+      {/* ✅ قائمة عروض مصغرة تحت الخريطة (خارج وضع الملء الكامل) */}
+      {!isFullscreen ? (
+        <section style={{ marginTop: 12 }}>
+          <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ fontWeight: 900 }}>العروض</div>
+            {loading ? <div className="muted">تحميل…</div> : <div className="muted">عدد العلامات: {filteredItemsWithCoords.length}</div>}
           </div>
-        </div>
+
+          {loading ? null : filteredItemsWithCoords.length === 0 ? (
+            <div className="card muted" style={{ marginTop: 10 }}>
+              لا توجد عروض بإحداثيات ضمن الحي المختار.
+            </div>
+          ) : (
+            <div style={{ marginTop: 10, display: 'grid', gap: 10 }}>
+              {filteredItemsWithCoords.slice(0, 20).map((it) => (
+                <div key={it.id} className="card">
+                  <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ fontWeight: 900 }}>{it.title || 'عرض'}</div>
+                    <button className="btn" onClick={() => focusOn(it.id)}>عرض على الخريطة</button>
+                  </div>
+                  <div style={{ marginTop: 8 }}>
+                    <ListingCard item={it} compact />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
       ) : null}
 
-      <section style={{ marginTop: 12 }}>
-        <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ fontWeight: 900 }}>العروض على الخريطة</div>
-          {loading ? <div className="muted">تحميل…</div> : null}
-        </div>
-
-        {loading ? null : filteredItemsWithCoords.length === 0 ? (
-          <div className="card muted" style={{ marginTop: 10 }}>
-            لا توجد عروض بإحداثيات ضمن الفلاتر الحالية.
-          </div>
-        ) : (
-          <div style={{ marginTop: 10, display: 'grid', gap: 10 }}>
-            {filteredItemsWithCoords.slice(0, 40).map((it) => (
-              <div key={it.id} className="card">
-                <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{ fontWeight: 900 }}>{it.title || 'عرض'}</div>
-                  <button className="btn" onClick={() => focusOn(it.id)}>عرض على الخريطة</button>
-                </div>
-                <div style={{ marginTop: 8 }}>
-                  <ListingCard item={it} compact />
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
-
       <style jsx>{`
-        .mapWrap {
-          position: relative;
-        }
-        .mapBox {
-          width: 100%;
-          border-radius: 14px;
-          overflow: hidden;
+        .topBar {
+          position: sticky;
+          top: 10px;
+          z-index: 50;
+          background: rgba(255, 255, 255, 0.95);
           border: 1px solid var(--border);
-          background: #f1f5f9;
-        }
-        .mapBoxFullscreen {
-          position: fixed;
-          top: 0;
-          left: 0;
-          width: 100vw;
-          height: 100vh !important;
-          z-index: 9990;
-          border-radius: 0;
-          border: none;
-        }
-        .mapFullscreenTop {
-          position: fixed;
-          top: 0;
-          left: 0;
-          right: 0;
-          z-index: 9991;
-          padding: 10px 12px;
-          background: rgba(255, 255, 255, 0.96);
-          backdrop-filter: blur(8px);
-          border-bottom: 1px solid var(--border);
+          border-radius: 14px;
+          padding: 10px;
           display: flex;
           align-items: center;
           gap: 10px;
+          backdrop-filter: blur(12px);
+          box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
         }
-        .fsClose {
+        .topBarFs {
+          position: fixed;
+          left: 12px;
+          right: 12px;
+          top: 12px;
+          z-index: 9999;
+        }
+        .xBtn {
           width: 40px;
           height: 40px;
           border-radius: 12px;
@@ -478,14 +387,43 @@ export default function MapPage() {
           font-weight: 900;
           cursor: pointer;
         }
-        .fsTitle {
-          font-weight: 900;
-          white-space: nowrap;
-        }
-        .fsChips {
+        .barCenter {
           flex: 1;
           min-width: 0;
         }
+        .fsBtn {
+          border: 1px solid var(--border);
+          background: var(--card);
+          border-radius: 12px;
+          padding: 10px 12px;
+          font-weight: 900;
+          cursor: pointer;
+          white-space: nowrap;
+        }
+
+        .mapShell {
+          margin-top: 10px;
+          height: 60vh;
+          min-height: 360px;
+          border-radius: 14px;
+          overflow: hidden;
+          border: 1px solid var(--border);
+          background: #f1f5f9;
+        }
+        .mapShellFs {
+          position: fixed;
+          inset: 0;
+          margin: 0;
+          height: 100vh;
+          border-radius: 0;
+          border: none;
+          z-index: 9990;
+        }
+        .mapBox {
+          width: 100%;
+          height: 100%;
+        }
+
         .chipLabel {
           display: inline-flex;
           align-items: center;
