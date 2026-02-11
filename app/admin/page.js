@@ -1,16 +1,23 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { getFirebase } from '@/lib/firebaseClient';
 import { signInWithEmailAndPassword, onAuthStateChanged, signOut } from 'firebase/auth';
-import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
+import {
+  ref as storageRef,
+  uploadBytesResumable,
+  getDownloadURL,
+  deleteObject,
+} from 'firebase/storage';
 import { doc, deleteDoc, getFirestore } from 'firebase/firestore';
+
 import { isAdminUser } from '@/lib/admin';
 import { adminCreateListing, adminUpdateListing, fetchListings } from '@/lib/listings';
 import { DEAL_TYPES, NEIGHBORHOODS, PROPERTY_TYPES, STATUS_OPTIONS, PROPERTY_CLASSES } from '@/lib/taxonomy';
 import { formatPriceSAR, statusBadge } from '@/lib/format';
 
 const LISTINGS_COLLECTION = 'abhur_listings';
+const MAX_FILES = 30; // بدون ما نعرضه للمستخدم
 
 function Field({ label, children, hint }) {
   return (
@@ -22,15 +29,8 @@ function Field({ label, children, hint }) {
   );
 }
 
-function uniqLines(txt) {
-  return Array.from(
-    new Set(
-      String(txt || '')
-        .split('\n')
-        .map((s) => s.trim())
-        .filter(Boolean)
-    )
-  );
+function uniq(arr) {
+  return Array.from(new Set((arr || []).map((x) => String(x || '').trim()).filter(Boolean)));
 }
 
 function toNumberOrNull(v) {
@@ -43,7 +43,6 @@ function toTextOrEmpty(v) {
 }
 
 function extractStoragePathFromDownloadURL(url) {
-  // يدعم روابط Firebase Storage الشائعة:
   // https://firebasestorage.googleapis.com/v0/b/<bucket>/o/<path>?alt=media&token=...
   try {
     const u = new URL(url);
@@ -56,8 +55,35 @@ function extractStoragePathFromDownloadURL(url) {
   }
 }
 
+function extractLatLngFromUrl(url) {
+  // يدعم روابط قوقل ماب الشائعة:
+  // - .../@lat,lng,..
+  // - ?q=lat,lng
+  // - ?query=lat,lng
+  try {
+    const s = String(url || '').trim();
+    if (!s) return { lat: null, lng: null };
+
+    // @lat,lng
+    const m1 = s.match(/@(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)/);
+    if (m1) return { lat: Number(m1[1]), lng: Number(m1[2]) };
+
+    // q=lat,lng OR query=lat,lng
+    const u = new URL(s);
+    const q = u.searchParams.get('q') || u.searchParams.get('query') || '';
+    const m2 = q.match(/(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)/);
+    if (m2) return { lat: Number(m2[1]), lng: Number(m2[2]) };
+  } catch {
+    // ignore
+  }
+  return { lat: null, lng: null };
+}
+
+function nowId() {
+  return `${Date.now()}_${Math.random().toString(16).slice(2)}`;
+}
+
 export default function AdminPage() {
-  // نحاول استخراج أكبر قدر ممكن من getFirebase (بعض المشاريع ترجع db/app)
   const fb = getFirebase();
   const auth = fb?.auth;
   const storage = fb?.storage;
@@ -72,86 +98,166 @@ export default function AdminPage() {
 
   const [tab, setTab] = useState('create');
   const [createdId, setCreatedId] = useState('');
-
   const [editingId, setEditingId] = useState('');
   const [actionBusyId, setActionBusyId] = useState('');
 
-  const [selectedFiles, setSelectedFiles] = useState([]);
+  // ✅ ملفات الصور قبل الرفع
+  // { id, file, preview, selected, progress, status: 'ready'|'uploading'|'done'|'error', error? }
+  const [queue, setQueue] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [uploadErr, setUploadErr] = useState('');
+  const fileInputRef = useRef(null);
 
-  const emptyForm = useMemo(() => ({
-    title: '',
-    neighborhood: '',
-    plan: '',
-    part: '',
-    dealType: 'sale',
-    propertyType: 'أرض',
-    propertyClass: '',
-    area: '',
-    price: '',
-    lat: '',
-    lng: '',
-    status: 'available',
-    direct: true,
-    websiteUrl: '',
-    description: '',
-    imagesText: '',
-  }), []);
+  const emptyForm = useMemo(
+    () => ({
+      title: '',
+      neighborhood: '',
+      plan: '',
+      part: '',
+      dealType: 'sale',
+      propertyType: 'أرض',
+      propertyClass: '',
+      area: '',
+      price: '',
+      status: 'available',
+      direct: true,
+      websiteUrl: '', // رابط موقع العقار
+      description: '',
+      images: [], // URLs
+    }),
+    []
+  );
 
   const [form, setForm] = useState(emptyForm);
-
   const [list, setList] = useState([]);
   const [loadingList, setLoadingList] = useState(false);
 
   const isAdmin = useMemo(() => isAdminUser(user), [user]);
-
-  const imagesPreview = useMemo(() => uniqLines(form.imagesText), [form.imagesText]);
 
   useEffect(() => {
     if (!auth) return;
     return onAuthStateChanged(auth, (u) => setUser(u || null));
   }, [auth]);
 
+  // تنظيف object URLs
+  useEffect(() => {
+    return () => {
+      queue.forEach((q) => {
+        try {
+          if (q?.preview) URL.revokeObjectURL(q.preview);
+        } catch {}
+      });
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function addFiles(files) {
+    setUploadErr('');
+    const incoming = Array.from(files || []).filter(Boolean);
+    if (!incoming.length) return;
+
+    setQueue((prev) => {
+      const left = Math.max(0, MAX_FILES - prev.length);
+      const slice = incoming.slice(0, left);
+      const next = slice.map((file) => ({
+        id: nowId(),
+        file,
+        preview: URL.createObjectURL(file),
+        selected: true,
+        progress: 0,
+        status: 'ready',
+        error: '',
+      }));
+      return [...prev, ...next];
+    });
+  }
+
+  function removeQueued(id) {
+    setQueue((prev) => {
+      const it = prev.find((x) => x.id === id);
+      if (it?.preview) {
+        try {
+          URL.revokeObjectURL(it.preview);
+        } catch {}
+      }
+      return prev.filter((x) => x.id !== id);
+    });
+  }
+
+  function toggleQueued(id) {
+    setQueue((prev) => prev.map((x) => (x.id === id ? { ...x, selected: !x.selected } : x)));
+  }
+
+  function clearQueue() {
+    setQueue((prev) => {
+      prev.forEach((it) => {
+        try {
+          if (it?.preview) URL.revokeObjectURL(it.preview);
+        } catch {}
+      });
+      return [];
+    });
+  }
+
   async function uploadSelectedImages() {
     setUploadErr('');
+
     if (!user) {
       setUploadErr('لا يمكن رفع الصور قبل تسجيل الدخول.');
-      return;
-    }
-    if (!selectedFiles || selectedFiles.length === 0) {
-      setUploadErr('اختر صورة أو أكثر.');
       return;
     }
     if (!storage) {
       setUploadErr('Firebase Storage غير مُعدّ. تأكد من NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET وتمكين Storage في Firebase.');
       return;
     }
+    const selected = queue.filter((q) => q.selected && q.status !== 'done');
+    if (!selected.length) {
+      setUploadErr('حدد صورة واحدة على الأقل للرفع.');
+      return;
+    }
 
     setUploading(true);
     try {
       const urls = [];
-      for (let i = 0; i < selectedFiles.length; i++) {
-        const file = selectedFiles[i];
+
+      for (let i = 0; i < selected.length; i++) {
+        const item = selected[i];
+        const file = item.file;
         const safeName = String(file.name || 'image')
           .replace(/\s+/g, '_')
           .replace(/[^a-zA-Z0-9_\.-]/g, '')
           .slice(0, 80);
         const path = `abhur_images/${user.uid}/${Date.now()}_${i}_${safeName}`;
         const r = storageRef(storage, path);
-        await uploadBytes(r, file, { contentType: file.type || 'image/jpeg' });
+
+        // وضع uploading
+        setQueue((prev) => prev.map((x) => (x.id === item.id ? { ...x, status: 'uploading', progress: 0, error: '' } : x)));
+
+        const task = uploadBytesResumable(r, file, { contentType: file.type || 'image/jpeg' });
+        await new Promise((resolve, reject) => {
+          task.on(
+            'state_changed',
+            (snap) => {
+              const p = snap.totalBytes ? Math.round((snap.bytesTransferred / snap.totalBytes) * 100) : 0;
+              setQueue((prev) => prev.map((x) => (x.id === item.id ? { ...x, progress: p } : x)));
+            },
+            (err) => reject(err),
+            () => resolve()
+          );
+        });
+
         const url = await getDownloadURL(r);
         urls.push(url);
+        setQueue((prev) => prev.map((x) => (x.id === item.id ? { ...x, status: 'done', progress: 100 } : x)));
       }
 
-      setForm((p) => {
-        const merged = uniqLines([p.imagesText, ...urls].filter(Boolean).join('\n')).join('\n');
-        return { ...p, imagesText: merged };
-      });
-      setSelectedFiles([]);
+      setForm((p) => ({ ...p, images: uniq([...(p.images || []), ...urls]) }));
+      // بعد الرفع: نخلي الموجود "done" في الطابور، ونلغي تحديدها حتى لا يعيد رفعها بالغلط
+      setQueue((prev) => prev.map((x) => (x.status === 'done' ? { ...x, selected: false } : x)));
     } catch (e) {
       console.error(e);
       setUploadErr(e?.message || 'فشل رفع الصور.');
+      setQueue((prev) => prev.map((x) => (x.status === 'uploading' ? { ...x, status: 'error', error: 'فشل الرفع' } : x)));
     } finally {
       setUploading(false);
     }
@@ -180,7 +286,7 @@ export default function AdminPage() {
     setEditingId('');
     setCreatedId('');
     setForm(emptyForm);
-    setSelectedFiles([]);
+    clearQueue();
     setUploadErr('');
   }
 
@@ -189,8 +295,6 @@ export default function AdminPage() {
     setEditingId(item.id);
 
     const images = Array.isArray(item.images) ? item.images : [];
-    const lat = item.lat ?? item.latitude ?? null;
-    const lng = item.lng ?? item.longitude ?? null;
 
     setForm({
       ...emptyForm,
@@ -203,44 +307,41 @@ export default function AdminPage() {
       propertyClass: toTextOrEmpty(item.propertyClass || ''),
       area: item.area == null ? '' : String(item.area),
       price: item.price == null ? '' : String(item.price),
-      lat: lat == null ? '' : String(lat),
-      lng: lng == null ? '' : String(lng),
       status: toTextOrEmpty(item.status || 'available'),
       direct: !!item.direct,
       websiteUrl: toTextOrEmpty(item.websiteUrl || item.website || item.url || ''),
       description: toTextOrEmpty(item.description),
-      imagesText: uniqLines(images).join('\n'),
+      images: uniq(images),
     });
 
+    clearQueue();
     setTab('create');
     window?.scrollTo?.({ top: 0, behavior: 'smooth' });
   }
 
   function removeImageFromForm(url) {
-    setForm((p) => {
-      const next = uniqLines(p.imagesText).filter((u) => u !== url).join('\n');
-      return { ...p, imagesText: next };
-    });
+    setForm((p) => ({ ...p, images: (p.images || []).filter((u) => u !== url) }));
   }
 
   async function saveListing() {
     setBusy(true);
     setCreatedId('');
     try {
-      const images = uniqLines(form.imagesText);
+      const images = uniq(form.images || []);
+      const websiteUrl = String(form.websiteUrl || '').trim();
+
+      // ✅ نلتقط الإحداثيات من رابط الموقع (بدون حقول lat/lng)
+      const { lat, lng } = extractLatLngFromUrl(websiteUrl);
+      const hasCoords = Number.isFinite(lat) && Number.isFinite(lng);
 
       const payload = {
         ...form,
         area: toNumberOrNull(form.area),
         price: toNumberOrNull(form.price),
-        lat: toNumberOrNull(form.lat),
-        lng: toNumberOrNull(form.lng),
         images,
-        websiteUrl: String(form.websiteUrl || '').trim(),
+        websiteUrl,
+        ...(hasCoords ? { lat, lng } : {}),
       };
-
-      // نظافة بسيطة: لا نرسل imagesText للقاعدة (نحتفظ فقط بالمصفوفة images)
-      delete payload.imagesText;
 
       if (editingId) {
         await adminUpdateListing(editingId, payload);
@@ -272,14 +373,11 @@ export default function AdminPage() {
   }
 
   async function hardDeleteFromFirestore(listingId) {
-    // نحاول كل الاحتمالات المتوقعة (compat/modular/app)
     if (db && typeof db.collection === 'function') {
-      // compat Firestore
       await db.collection(LISTINGS_COLLECTION).doc(listingId).delete();
       return;
     }
     if (db) {
-      // modular Firestore instance
       await deleteDoc(doc(db, LISTINGS_COLLECTION, listingId));
       return;
     }
@@ -300,7 +398,6 @@ export default function AdminPage() {
       try {
         await deleteObject(storageRef(storage, path));
       } catch (e) {
-        // ممكن تفشل لو قواعد Storage ما تسمح — نتجاهل ونكمل
         console.warn('Delete image failed:', url, e?.message || e);
       }
     }
@@ -313,33 +410,42 @@ export default function AdminPage() {
 
     setActionBusyId(item.id);
     try {
-      // 1) نحاول حذف الصور (اختياري)
       await tryDeleteImages(item);
-
-      // 2) نحذف وثيقة الإعلان
       await hardDeleteFromFirestore(item.id);
-
       alert('تم حذف الإعلان ✅');
       await loadList();
     } catch (e) {
       console.error(e);
-
-      // كحل احتياطي لو الحذف النهائي فشل (بسبب عدم توفر db/app مثلاً):
-      // نخفي الإعلان بتغيير الحالة إلى ملغي + archived
+      // fallback: إخفاء بدل الحذف
       try {
         await adminUpdateListing(item.id, { status: 'canceled', archived: true });
         alert('تعذر الحذف النهائي — تم إخفاء الإعلان بدلًا من ذلك ✅');
         await loadList();
       } catch (e2) {
         console.error(e2);
-        alert('فشل حذف/إخفاء الإعلان. راجع صلاحيات Firestore/Storage وتأكد أن getFirebase يعيد db أو app.');
+        alert('فشل حذف/إخفاء الإعلان. راجع صلاحيات Firestore/Storage.');
       }
     } finally {
       setActionBusyId('');
     }
   }
 
-  useEffect(() => { if (isAdmin && tab === 'manage') loadList(); }, [isAdmin, tab]);
+  useEffect(() => {
+    if (isAdmin && tab === 'manage') loadList();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAdmin, tab]);
+
+  // ===== UI helpers (dropzone) =====
+  function openPicker() {
+    fileInputRef.current?.click?.();
+  }
+
+  function onDrop(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    const files = e.dataTransfer?.files;
+    if (files && files.length) addFiles(files);
+  }
 
   if (!user) {
     return (
@@ -413,18 +519,13 @@ export default function AdminPage() {
 
       {tab === 'create' ? (
         <section className="card" style={{ marginTop: 12 }}>
-          <div className="row" style={{ justifyContent: 'space-between', alignItems:'center' }}>
-            <div style={{ fontWeight: 900 }}>
-              {editingId ? 'تعديل الإعلان' : 'إضافة إعلان'}
-            </div>
-
-            {editingId ? (
-              <button className="btn" onClick={resetToCreate}>إلغاء التعديل</button>
-            ) : null}
+          <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ fontWeight: 900 }}>{editingId ? 'تعديل الإعلان' : 'إضافة إعلان'}</div>
+            {editingId ? <button className="btn" onClick={resetToCreate}>إلغاء التعديل</button> : null}
           </div>
 
           {createdId ? (
-            <div className="card" style={{ marginTop: 10, borderColor:'rgba(21,128,61,.25)', background:'rgba(21,128,61,.06)' }}>
+            <div className="card" style={{ marginTop: 10, borderColor: 'rgba(21,128,61,.25)', background: 'rgba(21,128,61,.06)' }}>
               تم إنشاء العرض بنجاح. ID: <b>{createdId}</b>
             </div>
           ) : null}
@@ -440,7 +541,7 @@ export default function AdminPage() {
               <Field label="الحي">
                 <select className="select" value={form.neighborhood} onChange={(e) => setForm({ ...form, neighborhood: e.target.value })}>
                   <option value="">اختر</option>
-                  {NEIGHBORHOODS.map(n => <option key={n} value={n}>{n}</option>)}
+                  {NEIGHBORHOODS.map((n) => <option key={n} value={n}>{n}</option>)}
                 </select>
               </Field>
             </div>
@@ -469,7 +570,7 @@ export default function AdminPage() {
             <div className="col-3">
               <Field label="بيع/إيجار">
                 <select className="select" value={form.dealType} onChange={(e) => setForm({ ...form, dealType: e.target.value })}>
-                  {DEAL_TYPES.map(d => <option key={d.key} value={d.key}>{d.label}</option>)}
+                  {DEAL_TYPES.map((d) => <option key={d.key} value={d.key}>{d.label}</option>)}
                 </select>
               </Field>
             </div>
@@ -477,7 +578,7 @@ export default function AdminPage() {
             <div className="col-3">
               <Field label="نوع العقار">
                 <select className="select" value={form.propertyType} onChange={(e) => setForm({ ...form, propertyType: e.target.value })}>
-                  {PROPERTY_TYPES.map(p => <option key={p} value={p}>{p}</option>)}
+                  {PROPERTY_TYPES.map((p) => <option key={p} value={p}>{p}</option>)}
                 </select>
               </Field>
             </div>
@@ -486,7 +587,7 @@ export default function AdminPage() {
               <Field label="سكني/تجاري" hint="اختياري — إذا تركته (تلقائي) سيتحدد حسب نوع العقار.">
                 <select className="select" value={form.propertyClass} onChange={(e) => setForm({ ...form, propertyClass: e.target.value })}>
                   <option value="">تلقائي</option>
-                  {PROPERTY_CLASSES.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}
+                  {PROPERTY_CLASSES.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
                 </select>
               </Field>
             </div>
@@ -504,28 +605,21 @@ export default function AdminPage() {
             </div>
 
             <div className="col-3">
-              <Field label="خط العرض (lat) — اختياري" hint="لو أضفت lat/lng سيظهر العرض على صفحة الخريطة.">
-                <input className="input" inputMode="decimal" value={form.lat} onChange={(e) => setForm({ ...form, lat: e.target.value })} placeholder="مثال: 21.7001" />
-              </Field>
-            </div>
-
-            <div className="col-3">
-              <Field label="خط الطول (lng) — اختياري">
-                <input className="input" inputMode="decimal" value={form.lng} onChange={(e) => setForm({ ...form, lng: e.target.value })} placeholder="مثال: 39.1234" />
-              </Field>
-            </div>
-
-            <div className="col-3">
               <Field label="الحالة">
                 <select className="select" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
-                  {STATUS_OPTIONS.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
+                  {STATUS_OPTIONS.filter((s) => ['available', 'reserved', 'sold', 'rented'].includes(s.key)).map((s) => (
+                    <option key={s.key} value={s.key}>{s.label}</option>
+                  ))}
                 </select>
               </Field>
             </div>
 
             <div className="col-12">
-              <Field label="رابط موقع الإعلان (اختياري)" hint="مثال: رابط قوقل ماب / رابط صفحة خارجية / رابط ملف.">
-                <input className="input" value={form.websiteUrl} onChange={(e) => setForm({ ...form, websiteUrl: e.target.value })} placeholder="https://..." />
+              <Field
+                label="رابط موقع العقار"
+                hint="ضع رابط قوقل ماب أو أي رابط. (إذا كان الرابط يحتوي إحداثيات، سيتم التقاطها تلقائيًا لعرضه على الخريطة بدون إدخال lat/lng)."
+              >
+                <input className="input" value={form.websiteUrl} onChange={(e) => setForm({ ...form, websiteUrl: e.target.value })} placeholder="https://maps.google.com/..." />
               </Field>
             </div>
 
@@ -535,46 +629,101 @@ export default function AdminPage() {
               </Field>
             </div>
 
+            {/* ===== رفع الصور ===== */}
             <div className="col-12">
-              <Field label="رفع صور (متعدد)">
-                <div className="row" style={{ alignItems: 'center' }}>
-                  <input
-                    className="input"
-                    type="file"
-                    accept="image/*"
-                    multiple
-                    onChange={(e) => setSelectedFiles(Array.from(e.target.files || []))}
-                  />
-                  <button className="btnPrimary" type="button" disabled={uploading} onClick={uploadSelectedImages}>
-                    {uploading ? 'جاري الرفع…' : 'رفع الصور'}
-                  </button>
+              <Field label="الصور" hint="اسحب الصور هنا أو اضغط (اختيار صور). بعد ذلك: حدد الصور التي تريد رفعها ثم اضغط (رفع المحدد).">
+                <div
+                  className="dropzone"
+                  onClick={openPicker}
+                  onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                  onDrop={onDrop}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') openPicker(); }}
+                >
+                  <div style={{ fontWeight: 900 }}>اسحب وأفلت الصور هنا</div>
+                  <div className="muted" style={{ marginTop: 6 }}>أو اضغط لاختيار الصور من الجهاز</div>
+                </div>
+
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  style={{ display: 'none' }}
+                  onChange={(e) => {
+                    addFiles(e.target.files);
+                    // reset حتى لو اختار نفس الملف مرة ثانية
+                    e.target.value = '';
+                  }}
+                />
+
+                <div className="row" style={{ marginTop: 12, justifyContent: 'space-between' }}>
+                  <div className="row">
+                    <button className="btn" type="button" onClick={openPicker}>اختيار صور</button>
+                    <button className="btnPrimary" type="button" disabled={uploading} onClick={uploadSelectedImages}>
+                      {uploading ? 'جاري الرفع…' : 'رفع المحدد'}
+                    </button>
+                    <button className="btn" type="button" onClick={clearQueue}>تفريغ المحددات</button>
+                  </div>
+                  <div className="muted" style={{ fontSize: 12 }}>الصورة التي تم رفعها تُضاف تلقائيًا للإعلان.</div>
                 </div>
 
                 {uploadErr ? (
-                  <div
-                    className="card"
-                    style={{
-                      marginTop: 10,
-                      borderColor: 'rgba(180,35,24,.25)',
-                      background: 'rgba(180,35,24,.05)',
-                    }}
-                  >
+                  <div className="card" style={{ marginTop: 10, borderColor: 'rgba(180,35,24,.25)', background: 'rgba(180,35,24,.05)' }}>
                     {uploadErr}
+                  </div>
+                ) : null}
+
+                {queue.length ? (
+                  <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 10 }}>
+                    {queue.map((q) => (
+                      <div key={q.id} className="card" style={{ padding: 10 }}>
+                        <div style={{ position: 'relative' }}>
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={q.preview} alt="" style={{ width: '100%', height: 92, objectFit: 'cover', borderRadius: 12 }} />
+                          <div className="chip">
+                            <input
+                              type="checkbox"
+                              checked={!!q.selected}
+                              onChange={() => toggleQueued(q.id)}
+                              aria-label="تحديد الصورة"
+                            />
+                            <span style={{ fontSize: 12, fontWeight: 800 }}>تحديد</span>
+                          </div>
+                        </div>
+
+                        <div style={{ marginTop: 8 }}>
+                          <div className="row" style={{ justifyContent: 'space-between', gap: 8 }}>
+                            <div className="muted" style={{ fontSize: 12 }}>
+                              {q.status === 'done' ? 'تم' : q.status === 'uploading' ? 'يرفع…' : q.status === 'error' ? 'فشل' : 'جاهز'}
+                            </div>
+                            <button className="btnDanger" type="button" onClick={() => removeQueued(q.id)} style={{ padding: '6px 10px', borderRadius: 10, fontSize: 12 }}>
+                              حذف
+                            </button>
+                          </div>
+
+                          <div className="progress" style={{ marginTop: 8 }}>
+                            <div className="progressBar" style={{ width: `${Math.max(0, Math.min(100, q.progress || 0))}%` }} />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 ) : null}
               </Field>
             </div>
 
-            {imagesPreview.length ? (
+            {Array.isArray(form.images) && form.images.length ? (
               <div className="col-12">
-                <Field label="معاينة الصور" hint="اضغط حذف لإزالة الصورة من الإعلان (لا يحذفها من التخزين إلا عند حذف الإعلان).">
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 10 }}>
-                    {imagesPreview.map((url) => (
-                      <div key={url} className="card" style={{ padding: 8 }}>
+                <Field label="صور الإعلان" hint="هذه الصور ستظهر للزوار. يمكنك حذف أي صورة من الإعلان.">
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 10 }}>
+                    {form.images.map((url) => (
+                      <div key={url} className="card" style={{ padding: 10 }}>
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={url} alt="" style={{ width: '100%', height: 90, objectFit: 'cover', borderRadius: 10 }} />
-                        <button className="btnDanger" type="button" style={{ width: '100%', marginTop: 8 }} onClick={() => removeImageFromForm(url)}>
-                          حذف
+                        <img src={url} alt="" style={{ width: '100%', height: 92, objectFit: 'cover', borderRadius: 12 }} />
+                        <button className="btnDanger" type="button" style={{ width: '100%', marginTop: 10 }} onClick={() => removeImageFromForm(url)}>
+                          حذف من الإعلان
                         </button>
                       </div>
                     ))}
@@ -583,19 +732,55 @@ export default function AdminPage() {
               </div>
             ) : null}
 
-            <div className="col-12">
-              <Field label="روابط الصور (كل رابط في سطر)" hint="يمكنك لصق روابط جاهزة، أو استخدم رفع الصور بالأعلى.">
-                <textarea className="input" rows={4} value={form.imagesText} onChange={(e) => setForm({ ...form, imagesText: e.target.value })} placeholder="https://...
-https://..." />
-              </Field>
-            </div>
-
             <div className="col-12 row" style={{ justifyContent: 'flex-end' }}>
               <button type="button" className="btnPrimary" disabled={busy} onClick={saveListing}>
                 {busy ? 'جاري الحفظ…' : (editingId ? 'تحديث الإعلان' : 'إضافة الإعلان')}
               </button>
             </div>
           </div>
+
+          <style jsx>{`
+            .dropzone {
+              border: 1px dashed rgba(214, 179, 91, 0.45);
+              background: rgba(214, 179, 91, 0.06);
+              border-radius: 16px;
+              padding: 18px;
+              cursor: pointer;
+              transition: all 0.2s ease;
+              text-align: center;
+            }
+            .dropzone:hover {
+              border-color: rgba(214, 179, 91, 0.75);
+              background: rgba(214, 179, 91, 0.09);
+              transform: translateY(-1px);
+            }
+            .chip {
+              position: absolute;
+              top: 10px;
+              left: 10px;
+              display: inline-flex;
+              align-items: center;
+              gap: 8px;
+              padding: 6px 10px;
+              border-radius: 999px;
+              border: 1px solid rgba(255,255,255,0.18);
+              background: rgba(0,0,0,0.55);
+              backdrop-filter: blur(10px);
+            }
+            .progress {
+              height: 8px;
+              border-radius: 999px;
+              overflow: hidden;
+              background: rgba(255,255,255,0.08);
+              border: 1px solid rgba(255,255,255,0.12);
+            }
+            .progressBar {
+              height: 100%;
+              background: linear-gradient(135deg, var(--primary), var(--primary2));
+              border-radius: 999px;
+              transition: width 0.2s ease;
+            }
+          `}</style>
         </section>
       ) : (
         <section className="card" style={{ marginTop: 12 }}>
@@ -610,7 +795,7 @@ https://..." />
             <div className="muted" style={{ marginTop: 10 }}>لا توجد عروض.</div>
           ) : (
             <div style={{ marginTop: 10, display: 'grid', gap: 10 }}>
-              {list.map(item => (
+              {list.map((item) => (
                 <div key={item.id} className="card">
                   <div className="row" style={{ justifyContent: 'space-between', gap: 8 }}>
                     <div style={{ fontWeight: 900, lineHeight: 1.3 }}>{item.title || 'عرض'}</div>
@@ -634,7 +819,6 @@ https://..." />
                     <button className="btn" onClick={() => adminUpdateListing(item.id, { status: 'reserved' }).then(loadList)}>محجوز</button>
                     <button className="btnDanger" onClick={() => adminUpdateListing(item.id, { status: 'sold' }).then(loadList)}>مباع</button>
                     <button className="btn" onClick={() => adminUpdateListing(item.id, { status: 'rented' }).then(loadList)}>مؤجر</button>
-                    <button className="btn" onClick={() => adminUpdateListing(item.id, { status: 'canceled' }).then(loadList)}>ملغي</button>
                   </div>
                 </div>
               ))}
