@@ -41,6 +41,18 @@ function loadGoogleMaps(apiKey) {
   });
 }
 
+// ألوان صغيرة للأحياء (أيقونة نقطية داخل الشيب)
+const NEIGHBORHOOD_COLORS = {
+  الزمرد: '#34A853',
+  الياقوت: '#4285F4',
+  الصواري: '#EA4335',
+  الشراع: '#FBBC05',
+  اللؤلؤ: '#7B1FA2',
+  النور: '#00796B',
+  الفنار: '#0B57D0',
+  البحيرات: '#6D4C41',
+};
+
 export default function MapPage() {
   const sp = useSearchParams();
 
@@ -58,6 +70,10 @@ export default function MapPage() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
+
+  // ✅ وضع ملء الشاشة للخريطة (مثل سوق اليمن)
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const lastViewportRef = useRef({ bounds: null, center: null, zoom: null });
 
   const mapElRef = useRef(null);
   const mapRef = useRef(null);
@@ -124,7 +140,8 @@ export default function MapPage() {
             zoom: 11,
             mapTypeControl: false,
             streetViewControl: false,
-            fullscreenControl: true,
+            // نستخدم وضع ملء الشاشة الخاص بنا بدل زر Google الافتراضي
+            fullscreenControl: false,
           });
           infoRef.current = new window.google.maps.InfoWindow();
         }
@@ -139,6 +156,40 @@ export default function MapPage() {
       cancelled = true;
     };
   }, [apiKey]);
+
+  // ✅ تفعيل/إلغاء وضع ملء الشاشة + ضبط إعادة التحجيم لخريطة Google
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+
+    const prev = document.body.style.overflow;
+    if (isFullscreen) document.body.style.overflow = 'hidden';
+    else document.body.style.overflow = prev || '';
+
+    // بعد تغيير الحجم لازم نعمل resize للخريطة ثم نرجع نفس نطاق العرض
+    const map = mapRef.current;
+    if (map && window.google && window.google.maps) {
+      const t = setTimeout(() => {
+        try {
+          window.google.maps.event.trigger(map, 'resize');
+          const vp = lastViewportRef.current || {};
+          if (vp.bounds) map.fitBounds(vp.bounds);
+          if (vp.center && typeof vp.zoom === 'number') {
+            map.setCenter(vp.center);
+            map.setZoom(vp.zoom);
+          }
+        } catch {}
+      }, 50);
+
+      return () => {
+        clearTimeout(t);
+        document.body.style.overflow = prev || '';
+      };
+    }
+
+    return () => {
+      document.body.style.overflow = prev || '';
+    };
+  }, [isFullscreen]);
 
   // تحديث الماركرز مع تغيّر البيانات
   useEffect(() => {
@@ -185,11 +236,27 @@ export default function MapPage() {
 
     // زوم على كل العلامات
     map.fitBounds(bounds);
+    // حفظ نطاق العرض الحالي للرجوع له بعد فتح/إغلاق ملء الشاشة
+    try {
+      lastViewportRef.current = {
+        bounds,
+        center: map.getCenter() ? { lat: map.getCenter().lat(), lng: map.getCenter().lng() } : null,
+        zoom: map.getZoom(),
+      };
+    } catch {}
 
     // إذا كانت علامة واحدة فقط
     if (list.length === 1) {
       map.setZoom(15);
       map.setCenter({ lat: Number(list[0].lat), lng: Number(list[0].lng) });
+
+      try {
+        lastViewportRef.current = {
+          bounds: null,
+          center: { lat: Number(list[0].lat), lng: Number(list[0].lng) },
+          zoom: 15,
+        };
+      } catch {}
     }
   }, [filteredItemsWithCoords]);
 
@@ -203,10 +270,22 @@ export default function MapPage() {
     window.google.maps.event.trigger(marker, 'click');
   }
 
-  const neighborhoodOptions = useMemo(
-    () => [{ value: '', label: 'كل الأحياء' }, ...NEIGHBORHOODS.map((n) => ({ value: n, label: n }))],
-    []
-  );
+  const neighborhoodOptions = useMemo(() => {
+    const base = [{ value: '', label: 'كل الأحياء' }];
+    const opts = NEIGHBORHOODS.map((n) => {
+      const col = NEIGHBORHOOD_COLORS[n] || '#94A3B8';
+      return {
+        value: n,
+        label: (
+          <span className="chipLabel">
+            <span className="dot" style={{ background: col }} />
+            <span>{n}</span>
+          </span>
+        ),
+      };
+    });
+    return base.concat(opts);
+  }, []);
 
   const dealTypeOptions = useMemo(
     () => [{ value: '', label: 'بيع/إيجار' }, ...DEAL_TYPES.map((d) => ({ value: d.key, label: d.label }))],
@@ -263,11 +342,15 @@ export default function MapPage() {
 
           <div className="col-12" style={{ marginTop: 10 }}>
             <div className="muted" style={{ fontSize: 13, marginBottom: 6 }}>سكني/تجاري</div>
-            <ChipsRow value={propertyClass} options={classOptions} onChange={(v) => {
-              setPropertyClass(v);
-              // لو غيّر التصنيف، نفضي النوع لتفادي تعارض (اختياري)
-              setPropertyType('');
-            }} />
+            <ChipsRow
+              value={propertyClass}
+              options={classOptions}
+              onChange={(v) => {
+                setPropertyClass(v);
+                // لو غيّر التصنيف، نفضي النوع لتفادي تعارض (اختياري)
+                setPropertyType('');
+              }}
+            />
           </div>
 
           <div className="col-12" style={{ marginTop: 10 }}>
@@ -286,17 +369,43 @@ export default function MapPage() {
       <section className="card" style={{ marginTop: 12 }}>
         <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ fontWeight: 900 }}>الخريطة</div>
-          <div className="muted" style={{ fontSize: 13 }}>
-            عدد العلامات: {filteredItemsWithCoords.length}
+          <div className="row" style={{ gap: 10, alignItems: 'center' }}>
+            <div className="muted" style={{ fontSize: 13 }}>عدد العلامات: {filteredItemsWithCoords.length}</div>
+            <button className="btn" type="button" onClick={() => setIsFullscreen(true)}>
+              ملء الشاشة
+            </button>
           </div>
         </div>
 
-        <div
-          ref={mapElRef}
-          className="mapBox"
-          style={{ marginTop: 10, height: '60vh', minHeight: 360, borderRadius: 14, overflow: 'hidden', border: '1px solid var(--border)' }}
-        />
+        <div className="mapWrap" style={{ marginTop: 10 }}>
+          <div
+            ref={mapElRef}
+            className={`mapBox ${isFullscreen ? 'mapBoxFullscreen' : ''}`}
+            style={{ height: isFullscreen ? '100vh' : '60vh', minHeight: isFullscreen ? undefined : 360 }}
+            onClick={() => {
+              // حسب طلبك: النقر على الخريطة يفتح ملء الشاشة
+              if (!isFullscreen) setIsFullscreen(true);
+            }}
+          />
+        </div>
       </section>
+
+      {isFullscreen ? (
+        <div className="mapFullscreenTop" role="dialog" aria-label="الخريطة ملء الشاشة">
+          <button
+            type="button"
+            className="fsClose"
+            onClick={() => setIsFullscreen(false)}
+            aria-label="إغلاق"
+          >
+            ✕
+          </button>
+          <div className="fsTitle">الخريطة</div>
+          <div className="fsChips">
+            <ChipsRow value={neighborhood} options={neighborhoodOptions} onChange={setNeighborhood} />
+          </div>
+        </div>
+      ) : null}
 
       <section style={{ marginTop: 12 }}>
         <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
@@ -324,6 +433,72 @@ export default function MapPage() {
           </div>
         )}
       </section>
+
+      <style jsx>{`
+        .mapWrap {
+          position: relative;
+        }
+        .mapBox {
+          width: 100%;
+          border-radius: 14px;
+          overflow: hidden;
+          border: 1px solid var(--border);
+          background: #f1f5f9;
+        }
+        .mapBoxFullscreen {
+          position: fixed;
+          top: 0;
+          left: 0;
+          width: 100vw;
+          height: 100vh !important;
+          z-index: 9990;
+          border-radius: 0;
+          border: none;
+        }
+        .mapFullscreenTop {
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          z-index: 9991;
+          padding: 10px 12px;
+          background: rgba(255, 255, 255, 0.96);
+          backdrop-filter: blur(8px);
+          border-bottom: 1px solid var(--border);
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        }
+        .fsClose {
+          width: 40px;
+          height: 40px;
+          border-radius: 12px;
+          border: 1px solid var(--border);
+          background: var(--card);
+          font-weight: 900;
+          cursor: pointer;
+        }
+        .fsTitle {
+          font-weight: 900;
+          white-space: nowrap;
+        }
+        .fsChips {
+          flex: 1;
+          min-width: 0;
+        }
+        .chipLabel {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+        }
+        .dot {
+          width: 10px;
+          height: 10px;
+          border-radius: 999px;
+          display: inline-block;
+          box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.03);
+        }
+      `}</style>
     </div>
   );
 }
