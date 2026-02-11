@@ -533,7 +533,7 @@ export default function AdminPage() {
           <div className="grid" style={{ marginTop: 10 }}>
             <div className="col-6">
               <Field label="عنوان العرض">
-                <input className="input" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="مثال: أرض زاوية في الزمرد" />
+                <input className="input" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="مثال: فيلا للبيع في حي الزمرد" />
               </Field>
             </div>
 
@@ -550,20 +550,20 @@ export default function AdminPage() {
               <Field label="مباشر">
                 <select className="select" value={form.direct ? 'yes' : 'no'} onChange={(e) => setForm({ ...form, direct: e.target.value === 'yes' })}>
                   <option value="yes">نعم</option>
-                  <option value="no">لا</option>
+                  <option value="no">وسيط/وكيل</option>
                 </select>
               </Field>
             </div>
 
             <div className="col-3">
               <Field label="المخطط">
-                <input className="input" value={form.plan} onChange={(e) => setForm({ ...form, plan: e.target.value })} placeholder="مثال: 505 أو 99جس" />
+                <input className="input" value={form.plan} onChange={(e) => setForm({ ...form, plan: e.target.value })} placeholder="مثال: مخطط الخالدية السياحي272/ب" />
               </Field>
             </div>
 
             <div className="col-3">
               <Field label="الجزء">
-                <input className="input" value={form.part} onChange={(e) => setForm({ ...form, part: e.target.value })} placeholder="مثال: أ/ب أو 1ط" />
+                <input className="input" value={form.part} onChange={(e) => setForm({ ...form, part: e.target.value })} placeholder="مثال: الجزء ج " />
               </Field>
             </div>
 
@@ -594,13 +594,13 @@ export default function AdminPage() {
 
             <div className="col-3">
               <Field label="المساحة (م²)">
-                <input className="input" inputMode="numeric" value={form.area} onChange={(e) => setForm({ ...form, area: e.target.value })} placeholder="مثال: 600" />
+                <input className="input" inputMode="numeric" value={form.area} onChange={(e) => setForm({ ...form, area: e.target.value })} placeholder="مثال: 312" />
               </Field>
             </div>
 
             <div className="col-3">
               <Field label="السعر">
-                <input className="input" inputMode="numeric" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} placeholder="مثال: 1200000" />
+                <input className="input" inputMode="numeric" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} placeholder="مثال: 1350000" />
               </Field>
             </div>
 
