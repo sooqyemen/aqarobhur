@@ -41,29 +41,20 @@ function loadGoogleMaps(apiKey) {
   });
 }
 
-// نقاط ألوان خفيفة للأحياء (بدون رموز)
-const NEIGHBORHOOD_COLORS = {
-  الزمرد: '#34A853',
-  الياقوت: '#4285F4',
-  الصواري: '#EA4335',
-  الشراع: '#FBBC05',
-  اللؤلؤ: '#7B1FA2',
-  النور: '#00796B',
-  الفنار: '#0B57D0',
-  البحيرات: '#6D4C41',
-};
-
 export default function MapClient() {
   const sp = useSearchParams();
-
   const initialNeighborhood = sp.get('neighborhood') || '';
 
   const [neighborhood, setNeighborhood] = useState(initialNeighborhood);
+
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
 
-  // ✅ Fullscreen بدون أي Overlay مُظلِّل
+  // ✅ مهم: بدل الاعتماد على mapRef (لا يسبب re-render)
+  const [mapReady, setMapReady] = useState(false);
+
+  // ✅ Fullscreen
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   const mapDivRef = useRef(null);
@@ -71,6 +62,9 @@ export default function MapClient() {
   const infoRef = useRef(null);
   const markersRef = useRef([]);
   const markerByIdRef = useRef({});
+
+  const prevBodyOverflowRef = useRef('');
+  const prevHtmlOverflowRef = useRef('');
 
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
 
@@ -112,13 +106,15 @@ export default function MapClient() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters]);
 
-  // ✅ init map مرة واحدة
+  // ✅ init map
   useEffect(() => {
     let cancelled = false;
 
     async function init() {
       if (!apiKey) return;
       if (!mapDivRef.current) return;
+
+      setMapReady(false);
 
       try {
         await loadGoogleMaps(apiKey);
@@ -134,9 +130,20 @@ export default function MapClient() {
           });
           infoRef.current = new window.google.maps.InfoWindow();
         }
+
+        // ✅ الآن الخريطة جاهزة (نخفي “جاري التحميل…”)
+        setMapReady(true);
+
+        // ✅ resize آمن بعد أول رسم (مهم للجوال)
+        setTimeout(() => {
+          try {
+            window.google?.maps?.event?.trigger(mapRef.current, 'resize');
+          } catch {}
+        }, 120);
       } catch {
         if (!cancelled) {
           setErr('تعذر تحميل خريطة Google. تأكد من المفتاح وتفعيل Google Maps JavaScript API.');
+          setMapReady(false);
         }
       }
     }
@@ -147,27 +154,37 @@ export default function MapClient() {
     };
   }, [apiKey]);
 
-  // ✅ عند فتح/إغلاق Fullscreen: نخفي سكرول الخلفية + resize للخريطة
+  // ✅ Fullscreen: نقفل التمرير فقط وقت الملء ونرجعه مضبوط
   useEffect(() => {
     if (typeof document === 'undefined') return;
 
-    const prevOverflow = document.body.style.overflow;
-    if (isFullscreen) {
-      document.body.style.overflow = 'hidden';
-      document.body.classList.add('isMapFullscreen');
-    } else {
-      document.body.style.overflow = prevOverflow || '';
-      document.body.classList.remove('isMapFullscreen');
-    }
+    const html = document.documentElement;
+    const body = document.body;
 
-    const map = mapRef.current;
-    if (map && window.google?.maps) {
-      const t = setTimeout(() => {
+    if (isFullscreen) {
+      prevHtmlOverflowRef.current = html.style.overflow || '';
+      prevBodyOverflowRef.current = body.style.overflow || '';
+
+      html.style.overflow = 'hidden';
+      body.style.overflow = 'hidden';
+      body.classList.add('isMapFullscreen');
+
+      // resize للخرائط بعد الانتقال لملء الشاشة
+      setTimeout(() => {
         try {
-          window.google.maps.event.trigger(map, 'resize');
+          window.google?.maps?.event?.trigger(mapRef.current, 'resize');
         } catch {}
       }, 120);
-      return () => clearTimeout(t);
+    } else {
+      html.style.overflow = prevHtmlOverflowRef.current;
+      body.style.overflow = prevBodyOverflowRef.current;
+      body.classList.remove('isMapFullscreen');
+
+      setTimeout(() => {
+        try {
+          window.google?.maps?.event?.trigger(mapRef.current, 'resize');
+        } catch {}
+      }, 120);
     }
   }, [isFullscreen]);
 
@@ -176,7 +193,6 @@ export default function MapClient() {
     const map = mapRef.current;
     if (!map || !window.google?.maps) return;
 
-    // clear
     markersRef.current.forEach((m) => m.setMap(null));
     markersRef.current = [];
     markerByIdRef.current = {};
@@ -202,11 +218,11 @@ export default function MapClient() {
       marker.addListener('click', () => {
         const html = `
           <div style="direction:rtl; font-family: Arial, sans-serif; max-width: 240px;">
-            <div style="font-weight: 800; margin-bottom: 6px;">${escapeHtml(it.title || 'عرض')}</div>
+            <div style="font-weight: 900; margin-bottom: 6px;">${escapeHtml(it.title || 'عرض')}</div>
             <div style="opacity: .85; font-size: 12px; margin-bottom: 8px;">
               ${escapeHtml(it.neighborhood || '')} ${escapeHtml(it.plan || '')} ${escapeHtml(it.part || '')}
             </div>
-            <a href="/listing/${encodeURIComponent(it.id)}" style="color:#0b57d0; text-decoration:none; font-weight:800;">فتح التفاصيل</a>
+            <a href="/listing/${encodeURIComponent(it.id)}" style="color:#0b57d0; text-decoration:none; font-weight:900;">فتح التفاصيل</a>
           </div>
         `;
         infoRef.current.setContent(html);
@@ -233,20 +249,9 @@ export default function MapClient() {
   }
 
   const neighborhoodOptions = useMemo(() => {
-    const base = [{ value: '', label: 'كل الأحياء' }];
-    const opts = (NEIGHBORHOODS || []).map((n) => {
-      const col = NEIGHBORHOOD_COLORS[n] || '#94A3B8';
-      return {
-        value: n,
-        label: (
-          <span className="chipLabel">
-            <span className="dot" style={{ background: col }} />
-            <span>{n}</span>
-          </span>
-        ),
-      };
-    });
-    return base.concat(opts);
+    return [{ value: '', label: 'كل الأحياء' }].concat(
+      (NEIGHBORHOODS || []).map((n) => ({ value: n, label: n }))
+    );
   }, []);
 
   return (
@@ -278,7 +283,7 @@ export default function MapClient() {
         </section>
       ) : null}
 
-      {/* ✅ شريط علوي (بدون تظليل على الخريطة) */}
+      {/* ✅ شريط علوي بدون أي تظليل فوق الخريطة */}
       <div className={`topBar ${isFullscreen ? 'topBarFs' : ''}`}>
         <button
           className="xBtn"
@@ -302,10 +307,12 @@ export default function MapClient() {
       {/* ✅ الخريطة */}
       <div className={`mapHost ${isFullscreen ? 'mapHostFs' : ''}`}>
         <div ref={mapDivRef} className="mapBox" />
-        {!mapRef.current ? <div className="mapLoading">جاري تحميل الخريطة…</div> : null}
+
+        {/* ✅ يظهر فقط إذا الخريطة غير جاهزة */}
+        {!mapReady ? <div className="mapLoading">جاري تحميل الخريطة…</div> : null}
       </div>
 
-      {/* ✅ قائمة مصغرة أسفل الخريطة (تختفي في fullscreen) */}
+      {/* ✅ قائمة مصغرة (تختفي في fullscreen) */}
       {!isFullscreen ? (
         <section style={{ marginTop: 12 }}>
           <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
@@ -349,16 +356,16 @@ export default function MapClient() {
           display: flex;
           align-items: center;
           gap: 10px;
-          backdrop-filter: blur(16px);
+          backdrop-filter: blur(14px);
           box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
         }
 
-        /* ✅ وقت fullscreen: الشريط يثبت فوق الخريطة */
+        /* ✅ ثابت فوق الخريطة (بدون Overlay) + safe area */
         .topBarFs {
           position: fixed;
-          top: 12px;
-          left: 12px;
-          right: 12px;
+          top: calc(12px + env(safe-area-inset-top));
+          left: calc(12px + env(safe-area-inset-left));
+          right: calc(12px + env(safe-area-inset-right));
           z-index: 1000002;
         }
 
@@ -400,16 +407,24 @@ export default function MapClient() {
           position: relative;
         }
 
-        /* ✅ Fullscreen حقيقي بدون Overlay مظلل */
+        /* ✅ Fullscreen ثابت + dVH للجوال */
         .mapHostFs {
           position: fixed;
           inset: 0;
-          height: 100vh;
-          min-height: 100vh;
+          height: 100dvh;
+          min-height: 100dvh;
           margin: 0;
           border-radius: 0;
           border: none;
-          z-index: 1000000; /* أقل من topBarFs، أعلى من أي شيء */
+          z-index: 1000000;
+        }
+
+        /* fallback لو متصفح ما يدعم dvh */
+        @supports not (height: 100dvh) {
+          .mapHostFs {
+            height: 100vh;
+            min-height: 100vh;
+          }
         }
 
         .mapBox {
@@ -417,6 +432,7 @@ export default function MapClient() {
           height: 100%;
         }
 
+        /* ✅ لا يوجد تظليل دائم على الخريطة */
         .mapLoading {
           position: absolute;
           inset: 0;
@@ -425,20 +441,7 @@ export default function MapClient() {
           justify-content: center;
           font-weight: 950;
           color: #e2e8f0;
-          background: rgba(0, 0, 0, 0.18); /* خفيف جدًا فقط أثناء التحميل */
-        }
-
-        .chipLabel {
-          display: inline-flex;
-          align-items: center;
-          gap: 8px;
-        }
-        .dot {
-          width: 10px;
-          height: 10px;
-          border-radius: 999px;
-          display: inline-block;
-          box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.10);
+          background: rgba(0, 0, 0, 0.18); /* خفيف فقط أثناء التحميل */
         }
       `}</style>
     </div>
