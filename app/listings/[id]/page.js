@@ -1,8 +1,15 @@
 import { redirect } from 'next/navigation';
 
-// مسار قديم كان ينتج 404 في بعض الكروت/الروابط
-// نحوله للمسار الصحيح: /listing/[id]
-export default function LegacyListingRedirect({ params }) {
-  const id = params?.id ? encodeURIComponent(String(params.id)) : '';
-  redirect(id ? `/listing/${id}` : '/listings');
+export default function ListingsIdRedirect({ params }) {
+  const raw = params?.id ? String(params.id) : '';
+  let id = raw;
+  try {
+    id = raw ? decodeURIComponent(raw) : '';
+  } catch (_) {}
+
+  if (!id) {
+    redirect('/listings');
+  }
+
+  redirect(`/listing/${encodeURIComponent(id)}`);
 }
