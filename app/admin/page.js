@@ -3,15 +3,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { getFirebase } from '@/lib/firebaseClient';
 import { signInWithEmailAndPassword, onAuthStateChanged, signOut } from 'firebase/auth';
-import {
-  ref as storageRef,
-  refFromURL,
-  uploadBytes,
-  getDownloadURL,
-  deleteObject,
-} from 'firebase/storage';
-import { getFirestore, doc, deleteDoc } from 'firebase/firestore';
-
+import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
+import { doc, deleteDoc, getFirestore } from 'firebase/firestore';
 import { isAdminUser } from '@/lib/admin';
 import { adminCreateListing, adminUpdateListing, fetchListings } from '@/lib/listings';
 import { DEAL_TYPES, NEIGHBORHOODS, PROPERTY_TYPES, STATUS_OPTIONS, PROPERTY_CLASSES } from '@/lib/taxonomy';
@@ -29,82 +22,47 @@ function Field({ label, children, hint }) {
   );
 }
 
-function parseLines(text) {
-  return String(text || '')
-    .split('\n')
-    .map((s) => s.trim())
-    .filter(Boolean);
+function uniqLines(txt) {
+  return Array.from(
+    new Set(
+      String(txt || '')
+        .split('\n')
+        .map((s) => s.trim())
+        .filter(Boolean)
+    )
+  );
 }
 
-function normalizeWebsiteUrl(url) {
-  const raw = String(url || '').trim();
-  if (!raw) return '';
-  // إذا كتب بدون https
-  return /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+function toNumberOrNull(v) {
+  const n = Number(String(v ?? '').replace(/,/g, '').trim());
+  return Number.isFinite(n) ? n : null;
 }
 
-const EMPTY_FORM = {
-  title: '',
-  neighborhood: '',
-  plan: '',
-  part: '',
-  dealType: 'sale',
-  propertyType: 'أرض',
-  propertyClass: '',
-  area: '',
-  price: '',
-  lat: '',
-  lng: '',
-  status: 'available',
-  direct: true,
-  websiteUrl: '',
-  description: '',
-  imagesText: '',
-};
+function toTextOrEmpty(v) {
+  return v == null ? '' : String(v);
+}
 
-function itemToForm(item) {
-  // دعم أكثر من شكل بيانات (images[], coords[], lat/lng)
-  const coords = Array.isArray(item?.coords) ? item.coords : null;
-  const lat = item?.lat ?? (coords ? coords[0] : '');
-  const lng = item?.lng ?? (coords ? coords[1] : '');
-
-  const imagesArr = Array.isArray(item?.images) ? item.images : [];
-  const imagesText = imagesArr.length ? imagesArr.join('\n') : '';
-
-  return {
-    ...EMPTY_FORM,
-    title: item?.title || '',
-    neighborhood: item?.neighborhood || '',
-    plan: item?.plan || '',
-    part: item?.part || '',
-    dealType: item?.dealType || 'sale',
-    propertyType: item?.propertyType || 'أرض',
-    propertyClass: item?.propertyClass || '',
-    area: item?.area != null ? String(item.area) : '',
-    price: item?.price != null ? String(item.price) : '',
-    lat: lat != null && lat !== '' ? String(lat) : '',
-    lng: lng != null && lng !== '' ? String(lng) : '',
-    status: item?.status || 'available',
-    direct: typeof item?.direct === 'boolean' ? item.direct : true,
-    websiteUrl: item?.websiteUrl || '',
-    description: item?.description || '',
-    imagesText,
-  };
+function extractStoragePathFromDownloadURL(url) {
+  // يدعم روابط Firebase Storage الشائعة:
+  // https://firebasestorage.googleapis.com/v0/b/<bucket>/o/<path>?alt=media&token=...
+  try {
+    const u = new URL(url);
+    const idx = u.pathname.indexOf('/o/');
+    if (idx === -1) return '';
+    const encoded = u.pathname.slice(idx + 3);
+    return decodeURIComponent(encoded);
+  } catch {
+    return '';
+  }
 }
 
 export default function AdminPage() {
+  // نحاول استخراج أكبر قدر ممكن من getFirebase (بعض المشاريع ترجع db/app)
   const fb = getFirebase();
   const auth = fb?.auth;
   const storage = fb?.storage;
-
-  let db = fb?.db || null;
-  if (!db) {
-    try {
-      db = fb?.app ? getFirestore(fb.app) : getFirestore();
-    } catch {
-      db = null;
-    }
-  }
+  const db = fb?.db || fb?.firestore;
+  const app = fb?.app;
 
   const [user, setUser] = useState(null);
   const [email, setEmail] = useState('');
@@ -116,55 +74,44 @@ export default function AdminPage() {
   const [createdId, setCreatedId] = useState('');
 
   const [editingId, setEditingId] = useState('');
+  const [actionBusyId, setActionBusyId] = useState('');
 
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [uploadErr, setUploadErr] = useState('');
-  const [actionErr, setActionErr] = useState('');
 
-  const [createForm, setCreateForm] = useState(EMPTY_FORM);
+  const emptyForm = useMemo(() => ({
+    title: '',
+    neighborhood: '',
+    plan: '',
+    part: '',
+    dealType: 'sale',
+    propertyType: 'أرض',
+    propertyClass: '',
+    area: '',
+    price: '',
+    lat: '',
+    lng: '',
+    status: 'available',
+    direct: true,
+    websiteUrl: '',
+    description: '',
+    imagesText: '',
+  }), []);
+
+  const [form, setForm] = useState(emptyForm);
 
   const [list, setList] = useState([]);
   const [loadingList, setLoadingList] = useState(false);
 
   const isAdmin = useMemo(() => isAdminUser(user), [user]);
 
-  const imageUrls = useMemo(() => parseLines(createForm.imagesText), [createForm.imagesText]);
+  const imagesPreview = useMemo(() => uniqLines(form.imagesText), [form.imagesText]);
 
   useEffect(() => {
     if (!auth) return;
     return onAuthStateChanged(auth, (u) => setUser(u || null));
   }, [auth]);
-
-  function resetForm() {
-    setCreateForm(EMPTY_FORM);
-    setEditingId('');
-    setCreatedId('');
-    setSelectedFiles([]);
-    setUploadErr('');
-    setActionErr('');
-  }
-
-  function startEdit(item) {
-    setActionErr('');
-    setUploadErr('');
-    setCreatedId('');
-    setEditingId(item?.id || '');
-    setCreateForm(itemToForm(item));
-    setTab('create');
-    if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
-  }
-
-  function cancelEdit() {
-    resetForm();
-  }
-
-  function removeImageUrl(url) {
-    setCreateForm((p) => {
-      const urls = parseLines(p.imagesText).filter((u) => u !== url);
-      return { ...p, imagesText: urls.join('\n') };
-    });
-  }
 
   async function uploadSelectedImages() {
     setUploadErr('');
@@ -197,9 +144,8 @@ export default function AdminPage() {
         urls.push(url);
       }
 
-      setCreateForm((p) => {
-        const existing = parseLines(p.imagesText);
-        const merged = [...existing, ...urls].join('\n');
+      setForm((p) => {
+        const merged = uniqLines([p.imagesText, ...urls].filter(Boolean).join('\n')).join('\n');
         return { ...p, imagesText: merged };
       });
       setSelectedFiles([]);
@@ -225,53 +171,91 @@ export default function AdminPage() {
     }
   }
 
-  async function logout() { await signOut(auth); }
+  async function logout() {
+    if (!auth) return;
+    await signOut(auth);
+  }
+
+  function resetToCreate() {
+    setEditingId('');
+    setCreatedId('');
+    setForm(emptyForm);
+    setSelectedFiles([]);
+    setUploadErr('');
+  }
+
+  function startEdit(item) {
+    setCreatedId('');
+    setEditingId(item.id);
+
+    const images = Array.isArray(item.images) ? item.images : [];
+    const lat = item.lat ?? item.latitude ?? null;
+    const lng = item.lng ?? item.longitude ?? null;
+
+    setForm({
+      ...emptyForm,
+      title: toTextOrEmpty(item.title),
+      neighborhood: toTextOrEmpty(item.neighborhood),
+      plan: toTextOrEmpty(item.plan),
+      part: toTextOrEmpty(item.part),
+      dealType: toTextOrEmpty(item.dealType || 'sale'),
+      propertyType: toTextOrEmpty(item.propertyType || 'أرض'),
+      propertyClass: toTextOrEmpty(item.propertyClass || ''),
+      area: item.area == null ? '' : String(item.area),
+      price: item.price == null ? '' : String(item.price),
+      lat: lat == null ? '' : String(lat),
+      lng: lng == null ? '' : String(lng),
+      status: toTextOrEmpty(item.status || 'available'),
+      direct: !!item.direct,
+      websiteUrl: toTextOrEmpty(item.websiteUrl || item.website || item.url || ''),
+      description: toTextOrEmpty(item.description),
+      imagesText: uniqLines(images).join('\n'),
+    });
+
+    setTab('create');
+    window?.scrollTo?.({ top: 0, behavior: 'smooth' });
+  }
+
+  function removeImageFromForm(url) {
+    setForm((p) => {
+      const next = uniqLines(p.imagesText).filter((u) => u !== url).join('\n');
+      return { ...p, imagesText: next };
+    });
+  }
 
   async function saveListing() {
     setBusy(true);
-    setActionErr('');
     setCreatedId('');
-
     try {
-      const images = parseLines(createForm.imagesText);
-
-      const websiteUrl = normalizeWebsiteUrl(createForm.websiteUrl);
+      const images = uniqLines(form.imagesText);
 
       const payload = {
-        title: String(createForm.title || '').trim(),
-        neighborhood: String(createForm.neighborhood || '').trim(),
-        plan: String(createForm.plan || '').trim(),
-        part: String(createForm.part || '').trim(),
-        dealType: createForm.dealType || 'sale',
-        propertyType: createForm.propertyType || 'أرض',
-        propertyClass: String(createForm.propertyClass || '').trim() || '',
-        area: createForm.area ? Number(createForm.area) : null,
-        price: createForm.price ? Number(createForm.price) : null,
-        lat: createForm.lat ? Number(createForm.lat) : null,
-        lng: createForm.lng ? Number(createForm.lng) : null,
-        status: createForm.status || 'available',
-        direct: !!createForm.direct,
-        websiteUrl: websiteUrl || null,
-        description: String(createForm.description || '').trim(),
+        ...form,
+        area: toNumberOrNull(form.area),
+        price: toNumberOrNull(form.price),
+        lat: toNumberOrNull(form.lat),
+        lng: toNumberOrNull(form.lng),
         images,
+        websiteUrl: String(form.websiteUrl || '').trim(),
       };
+
+      // نظافة بسيطة: لا نرسل imagesText للقاعدة (نحتفظ فقط بالمصفوفة images)
+      delete payload.imagesText;
 
       if (editingId) {
         await adminUpdateListing(editingId, payload);
-        setCreatedId(editingId);
+        alert('تم تحديث الإعلان ✅');
+        await loadList();
       } else {
         const id = await adminCreateListing(payload);
         setCreatedId(id);
+        alert('تمت إضافة الإعلان ✅');
       }
 
-      // بعد الحفظ: روح لإدارة العروض وحدث القائمة
-      setEditingId('');
-      setCreateForm(EMPTY_FORM);
-      setTab('manage');
-      await loadList();
+      resetToCreate();
     } catch (err) {
+      alert('حصل خطأ أثناء حفظ الإعلان. راجع إعداد Firebase وقواعد Firestore.');
       console.error(err);
-      setActionErr('حصل خطأ أثناء الحفظ. راجع إعداد Firebase وقواعد Firestore.');
     } finally {
       setBusy(false);
     }
@@ -279,56 +263,79 @@ export default function AdminPage() {
 
   async function loadList() {
     setLoadingList(true);
-    setActionErr('');
     try {
       const data = await fetchListings({ filters: {}, onlyPublic: false });
-      setList(data || []);
-    } catch (e) {
-      console.error(e);
-      setActionErr('تعذر تحميل العروض.');
+      setList(data);
     } finally {
       setLoadingList(false);
     }
   }
 
+  async function hardDeleteFromFirestore(listingId) {
+    // نحاول كل الاحتمالات المتوقعة (compat/modular/app)
+    if (db && typeof db.collection === 'function') {
+      // compat Firestore
+      await db.collection(LISTINGS_COLLECTION).doc(listingId).delete();
+      return;
+    }
+    if (db) {
+      // modular Firestore instance
+      await deleteDoc(doc(db, LISTINGS_COLLECTION, listingId));
+      return;
+    }
+    if (app) {
+      const f = getFirestore(app);
+      await deleteDoc(doc(f, LISTINGS_COLLECTION, listingId));
+      return;
+    }
+    throw new Error('Firestore instance not found (db/app missing)');
+  }
+
+  async function tryDeleteImages(item) {
+    if (!storage) return;
+    const images = Array.isArray(item.images) ? item.images : [];
+    for (const url of images) {
+      const path = extractStoragePathFromDownloadURL(url);
+      if (!path) continue;
+      try {
+        await deleteObject(storageRef(storage, path));
+      } catch (e) {
+        // ممكن تفشل لو قواعد Storage ما تسمح — نتجاهل ونكمل
+        console.warn('Delete image failed:', url, e?.message || e);
+      }
+    }
+  }
+
   async function deleteListing(item) {
-    const id = item?.id;
-    if (!id) return;
-    const ok = typeof window !== 'undefined' ? window.confirm('هل أنت متأكد من حذف هذا الإعلان نهائيًا؟') : false;
+    if (!item?.id) return;
+    const ok = confirm(`تأكيد حذف الإعلان نهائيًا؟\n\n${item.title || item.id}`);
     if (!ok) return;
 
-    setBusy(true);
-    setActionErr('');
-
+    setActionBusyId(item.id);
     try {
-      // محاولة حذف الصور من Storage (اختياري) — لو فشل ما يمنع حذف الإعلان
-      const urls = Array.isArray(item?.images) ? item.images : [];
-      if (storage && urls.length) {
-        for (const url of urls) {
-          try {
-            const r = refFromURL(storage, url);
-            await deleteObject(r);
-          } catch (e) {
-            // تجاهل الأخطاء (قد تكون صلاحيات/رابط خارجي/صورة محذوفة)
-            console.warn('delete image failed', e);
-          }
-        }
-      }
+      // 1) نحاول حذف الصور (اختياري)
+      await tryDeleteImages(item);
 
-      if (!db) {
-        throw new Error('Firestore غير جاهز في getFirebase().');
-      }
-      await deleteDoc(doc(db, LISTINGS_COLLECTION, id));
+      // 2) نحذف وثيقة الإعلان
+      await hardDeleteFromFirestore(item.id);
 
-      // لو كنت تعدّل نفس الإعلان، ألغِ التعديل
-      if (editingId === id) cancelEdit();
-
+      alert('تم حذف الإعلان ✅');
       await loadList();
-    } catch (err) {
-      console.error(err);
-      setActionErr('فشل حذف الإعلان. تأكد أن قواعد Firestore تسمح delete للأدمن.');
+    } catch (e) {
+      console.error(e);
+
+      // كحل احتياطي لو الحذف النهائي فشل (بسبب عدم توفر db/app مثلاً):
+      // نخفي الإعلان بتغيير الحالة إلى ملغي + archived
+      try {
+        await adminUpdateListing(item.id, { status: 'canceled', archived: true });
+        alert('تعذر الحذف النهائي — تم إخفاء الإعلان بدلًا من ذلك ✅');
+        await loadList();
+      } catch (e2) {
+        console.error(e2);
+        alert('فشل حذف/إخفاء الإعلان. راجع صلاحيات Firestore/Storage وتأكد أن getFirebase يعيد db أو app.');
+      }
     } finally {
-      setBusy(false);
+      setActionBusyId('');
     }
   }
 
@@ -378,7 +385,10 @@ export default function AdminPage() {
           <div className="muted" style={{ marginTop: 8 }}>
             أضف الإيميل داخل <code>NEXT_PUBLIC_ADMIN_EMAILS</code> في Vercel ثم أعد النشر.
           </div>
-          <div style={{ marginTop: 12 }}><button className="btn" onClick={logout}>تسجيل خروج</button></div>
+
+          <div className="row" style={{ justifyContent: 'flex-end', marginTop: 12 }}>
+            <button className="btn" onClick={logout}>تسجيل خروج</button>
+          </div>
         </section>
       </div>
     );
@@ -386,51 +396,49 @@ export default function AdminPage() {
 
   return (
     <div className="container" style={{ paddingTop: 16 }}>
-      <div className="row" style={{ justifyContent: 'space-between' }}>
+      <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
-          <h1 style={{ margin: '6px 0 4px' }}>لوحة الأدمن</h1>
-          <div className="muted" style={{ fontSize: 13 }}>مرحبًا: {user.email}</div>
+          <h1 style={{ margin: '6px 0 0' }}>لوحة الأدمن</h1>
+          <div className="muted" style={{ marginTop: 4, fontSize: 13 }}>{user.email}</div>
         </div>
         <button className="btn" onClick={logout}>تسجيل خروج</button>
       </div>
 
       <section className="card" style={{ marginTop: 12 }}>
         <div className="row">
-          <button className={tab === 'create' ? 'btnPrimary' : 'btn'} onClick={() => setTab('create')}>
-            {editingId ? 'تعديل عرض' : 'إضافة عرض'}
-          </button>
+          <button className={tab === 'create' ? 'btnPrimary' : 'btn'} onClick={() => setTab('create')}>إضافة/تعديل عرض</button>
           <button className={tab === 'manage' ? 'btnPrimary' : 'btn'} onClick={() => setTab('manage')}>إدارة العروض</button>
         </div>
       </section>
 
-      {actionErr ? (
-        <section className="card" style={{ marginTop: 12, borderColor: 'rgba(180,35,24,.25)', background: 'rgba(180,35,24,.05)' }}>
-          {actionErr}
-        </section>
-      ) : null}
-
       {tab === 'create' ? (
         <section className="card" style={{ marginTop: 12 }}>
-          {editingId ? (
-            <div className="row" style={{ justifyContent: 'space-between', marginBottom: 12 }}>
-              <div>
-                <div style={{ fontWeight: 900 }}>وضع تعديل ✅</div>
-                <div className="muted" style={{ fontSize: 13 }}>رقم الإعلان: {editingId}</div>
-              </div>
-              <button className="btn" type="button" onClick={cancelEdit}>إلغاء التعديل</button>
+          <div className="row" style={{ justifyContent: 'space-between', alignItems:'center' }}>
+            <div style={{ fontWeight: 900 }}>
+              {editingId ? 'تعديل الإعلان' : 'إضافة إعلان'}
+            </div>
+
+            {editingId ? (
+              <button className="btn" onClick={resetToCreate}>إلغاء التعديل</button>
+            ) : null}
+          </div>
+
+          {createdId ? (
+            <div className="card" style={{ marginTop: 10, borderColor:'rgba(21,128,61,.25)', background:'rgba(21,128,61,.06)' }}>
+              تم إنشاء العرض بنجاح. ID: <b>{createdId}</b>
             </div>
           ) : null}
 
-          <div className="grid">
+          <div className="grid" style={{ marginTop: 10 }}>
             <div className="col-6">
               <Field label="عنوان العرض">
-                <input className="input" value={createForm.title} onChange={(e) => setCreateForm({ ...createForm, title: e.target.value })} placeholder="مثال: أرض زاوية في الزمرد" />
+                <input className="input" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="مثال: أرض زاوية في الزمرد" />
               </Field>
             </div>
 
             <div className="col-3">
               <Field label="الحي">
-                <select className="select" value={createForm.neighborhood} onChange={(e) => setCreateForm({ ...createForm, neighborhood: e.target.value })}>
+                <select className="select" value={form.neighborhood} onChange={(e) => setForm({ ...form, neighborhood: e.target.value })}>
                   <option value="">اختر</option>
                   {NEIGHBORHOODS.map(n => <option key={n} value={n}>{n}</option>)}
                 </select>
@@ -439,7 +447,7 @@ export default function AdminPage() {
 
             <div className="col-3">
               <Field label="مباشر">
-                <select className="select" value={createForm.direct ? 'yes' : 'no'} onChange={(e) => setCreateForm({ ...createForm, direct: e.target.value === 'yes' })}>
+                <select className="select" value={form.direct ? 'yes' : 'no'} onChange={(e) => setForm({ ...form, direct: e.target.value === 'yes' })}>
                   <option value="yes">نعم</option>
                   <option value="no">لا</option>
                 </select>
@@ -448,19 +456,19 @@ export default function AdminPage() {
 
             <div className="col-3">
               <Field label="المخطط">
-                <input className="input" value={createForm.plan} onChange={(e) => setCreateForm({ ...createForm, plan: e.target.value })} placeholder="مثال: 505 أو 99جس" />
+                <input className="input" value={form.plan} onChange={(e) => setForm({ ...form, plan: e.target.value })} placeholder="مثال: 505 أو 99جس" />
               </Field>
             </div>
 
             <div className="col-3">
               <Field label="الجزء">
-                <input className="input" value={createForm.part} onChange={(e) => setCreateForm({ ...createForm, part: e.target.value })} placeholder="مثال: أ/ب أو 1ط" />
+                <input className="input" value={form.part} onChange={(e) => setForm({ ...form, part: e.target.value })} placeholder="مثال: أ/ب أو 1ط" />
               </Field>
             </div>
 
             <div className="col-3">
               <Field label="بيع/إيجار">
-                <select className="select" value={createForm.dealType} onChange={(e) => setCreateForm({ ...createForm, dealType: e.target.value })}>
+                <select className="select" value={form.dealType} onChange={(e) => setForm({ ...form, dealType: e.target.value })}>
                   {DEAL_TYPES.map(d => <option key={d.key} value={d.key}>{d.label}</option>)}
                 </select>
               </Field>
@@ -468,7 +476,7 @@ export default function AdminPage() {
 
             <div className="col-3">
               <Field label="نوع العقار">
-                <select className="select" value={createForm.propertyType} onChange={(e) => setCreateForm({ ...createForm, propertyType: e.target.value })}>
+                <select className="select" value={form.propertyType} onChange={(e) => setForm({ ...form, propertyType: e.target.value })}>
                   {PROPERTY_TYPES.map(p => <option key={p} value={p}>{p}</option>)}
                 </select>
               </Field>
@@ -476,7 +484,7 @@ export default function AdminPage() {
 
             <div className="col-3">
               <Field label="سكني/تجاري" hint="اختياري — إذا تركته (تلقائي) سيتحدد حسب نوع العقار.">
-                <select className="select" value={createForm.propertyClass} onChange={(e) => setCreateForm({ ...createForm, propertyClass: e.target.value })}>
+                <select className="select" value={form.propertyClass} onChange={(e) => setForm({ ...form, propertyClass: e.target.value })}>
                   <option value="">تلقائي</option>
                   {PROPERTY_CLASSES.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}
                 </select>
@@ -485,104 +493,69 @@ export default function AdminPage() {
 
             <div className="col-3">
               <Field label="المساحة (م²)">
-                <input className="input" inputMode="numeric" value={createForm.area} onChange={(e) => setCreateForm({ ...createForm, area: e.target.value })} placeholder="مثال: 600" />
+                <input className="input" inputMode="numeric" value={form.area} onChange={(e) => setForm({ ...form, area: e.target.value })} placeholder="مثال: 600" />
               </Field>
             </div>
 
             <div className="col-3">
               <Field label="السعر">
-                <input className="input" inputMode="numeric" value={createForm.price} onChange={(e) => setCreateForm({ ...createForm, price: e.target.value })} placeholder="مثال: 1200000" />
+                <input className="input" inputMode="numeric" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} placeholder="مثال: 1200000" />
               </Field>
             </div>
 
             <div className="col-3">
               <Field label="خط العرض (lat) — اختياري" hint="لو أضفت lat/lng سيظهر العرض على صفحة الخريطة.">
-                <input className="input" inputMode="decimal" value={createForm.lat} onChange={(e) => setCreateForm({ ...createForm, lat: e.target.value })} placeholder="مثال: 21.7001" />
+                <input className="input" inputMode="decimal" value={form.lat} onChange={(e) => setForm({ ...form, lat: e.target.value })} placeholder="مثال: 21.7001" />
               </Field>
             </div>
 
             <div className="col-3">
               <Field label="خط الطول (lng) — اختياري">
-                <input className="input" inputMode="decimal" value={createForm.lng} onChange={(e) => setCreateForm({ ...createForm, lng: e.target.value })} placeholder="مثال: 39.1234" />
+                <input className="input" inputMode="decimal" value={form.lng} onChange={(e) => setForm({ ...form, lng: e.target.value })} placeholder="مثال: 39.1234" />
               </Field>
             </div>
 
             <div className="col-3">
               <Field label="الحالة">
-                <select className="select" value={createForm.status} onChange={(e) => setCreateForm({ ...createForm, status: e.target.value })}>
+                <select className="select" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
                   {STATUS_OPTIONS.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
                 </select>
               </Field>
             </div>
 
             <div className="col-12">
-              <Field label="رابط الموقع للإعلان (اختياري)" hint="إذا عندك رابط إعلان خارجي أو رابط موقع/خرائط، اكتب الرابط هنا.">
-                <input
-                  className="input"
-                  type="url"
-                  dir="ltr"
-                  value={createForm.websiteUrl}
-                  onChange={(e) => setCreateForm({ ...createForm, websiteUrl: e.target.value })}
-                  placeholder="https://example.com/..."
-                />
+              <Field label="رابط موقع الإعلان (اختياري)" hint="مثال: رابط قوقل ماب / رابط صفحة خارجية / رابط ملف.">
+                <input className="input" value={form.websiteUrl} onChange={(e) => setForm({ ...form, websiteUrl: e.target.value })} placeholder="https://..." />
               </Field>
             </div>
 
             <div className="col-12">
               <Field label="وصف (اختياري)">
-                <textarea className="input" rows={4} value={createForm.description} onChange={(e) => setCreateForm({ ...createForm, description: e.target.value })} placeholder="تفاصيل إضافية: شارع/واجهة/مميزات…" />
+                <textarea className="input" rows={4} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="تفاصيل إضافية: شارع/واجهة/مميزات…" />
               </Field>
             </div>
 
             <div className="col-12">
-              <Field
-                label="رفع الصور (اختياري)"
-                hint="اختر صور ثم اضغط (رفع الصور) وسيتم إضافة الروابط تلقائياً في خانة روابط الصور."
-              >
-                <input
-                  className="input"
-                  type="file"
-                  multiple
-                  accept="image/*"
-                  onChange={(e) => setSelectedFiles(Array.from(e.target.files || []))}
-                />
-
-                {selectedFiles.length ? (
-                  <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 8 }}>
-                    {selectedFiles.slice(0, 6).map((f, idx) => {
-                      const src = URL.createObjectURL(f);
-                      return (
-                        <div key={idx} style={{ border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden', background: '#fff' }}>
-                          <img
-                            src={src}
-                            alt={f.name}
-                            style={{ width: '100%', height: 80, objectFit: 'cover', display: 'block' }}
-                            onLoad={() => URL.revokeObjectURL(src)}
-                          />
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : null}
-
-                <div className="row" style={{ marginTop: 10, justifyContent: 'flex-end' }}>
-                  <button
-                    type="button"
-                    className="btn"
-                    onClick={uploadSelectedImages}
-                    disabled={uploading || busy || !selectedFiles.length}
-                  >
-                    {uploading ? `جاري الرفع… (${selectedFiles.length})` : 'رفع الصور'}
+              <Field label="رفع صور (متعدد)">
+                <div className="row" style={{ alignItems: 'center' }}>
+                  <input
+                    className="input"
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={(e) => setSelectedFiles(Array.from(e.target.files || []))}
+                  />
+                  <button className="btnPrimary" type="button" disabled={uploading} onClick={uploadSelectedImages}>
+                    {uploading ? 'جاري الرفع…' : 'رفع الصور'}
                   </button>
                 </div>
 
                 {uploadErr ? (
                   <div
+                    className="card"
                     style={{
-                      marginTop: 8,
-                      padding: '10px 12px',
-                      borderRadius: 12,
-                      border: '1px solid rgba(180,35,24,.25)',
+                      marginTop: 10,
+                      borderColor: 'rgba(180,35,24,.25)',
                       background: 'rgba(180,35,24,.05)',
                     }}
                   >
@@ -592,55 +565,43 @@ export default function AdminPage() {
               </Field>
             </div>
 
-            <div className="col-12">
-              <Field label={`روابط الصور (كل رابط في سطر) — ${imageUrls.length}`} hint="يمكنك لصق روابط جاهزة، أو استخدم رفع الصور بالأعلى.">
-                <textarea
-                  className="input"
-                  rows={4}
-                  value={createForm.imagesText}
-                  onChange={(e) => setCreateForm({ ...createForm, imagesText: e.target.value })}
-                  placeholder="https://...\nhttps://..."
-                />
-
-                {imageUrls.length ? (
-                  <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 8 }}>
-                    {imageUrls.slice(0, 12).map((url) => (
-                      <div key={url} style={{ border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden', background: '#fff', position: 'relative' }}>
-                        <img src={url} alt="" style={{ width: '100%', height: 80, objectFit: 'cover', display: 'block' }} />
-                        <button
-                          type="button"
-                          className="btnDanger"
-                          onClick={() => removeImageUrl(url)}
-                          style={{ position: 'absolute', top: 6, left: 6, padding: '6px 10px', borderRadius: 10 }}
-                          title="حذف الصورة من الإعلان"
-                        >
+            {imagesPreview.length ? (
+              <div className="col-12">
+                <Field label="معاينة الصور" hint="اضغط حذف لإزالة الصورة من الإعلان (لا يحذفها من التخزين إلا عند حذف الإعلان).">
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 10 }}>
+                    {imagesPreview.map((url) => (
+                      <div key={url} className="card" style={{ padding: 8 }}>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={url} alt="" style={{ width: '100%', height: 90, objectFit: 'cover', borderRadius: 10 }} />
+                        <button className="btnDanger" type="button" style={{ width: '100%', marginTop: 8 }} onClick={() => removeImageFromForm(url)}>
                           حذف
                         </button>
                       </div>
                     ))}
                   </div>
-                ) : null}
+                </Field>
+              </div>
+            ) : null}
+
+            <div className="col-12">
+              <Field label="روابط الصور (كل رابط في سطر)" hint="يمكنك لصق روابط جاهزة، أو استخدم رفع الصور بالأعلى.">
+                <textarea className="input" rows={4} value={form.imagesText} onChange={(e) => setForm({ ...form, imagesText: e.target.value })} placeholder="https://...
+https://..." />
               </Field>
             </div>
 
             <div className="col-12 row" style={{ justifyContent: 'flex-end' }}>
               <button type="button" className="btnPrimary" disabled={busy} onClick={saveListing}>
-                {busy ? 'جاري الحفظ…' : (editingId ? 'تحديث الإعلان' : 'حفظ الإعلان')}
+                {busy ? 'جاري الحفظ…' : (editingId ? 'تحديث الإعلان' : 'إضافة الإعلان')}
               </button>
             </div>
-
-            {createdId ? (
-              <div className="col-12">
-                <div className="badge ok">{editingId ? 'تم التحديث ✅' : 'تم الحفظ ✅'} رقم: {createdId}</div>
-              </div>
-            ) : null}
           </div>
         </section>
       ) : (
         <section className="card" style={{ marginTop: 12 }}>
           <div className="row" style={{ justifyContent: 'space-between' }}>
             <div style={{ fontWeight: 800 }}>إدارة العروض</div>
-            <button className="btn" onClick={loadList} disabled={busy}>تحديث</button>
+            <button className="btn" onClick={loadList}>تحديث</button>
           </div>
 
           {loadingList ? (
@@ -649,41 +610,31 @@ export default function AdminPage() {
             <div className="muted" style={{ marginTop: 10 }}>لا توجد عروض.</div>
           ) : (
             <div style={{ marginTop: 10, display: 'grid', gap: 10 }}>
-              {list.map((item) => (
+              {list.map(item => (
                 <div key={item.id} className="card">
-                  <div className="row" style={{ justifyContent: 'space-between' }}>
-                    <div style={{ fontWeight: 900 }}>{item.title || 'عرض'}</div>
+                  <div className="row" style={{ justifyContent: 'space-between', gap: 8 }}>
+                    <div style={{ fontWeight: 900, lineHeight: 1.3 }}>{item.title || 'عرض'}</div>
                     {statusBadge(item.status)}
                   </div>
 
                   <div className="muted" style={{ marginTop: 6, fontSize: 13 }}>
                     {item.neighborhood || '—'} • {item.plan || '—'} • {item.part || '—'}
                   </div>
-
                   <div style={{ marginTop: 8, fontWeight: 900 }}>{formatPriceSAR(item.price)}</div>
 
-                  {item.websiteUrl ? (
-                    <div style={{ marginTop: 8 }}>
-                      <a className="muted" href={item.websiteUrl} target="_blank" rel="noreferrer" style={{ textDecoration: 'underline' }}>
-                        فتح رابط الإعلان
-                      </a>
-                    </div>
-                  ) : null}
-
-                  <div className="row" style={{ marginTop: 10, flexWrap: 'wrap' }}>
-                    <button className="btn" onClick={() => startEdit(item)} disabled={busy}>تعديل</button>
-                    <button className="btnDanger" onClick={() => deleteListing(item)} disabled={busy}>حذف</button>
-
-                    <div style={{ flex: 1 }} />
-
-                    <button className="btn" onClick={() => adminUpdateListing(item.id, { status: 'available' }).then(loadList)} disabled={busy}>متاح</button>
-                    <button className="btn" onClick={() => adminUpdateListing(item.id, { status: 'reserved' }).then(loadList)} disabled={busy}>محجوز</button>
-                    <button className="btnDanger" onClick={() => adminUpdateListing(item.id, { status: 'sold' }).then(loadList)} disabled={busy}>مباع</button>
-                    <button className="btn" onClick={() => adminUpdateListing(item.id, { status: 'canceled' }).then(loadList)} disabled={busy}>ملغي</button>
+                  <div className="row" style={{ marginTop: 10, justifyContent: 'space-between', gap: 8 }}>
+                    <button className="btn" onClick={() => startEdit(item)}>تعديل</button>
+                    <button className="btnDanger" disabled={actionBusyId === item.id} onClick={() => deleteListing(item)}>
+                      {actionBusyId === item.id ? 'جاري الحذف…' : 'حذف'}
+                    </button>
                   </div>
 
-                  <div className="muted" style={{ marginTop: 8, fontSize: 12 }}>
-                    رقم: {item.id}
+                  <div className="row" style={{ marginTop: 10 }}>
+                    <button className="btn" onClick={() => adminUpdateListing(item.id, { status: 'available' }).then(loadList)}>متاح</button>
+                    <button className="btn" onClick={() => adminUpdateListing(item.id, { status: 'reserved' }).then(loadList)}>محجوز</button>
+                    <button className="btnDanger" onClick={() => adminUpdateListing(item.id, { status: 'sold' }).then(loadList)}>مباع</button>
+                    <button className="btn" onClick={() => adminUpdateListing(item.id, { status: 'rented' }).then(loadList)}>مؤجر</button>
+                    <button className="btn" onClick={() => adminUpdateListing(item.id, { status: 'canceled' }).then(loadList)}>ملغي</button>
                   </div>
                 </div>
               ))}
