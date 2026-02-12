@@ -17,14 +17,26 @@ import { DEAL_TYPES, NEIGHBORHOODS, PROPERTY_TYPES, STATUS_OPTIONS, PROPERTY_CLA
 import { formatPriceSAR, statusBadge } from '@/lib/format';
 
 const LISTINGS_COLLECTION = 'abhur_listings';
-const MAX_FILES = 30; // بدون ما نعرضه للمستخدم
+const MAX_FILES = 30;
 
+// سرعة الرفع: ارفعها إلى 3 لو اتصال قوي
+const UPLOAD_CONCURRENCY = 2;
+
+// مهلات: صور 3 دقائق، فيديو 10 دقائق
+const IMAGE_TIMEOUT_MS = 180000;
+const VIDEO_TIMEOUT_MS = 600000;
+
+// كشف تعليق الرفع: لو ما في أي تقدم 20 ثانية نلغي ونطلع سبب
+const STALL_MS = 20000;
+const WATCH_INTERVAL_MS = 1200;
+
+// ===================== Helpers =====================
 function Field({ label, children, hint }) {
   return (
-    <div>
-      <div className="muted" style={{ fontSize: 13, marginBottom: 6 }}>{label}</div>
+    <div style={{ marginBottom: 16 }}>
+      <div className="muted" style={{ fontSize: 13, marginBottom: 6, fontWeight: 700 }}>{label}</div>
       {children}
-      {hint ? <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>{hint}</div> : null}
+      {hint ? <div className="muted" style={{ fontSize: 12, marginTop: 6, opacity: 0.9 }}>{hint}</div> : null}
     </div>
   );
 }
@@ -42,24 +54,29 @@ function toTextOrEmpty(v) {
   return v == null ? '' : String(v);
 }
 
-function extractStoragePathFromDownloadURL(url) {
-  // https://firebasestorage.googleapis.com/v0/b/<bucket>/o/<path>?alt=media&token=...
-  try {
-    const u = new URL(url);
-    const idx = u.pathname.indexOf('/o/');
-    if (idx === -1) return '';
-    const encoded = u.pathname.slice(idx + 3);
-    return decodeURIComponent(encoded);
-  } catch {
-    return '';
-  }
+function isFiniteNumber(n) {
+  return typeof n === 'number' && Number.isFinite(n);
+}
+
+function round6(n) {
+  return Math.round(n * 1e6) / 1e6;
+}
+
+function nowId() {
+  return `${Date.now()}_${Math.random().toString(16).slice(2)}`;
+}
+
+function approxSame(a, b, eps = 1e-7) {
+  return Math.abs(a - b) <= eps;
+}
+
+function buildGoogleMapsUrl(lat, lng) {
+  const a = round6(lat);
+  const b = round6(lng);
+  return `https://www.google.com/maps?q=${a},${b}`;
 }
 
 function extractLatLngFromUrl(url) {
-  // يدعم روابط قوقل ماب الشائعة:
-  // - .../@lat,lng,..
-  // - ?q=lat,lng
-  // - ?query=lat,lng
   try {
     const s = String(url || '').trim();
     if (!s) return { lat: null, lng: null };
@@ -79,25 +96,58 @@ function extractLatLngFromUrl(url) {
   return { lat: null, lng: null };
 }
 
-function nowId() {
-  return `${Date.now()}_${Math.random().toString(16).slice(2)}`;
+function extractStoragePathFromDownloadURL(url) {
+  try {
+    const u = new URL(url);
+    const idx = u.pathname.indexOf('/o/');
+    if (idx === -1) return '';
+    const encoded = u.pathname.slice(idx + 3);
+    return decodeURIComponent(encoded);
+  } catch {
+    return '';
+  }
 }
 
-function isFiniteNumber(n) {
-  return typeof n === 'number' && Number.isFinite(n);
+function isVideoUrl(url) {
+  if (!url) return false;
+  // يعتمد على الامتداد في الاسم (عادة موجود لأننا نحافظ على اسم الملف)
+  return /\.(mp4|mov|webm|mkv|avi|wmv|flv|3gp|m4v)(\?|$)/i.test(String(url));
 }
 
-function round6(n) {
-  return Math.round(n * 1e6) / 1e6;
+function formatStorageError(e) {
+  const code = String(e?.code || '');
+  const msg = String(e?.message || '');
+
+  // App Check enforcement غالبًا يظهر ضمن unauthorized + رسالة فيها AppCheck
+  if (msg.toLowerCase().includes('appcheck')) {
+    return 'رفع الملفات مرفوض بسبب App Check. إذا كان (Enforce) مفعّل على Storage عطّله مؤقتًا أو جهّزه للتطبيق.';
+  }
+
+  if (code === 'upload-stalled') {
+    return 'الرفع توقف بدون تقدم (تعليق). جرّب شبكة أخرى أو عطّل VPN/Proxy أو راجع صلاحيات Storage Rules.';
+  }
+  if (code === 'upload-timeout') {
+    return 'انتهت مهلة الرفع. قد يكون الملف كبيرًا جدًا أو الاتصال بطيء.';
+  }
+  if (code === 'storage/unauthorized' || code === 'permission-denied' || code === 'storage/unauthenticated') {
+    return 'لا توجد صلاحيات لرفع الملفات. تحقق من Storage Rules (السماح للأدمن/المسجلين) وتأكد أنك مسجّل دخول.';
+  }
+  if (code === 'storage/bucket-not-found') {
+    return 'Storage Bucket غير صحيح. تأكد من NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET (عادةً يكون project-id.appspot.com أو project-id.firebasestorage.app حسب إعدادك).';
+  }
+  if (code === 'storage/retry-limit-exceeded' || msg.toLowerCase().includes('retry limit')) {
+    return 'تعذر إكمال الرفع بسبب انقطاع/حظر في الشبكة. جرّب شبكة أخرى أو راجع إعدادات المتصفح.';
+  }
+  if (code === 'storage/canceled') {
+    return 'تم إلغاء الرفع.';
+  }
+  if (code === 'storage/quota-exceeded') {
+    return 'تم تجاوز سعة التخزين في Firebase Storage.';
+  }
+  return msg || 'فشل رفع الملفات.';
 }
 
-function buildGoogleMapsUrl(lat, lng) {
-  const a = round6(lat);
-  const b = round6(lng);
-  return `https://www.google.com/maps?q=${a},${b}`;
-}
-
-// ===================== Google Maps loader (ONLY) =====================
+// ===================== Google Maps loader (Singleton) =====================
 let __gmapsPromise = null;
 
 function loadGoogleMaps(apiKey) {
@@ -141,10 +191,7 @@ function loadGoogleMaps(apiKey) {
   return __gmapsPromise;
 }
 
-function approxSame(a, b, eps = 1e-7) {
-  return Math.abs(a - b) <= eps;
-}
-
+// ===================== Map Picker (ResizeObserver + Cleanup) =====================
 function MapPicker({ value, onChange }) {
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
 
@@ -152,18 +199,18 @@ function MapPicker({ value, onChange }) {
   const mapRef = useRef(null);
   const markerRef = useRef(null);
   const listenersRef = useRef([]);
+  const resizeObserverRef = useRef(null);
 
   const [mapErr, setMapErr] = useState('');
   const [geoErr, setGeoErr] = useState('');
   const [mapReady, setMapReady] = useState(false);
 
-  // Default center (شمال جدة تقريبًا)
+  // Default center (أبحر/شمال جدة تقريبًا)
   const defaultCenter = useMemo(() => ({ lat: 21.75, lng: 39.12 }), []);
   const defaultZoom = 13;
 
   const current = useMemo(() => {
-    const v = value && isFiniteNumber(value.lat) && isFiniteNumber(value.lng) ? value : null;
-    return v;
+    return value && isFiniteNumber(value.lat) && isFiniteNumber(value.lng) ? value : null;
   }, [value]);
 
   useEffect(() => {
@@ -184,7 +231,7 @@ function MapPicker({ value, onChange }) {
           zoom: current ? 16 : defaultZoom,
           mapTypeControl: false,
           streetViewControl: false,
-          fullscreenControl: false,
+          fullscreenControl: true,
           clickableIcons: false,
           gestureHandling: 'greedy',
           zoomControl: true,
@@ -195,15 +242,13 @@ function MapPicker({ value, onChange }) {
           map,
           position: center,
           draggable: true,
+          animation: gmaps.Animation?.DROP,
         });
 
         const emit = (lat, lng) => {
-          const a = round6(lat);
-          const b = round6(lng);
-          onChange?.({ lat: a, lng: b });
+          onChange?.({ lat: round6(lat), lng: round6(lng) });
         };
 
-        // click on map
         listenersRef.current.push(
           map.addListener('click', (e) => {
             if (!e?.latLng) return;
@@ -214,7 +259,6 @@ function MapPicker({ value, onChange }) {
           })
         );
 
-        // drag marker
         listenersRef.current.push(
           marker.addListener('dragend', () => {
             const pos = marker.getPosition();
@@ -226,13 +270,28 @@ function MapPicker({ value, onChange }) {
         mapRef.current = map;
         markerRef.current = marker;
         setMapReady(true);
+
+        // ResizeObserver لتفادي قص/تشوه الخريطة عند تغير الحجم
+        if (typeof window.ResizeObserver !== 'undefined') {
+          resizeObserverRef.current = new ResizeObserver(() => {
+            try {
+              if (!mapRef.current) return;
+              gmaps.event.trigger(mapRef.current, 'resize');
+              const c = current ? { lat: current.lat, lng: current.lng } : center;
+              mapRef.current.panTo(c);
+            } catch {
+              // ignore
+            }
+          });
+          resizeObserverRef.current.observe(mapElRef.current);
+        }
       } catch (e) {
         console.error(e);
         const msg = String(e?.message || '');
         if (msg.includes('Missing NEXT_PUBLIC_GOOGLE_MAPS_API_KEY')) {
           setMapErr('مفتاح Google Maps غير موجود. أضف NEXT_PUBLIC_GOOGLE_MAPS_API_KEY في Vercel/.env.local');
         } else {
-          setMapErr('تعذر تحميل خريطة Google. تأكد من المفتاح وتفعيل Google Maps JavaScript API والسماح بالاتصال بـ maps.googleapis.com');
+          setMapErr('تعذر تحميل خريطة Google. تأكد من المفتاح وتفعيل Google Maps JavaScript API.');
         }
       }
     }
@@ -243,87 +302,75 @@ function MapPicker({ value, onChange }) {
       cancelled = true;
       try {
         listenersRef.current.forEach((l) => l?.remove?.());
-        listenersRef.current = [];
       } catch {}
+      listenersRef.current = [];
       try {
         if (markerRef.current) markerRef.current.setMap(null);
       } catch {}
+      if (resizeObserverRef.current) {
+        try { resizeObserverRef.current.disconnect(); } catch {}
+        resizeObserverRef.current = null;
+      }
       markerRef.current = null;
       mapRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [apiKey]);
 
   // Sync external value to map/marker
   useEffect(() => {
-    try {
-      const map = mapRef.current;
-      const marker = markerRef.current;
-      if (!map || !marker) return;
-      if (!current) return;
+    const map = mapRef.current;
+    const marker = markerRef.current;
+    if (!map || !marker || !current) return;
 
-      const pos = marker.getPosition();
-      const curLat = pos?.lat?.();
-      const curLng = pos?.lng?.();
-      if (typeof curLat === 'number' && typeof curLng === 'number') {
-        if (approxSame(curLat, current.lat) && approxSame(curLng, current.lng)) return;
-      }
+    const pos = marker.getPosition();
+    const curLat = pos?.lat?.();
+    const curLng = pos?.lng?.();
+    if (typeof curLat === 'number' && typeof curLng === 'number') {
+      if (approxSame(curLat, current.lat) && approxSame(curLng, current.lng)) return;
+    }
 
-      marker.setPosition({ lat: current.lat, lng: current.lng });
-      map.panTo({ lat: current.lat, lng: current.lng });
-      if ((map.getZoom?.() || 0) < 16) map.setZoom(16);
-    } catch {}
+    marker.setPosition({ lat: current.lat, lng: current.lng });
+    map.panTo({ lat: current.lat, lng: current.lng });
+    if ((map.getZoom?.() || 0) < 16) map.setZoom(16);
   }, [current]);
 
   async function useMyLocation() {
     setGeoErr('');
-    try {
-      if (typeof navigator === 'undefined' || !navigator.geolocation) {
-        setGeoErr('المتصفح لا يدعم تحديد الموقع.');
-        return;
-      }
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          const lat = round6(pos.coords.latitude);
-          const lng = round6(pos.coords.longitude);
-          onChange?.({ lat, lng });
-        },
-        (err) => {
-          console.warn(err);
-          setGeoErr('لم يتم السماح بتحديد الموقع أو حدث خطأ في GPS.');
-        },
-        { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
-      );
-    } catch (e) {
-      console.error(e);
-      setGeoErr('تعذر تحديد موقعك.');
+    if (typeof navigator === 'undefined' || !navigator.geolocation) {
+      setGeoErr('المتصفح لا يدعم تحديد الموقع.');
+      return;
     }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        onChange?.({ lat: round6(pos.coords.latitude), lng: round6(pos.coords.longitude) });
+      },
+      (err) => {
+        console.warn(err);
+        setGeoErr('تعذر تحديد الموقع (GPS).');
+      },
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
+    );
   }
 
   return (
     <div>
-      <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+      <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
         <div className="muted" style={{ fontSize: 12 }}>
           اختر الموقع بالنقر على الخريطة أو اسحب العلامة. سيتم حفظ الإحداثيات بدقة.
         </div>
-        <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
-          <button className="btn" type="button" onClick={useMyLocation}>استخدم موقعي الحالي</button>
-        </div>
+        <button className="btn" type="button" onClick={useMyLocation} style={{ fontSize: 12, padding: '6px 10px' }}>
+          📍 موقعي الحالي
+        </button>
       </div>
 
       <div className="mapWrap" style={{ marginTop: 10 }}>
         <div ref={mapElRef} className="mapEl" />
-        {!mapReady && !mapErr ? (
-          <div className="mapOverlay muted">جاري تحميل الخريطة…</div>
-        ) : null}
-        {mapErr ? (
-          <div className="mapOverlay" style={{ color: '#b42318' }}>{mapErr}</div>
-        ) : null}
+        {!mapReady && !mapErr ? <div className="mapOverlay muted">جاري تحميل الخريطة…</div> : null}
+        {mapErr ? <div className="mapOverlay" style={{ color: '#b42318' }}>{mapErr}</div> : null}
       </div>
 
-      {geoErr ? (
-        <div className="muted" style={{ marginTop: 8, color: '#b42318', fontSize: 12 }}>{geoErr}</div>
-      ) : null}
+      {geoErr ? <div className="muted" style={{ marginTop: 8, color: '#b42318', fontSize: 12 }}>{geoErr}</div> : null}
 
       <style jsx>{`
         .mapWrap {
@@ -332,11 +379,13 @@ function MapPicker({ value, onChange }) {
           overflow: hidden;
           border: 1px solid rgba(214, 179, 91, 0.28);
           background: rgba(255,255,255,0.03);
-          min-height: 360px;
         }
         .mapEl {
           width: 100%;
-          height: 360px;
+          height: 420px;
+        }
+        @media (max-width: 768px) {
+          .mapEl { height: 320px; }
         }
         .mapOverlay {
           position: absolute;
@@ -355,7 +404,7 @@ function MapPicker({ value, onChange }) {
   );
 }
 
-// ===================== Page =====================
+// ===================== Main Page =====================
 export default function AdminPage() {
   const fb = getFirebase();
   const auth = fb?.auth;
@@ -374,8 +423,7 @@ export default function AdminPage() {
   const [editingId, setEditingId] = useState('');
   const [actionBusyId, setActionBusyId] = useState('');
 
-  // ✅ ملفات الصور قبل الرفع
-  // { id, file, preview, selected, progress, status: 'ready'|'uploading'|'done'|'error', error? }
+  // Queue item: { id, file, preview, selected, progress, status, error, type }
   const [queue, setQueue] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [uploadErr, setUploadErr] = useState('');
@@ -394,11 +442,11 @@ export default function AdminPage() {
       price: '',
       status: 'available',
       direct: true,
-      websiteUrl: '', // رابط موقع العقار
-      lat: '', // ✅ يتم حفظه تلقائيًا من الخريطة/الرابط
-      lng: '', // ✅ يتم حفظه تلقائيًا من الخريطة/الرابط
+      websiteUrl: '',
+      lat: '',
+      lng: '',
       description: '',
-      images: [], // URLs
+      images: [], // صور + فيديو (روابط)
     }),
     []
   );
@@ -417,11 +465,9 @@ export default function AdminPage() {
   // تنظيف object URLs
   useEffect(() => {
     return () => {
-      queue.forEach((q) => {
-        try {
-          if (q?.preview) URL.revokeObjectURL(q.preview);
-        } catch {}
-      });
+      try {
+        queue.forEach((q) => q?.preview && URL.revokeObjectURL(q.preview));
+      } catch {}
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -438,6 +484,7 @@ export default function AdminPage() {
         id: nowId(),
         file,
         preview: URL.createObjectURL(file),
+        type: file.type || '',
         selected: true,
         progress: 0,
         status: 'ready',
@@ -451,9 +498,7 @@ export default function AdminPage() {
     setQueue((prev) => {
       const it = prev.find((x) => x.id === id);
       if (it?.preview) {
-        try {
-          URL.revokeObjectURL(it.preview);
-        } catch {}
+        try { URL.revokeObjectURL(it.preview); } catch {}
       }
       return prev.filter((x) => x.id !== id);
     });
@@ -465,145 +510,186 @@ export default function AdminPage() {
 
   function clearQueue() {
     setQueue((prev) => {
-      prev.forEach((it) => {
-        try {
-          if (it?.preview) URL.revokeObjectURL(it.preview);
-        } catch {}
-      });
+      try {
+        prev.forEach((it) => it.preview && URL.revokeObjectURL(it.preview));
+      } catch {}
       return [];
     });
   }
 
-  function formatStorageError(e) {
-  const code = String(e?.code || '');
-  const msg = String(e?.message || '');
-
-  // App Check enforcement غالبًا يظهر ضمن unauthorized + رسالة فيها AppCheck
-  if (msg.toLowerCase().includes('appcheck')) {
-    return 'رفع الصور مرفوض بسبب App Check. إذا كنت فعلته (Enforce) في Storage عطّله أو جهّزه للتطبيق.';
+  function removeMediaFromForm(url) {
+    setForm((p) => ({ ...p, images: (p.images || []).filter((u) => u !== url) }));
   }
 
-  if (code === 'storage/unauthorized' || code === 'permission-denied') {
-    return 'لا توجد صلاحيات لرفع الصور. تحقق من Storage Rules (السماح للأدمن/المسجلين) وتأكد أنك مسجّل دخول.';
-  }
-  if (code === 'storage/bucket-not-found') {
-    return 'Storage Bucket غير صحيح. تأكد من NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET (عادةً يكون project-id.appspot.com).';
-  }
-  if (code === 'storage/retry-limit-exceeded' || msg.toLowerCase().includes('retry limit')) {
-    return 'تعذر إكمال الرفع بسبب انقطاع/حظر في الشبكة. جرّب شبكة أخرى أو راجع إعدادات المتصفح.';
-  }
-  if (code === 'storage/canceled') {
-    return 'تم إلغاء الرفع.';
+  function setCoords(lat, lng, { updateUrl = true } = {}) {
+    const a = round6(lat);
+    const b = round6(lng);
+    setForm((p) => ({
+      ...p,
+      lat: String(a),
+      lng: String(b),
+      websiteUrl: updateUrl ? buildGoogleMapsUrl(a, b) : p.websiteUrl,
+    }));
   }
 
-  // خطأ داخلي
-  if (code === 'upload-timeout') {
-    return 'تعذر رفع الصورة (لا يوجد أي تقدم). غالبًا مشكلة صلاحيات Storage Rules أو حظر اتصال التخزين.';
+  function clearCoords() {
+    setForm((p) => ({ ...p, lat: '', lng: '' }));
   }
 
-  return msg || 'فشل رفع الصور.';
-}
+  // ============ Upload (Parallel + Stall/Timeout) ============
+  async function uploadOne(item, idx, uid) {
+    const file = item.file;
+    const isVideo = String(file?.type || '').startsWith('video/');
+    const folder = isVideo ? 'abhur_videos' : 'abhur_images';
+    const timeoutMs = isVideo ? VIDEO_TIMEOUT_MS : IMAGE_TIMEOUT_MS;
 
-async function uploadSelectedImages() {
-  setUploadErr('');
+    const safeName = String(file?.name || (isVideo ? 'video' : 'image'))
+      .replace(/\s+/g, '_')
+      .replace(/[^a-zA-Z0-9_\.-]/g, '')
+      .slice(0, 100);
 
-  if (!user) {
-    setUploadErr('لا يمكن رفع الصور قبل تسجيل الدخول.');
-    return;
-  }
-  if (!storage) {
-    setUploadErr('Firebase Storage غير مُعدّ. تأكد من NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET وتمكين Storage في Firebase.');
-    return;
-  }
-  const selected = queue.filter((q) => q.selected && q.status !== 'done');
-  if (!selected.length) {
-    setUploadErr('حدد صورة واحدة على الأقل للرفع.');
-    return;
-  }
+    const path = `${folder}/${uid}/${Date.now()}_${idx}_${safeName}`;
+    const r = storageRef(storage, path);
 
-  setUploading(true);
-  try {
-    const urls = [];
+    setQueue((prev) => prev.map((x) => (x.id === item.id ? { ...x, status: 'uploading', progress: 0, error: '' } : x)));
 
-    for (let i = 0; i < selected.length; i++) {
-      const item = selected[i];
-      const file = item.file;
+    const metadata = { contentType: file?.type || (isVideo ? 'video/mp4' : 'image/jpeg') };
+    const task = uploadBytesResumable(r, file, metadata);
 
-      const safeName = String(file.name || 'image')
-        .replace(/\s+/g, '_')
-        .replace(/[^a-zA-Z0-9_\.-]/g, '')
-        .slice(0, 80);
+    let lastBytes = 0;
+    let lastTick = Date.now();
+    const startedAt = Date.now();
 
-      const path = `abhur_images/${user.uid}/${Date.now()}_${i}_${safeName}`;
-      const r = storageRef(storage, path);
+    await new Promise((resolve, reject) => {
+      const watcher = setInterval(() => {
+        const now = Date.now();
 
-      // وضع uploading
-      setQueue((prev) => prev.map((x) => (x.id === item.id ? { ...x, status: 'uploading', progress: 0, error: '' } : x)));
+        // hard timeout
+        if (now - startedAt > timeoutMs) {
+          try { task.cancel(); } catch {}
+          const err = new Error('upload-timeout');
+          err.code = 'upload-timeout';
+          clearInterval(watcher);
+          reject(err);
+          return;
+        }
 
-      const task = uploadBytesResumable(r, file, { contentType: file.type || 'image/jpeg' });
+        // stall timeout (no progress)
+        if (now - lastTick > STALL_MS) {
+          try { task.cancel(); } catch {}
+          const err = new Error('upload-stalled');
+          err.code = 'upload-stalled';
+          clearInterval(watcher);
+          reject(err);
+        }
+      }, WATCH_INTERVAL_MS);
 
-      // ✅ Watchdog: لو ما في أي تقدم 20 ثانية نلغي ونطلع رسالة واضحة
-      let lastBytes = 0;
-      let lastTick = Date.now();
-
-      await new Promise((resolve, reject) => {
-        const stopWatch = setInterval(() => {
-          const idleMs = Date.now() - lastTick;
-          if (idleMs > 20000) {
-            try { task.cancel(); } catch {}
-            const err = new Error('upload-timeout');
-            err.code = 'upload-timeout';
-            clearInterval(stopWatch);
-            reject(err);
+      const unsubscribe = task.on(
+        'state_changed',
+        (snap) => {
+          const bt = snap.bytesTransferred || 0;
+          if (bt !== lastBytes) {
+            lastBytes = bt;
+            lastTick = Date.now();
           }
-        }, 1200);
+          const p = snap.totalBytes ? Math.round((bt / snap.totalBytes) * 100) : 0;
+          setQueue((prev) => prev.map((x) => (x.id === item.id ? { ...x, progress: p } : x)));
+        },
+        (err) => {
+          clearInterval(watcher);
+          try { unsubscribe?.(); } catch {}
+          reject(err);
+        },
+        () => {
+          clearInterval(watcher);
+          try { unsubscribe?.(); } catch {}
+          resolve();
+        }
+      );
+    });
 
-        const unsubscribe = task.on(
-          'state_changed',
-          (snap) => {
-            const bt = snap.bytesTransferred || 0;
-            if (bt !== lastBytes) {
-              lastBytes = bt;
-              lastTick = Date.now();
-            }
-            const p = snap.totalBytes ? Math.round((bt / snap.totalBytes) * 100) : 0;
-            setQueue((prev) => prev.map((x) => (x.id === item.id ? { ...x, progress: p } : x)));
-          },
-          (err) => {
-            clearInterval(stopWatch);
-            try { unsubscribe?.(); } catch {}
-            reject(err);
-          },
-          () => {
-            clearInterval(stopWatch);
-            try { unsubscribe?.(); } catch {}
-            resolve();
-          }
-        );
-      });
+    const url = await getDownloadURL(task.snapshot.ref);
+    setQueue((prev) => prev.map((x) => (x.id === item.id ? { ...x, status: 'done', progress: 100 } : x)));
+    return url;
+  }
 
-      // ✅ خذ الرابط من المرجع الفعلي بعد اكتمال الرفع
-      const url = await getDownloadURL(task.snapshot.ref);
-      urls.push(url);
+  async function runPool(items, concurrency, worker) {
+    const results = new Array(items.length);
+    let i = 0;
 
-      setQueue((prev) => prev.map((x) => (x.id === item.id ? { ...x, status: 'done', progress: 100 } : x)));
+    const workers = new Array(Math.max(1, concurrency)).fill(0).map(async () => {
+      while (true) {
+        const idx = i;
+        i += 1;
+        if (idx >= items.length) break;
+        results[idx] = await worker(items[idx], idx);
+      }
+    });
+
+    await Promise.all(workers);
+    return results;
+  }
+
+  async function uploadSelectedMedia() {
+    setUploadErr('');
+
+    if (!user) {
+      setUploadErr('لا يمكن رفع الملفات قبل تسجيل الدخول.');
+      return;
+    }
+    if (!storage) {
+      setUploadErr('Firebase Storage غير مُعدّ. تأكد من NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET وتمكين Storage في Firebase.');
+      return;
     }
 
-    setForm((p) => ({ ...p, images: uniq([...(p.images || []), ...urls]) }));
-    // بعد الرفع: نخلي الموجود "done" في الطابور، ونلغي تحديدها حتى لا يعيد رفعها بالغلط
-    setQueue((prev) => prev.map((x) => (x.status === 'done' ? { ...x, selected: false } : x)));
-  } catch (e) {
-    console.error(e);
-    setUploadErr(formatStorageError(e));
-    setQueue((prev) =>
-      prev.map((x) => (x.status === 'uploading' ? { ...x, status: 'error', error: formatStorageError(e) } : x))
-    );
-  } finally {
-    setUploading(false);
+    const selected = queue.filter((q) => q.selected && q.status !== 'done' && q.status !== 'uploading');
+    if (!selected.length) {
+      setUploadErr('حدد ملفًا واحدًا على الأقل للرفع.');
+      return;
+    }
+
+    setUploading(true);
+
+    const uid = user?.uid || 'anon';
+    const errors = [];
+    try {
+      const urls = await runPool(
+        selected,
+        UPLOAD_CONCURRENCY,
+        async (it, idx) => {
+          try {
+            return await uploadOne(it, idx, uid);
+          } catch (e) {
+            const msg = formatStorageError(e);
+            errors.push(msg);
+            setQueue((prev) => prev.map((x) => (x.id === it.id ? { ...x, status: 'error', error: msg } : x)));
+            return null;
+          }
+        }
+      );
+
+      const okUrls = uniq(urls.filter(Boolean));
+      if (okUrls.length) {
+        setForm((p) => ({ ...p, images: uniq([...(p.images || []), ...okUrls]) }));
+      }
+
+      // بعد الرفع: نلغي تحديد العناصر التي انتهت (نجاح/فشل) حتى لا تعيد رفعها بالغلط
+      setQueue((prev) => prev.map((x) => {
+        const isTouched = selected.some((s) => s.id === x.id);
+        if (!isTouched) return x;
+        return { ...x, selected: false };
+      }));
+
+      if (errors.length) {
+        // رسالة مختصرة
+        setUploadErr(`تم رفع ${okUrls.length} من ${selected.length}. بعض الملفات فشل رفعها — افتح تفاصيل كل ملف لرؤية السبب.`);
+      }
+    } finally {
+      setUploading(false);
+    }
   }
-}
 
-
+  // ===================== Auth =====================
   async function login(e) {
     e.preventDefault();
     setBusy(true);
@@ -623,6 +709,7 @@ async function uploadSelectedImages() {
     await signOut(auth);
   }
 
+  // ===================== CRUD =====================
   function resetToCreate() {
     setEditingId('');
     setCreatedId('');
@@ -635,7 +722,7 @@ async function uploadSelectedImages() {
     setCreatedId('');
     setEditingId(item.id);
 
-    const images = Array.isArray(item.images) ? item.images : [];
+    const media = Array.isArray(item.images) ? item.images : [];
     const urlFromItem = toTextOrEmpty(item.websiteUrl || item.website || item.url || '');
     const fromUrl = extractLatLngFromUrl(urlFromItem);
 
@@ -662,31 +749,12 @@ async function uploadSelectedImages() {
       lat: latFinal == null ? '' : String(round6(latFinal)),
       lng: lngFinal == null ? '' : String(round6(lngFinal)),
       description: toTextOrEmpty(item.description),
-      images: uniq(images),
+      images: uniq(media),
     });
 
     clearQueue();
     setTab('create');
-    window?.scrollTo?.({ top: 0, behavior: 'smooth' });
-  }
-
-  function removeImageFromForm(url) {
-    setForm((p) => ({ ...p, images: (p.images || []).filter((u) => u !== url) }));
-  }
-
-  function setCoords(lat, lng, { updateUrl = true } = {}) {
-    const a = round6(lat);
-    const b = round6(lng);
-    setForm((p) => ({
-      ...p,
-      lat: String(a),
-      lng: String(b),
-      websiteUrl: updateUrl ? buildGoogleMapsUrl(a, b) : p.websiteUrl,
-    }));
-  }
-
-  function clearCoords() {
-    setForm((p) => ({ ...p, lat: '', lng: '' }));
+    try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch {}
   }
 
   async function saveListing() {
@@ -696,14 +764,12 @@ async function uploadSelectedImages() {
       const images = uniq(form.images || []);
       const websiteUrl = String(form.websiteUrl || '').trim();
 
-      // ✅ أولاً: نعتمد إحداثيات الخريطة إن وجدت
       const latFromForm = toNumberOrNull(form.lat);
       const lngFromForm = toNumberOrNull(form.lng);
 
       let lat = isFiniteNumber(latFromForm) ? latFromForm : null;
       let lng = isFiniteNumber(lngFromForm) ? lngFromForm : null;
 
-      // ✅ ثانياً: لو ما فيه إحداثيات من الخريطة، نجرب نلتقطها من الرابط
       if (!isFiniteNumber(lat) || !isFiniteNumber(lng)) {
         const fromUrl = extractLatLngFromUrl(websiteUrl);
         if (isFiniteNumber(fromUrl.lat) && isFiniteNumber(fromUrl.lng)) {
@@ -713,8 +779,6 @@ async function uploadSelectedImages() {
       }
 
       const hasCoords = isFiniteNumber(lat) && isFiniteNumber(lng);
-
-      // ✅ لو عندنا إحداثيات ولا يوجد رابط، نبنيه تلقائيًا
       const finalWebsiteUrl = websiteUrl || (hasCoords ? buildGoogleMapsUrl(lat, lng) : '');
 
       const payload = {
@@ -756,14 +820,17 @@ async function uploadSelectedImages() {
   }
 
   async function hardDeleteFromFirestore(listingId) {
+    // compat support
     if (db && typeof db.collection === 'function') {
       await db.collection(LISTINGS_COLLECTION).doc(listingId).delete();
       return;
     }
+    // modular instance
     if (db) {
       await deleteDoc(doc(db, LISTINGS_COLLECTION, listingId));
       return;
     }
+    // fallback via app
     if (app) {
       const f = getFirestore(app);
       await deleteDoc(doc(f, LISTINGS_COLLECTION, listingId));
@@ -772,16 +839,16 @@ async function uploadSelectedImages() {
     throw new Error('Firestore instance not found (db/app missing)');
   }
 
-  async function tryDeleteImages(item) {
+  async function tryDeleteMedia(item) {
     if (!storage) return;
-    const images = Array.isArray(item.images) ? item.images : [];
-    for (const url of images) {
+    const media = Array.isArray(item.images) ? item.images : [];
+    for (const url of media) {
       const path = extractStoragePathFromDownloadURL(url);
       if (!path) continue;
       try {
         await deleteObject(storageRef(storage, path));
       } catch (e) {
-        console.warn('Delete image failed:', url, e?.message || e);
+        console.warn('Delete media failed:', url, e?.message || e);
       }
     }
   }
@@ -793,13 +860,12 @@ async function uploadSelectedImages() {
 
     setActionBusyId(item.id);
     try {
-      await tryDeleteImages(item);
+      await tryDeleteMedia(item);
       await hardDeleteFromFirestore(item.id);
       alert('تم حذف الإعلان ✅');
       await loadList();
     } catch (e) {
       console.error(e);
-      // fallback: إخفاء بدل الحذف
       try {
         await adminUpdateListing(item.id, { status: 'canceled', archived: true });
         alert('تعذر الحذف النهائي — تم إخفاء الإعلان بدلًا من ذلك ✅');
@@ -818,7 +884,6 @@ async function uploadSelectedImages() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAdmin, tab]);
 
-  // ===== UI helpers (dropzone) =====
   function openPicker() {
     fileInputRef.current?.click?.();
   }
@@ -830,9 +895,10 @@ async function uploadSelectedImages() {
     if (files && files.length) addFiles(files);
   }
 
+  // ===================== Render =====================
   if (!user) {
     return (
-      <div className="container" style={{ paddingTop: 16 }}>
+      <div className="container" style={{ paddingTop: 16, maxWidth: 520, margin: '0 auto' }}>
         <h1 style={{ margin: '6px 0 4px' }}>تسجيل دخول الأدمن</h1>
         <div className="muted">سجّل بحساب Email/Password الذي أنشأته في Firebase Auth</div>
 
@@ -888,7 +954,7 @@ async function uploadSelectedImages() {
   const hasCoords = isFiniteNumber(latNum) && isFiniteNumber(lngNum);
 
   return (
-    <div className="container" style={{ paddingTop: 16 }}>
+    <div className="container" style={{ paddingTop: 16, paddingBottom: 40 }}>
       <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <h1 style={{ margin: '6px 0 0' }}>لوحة الأدمن</h1>
@@ -944,13 +1010,13 @@ async function uploadSelectedImages() {
 
             <div className="col-3">
               <Field label="المخطط">
-                <input className="input" value={form.plan} onChange={(e) => setForm({ ...form, plan: e.target.value })} placeholder="مثال: مخطط الخالدية السياحي272/ب" />
+                <input className="input" value={form.plan} onChange={(e) => setForm({ ...form, plan: e.target.value })} placeholder="مثال: مخطط الخالدية السياحي" />
               </Field>
             </div>
 
             <div className="col-3">
               <Field label="الجزء">
-                <input className="input" value={form.part} onChange={(e) => setForm({ ...form, part: e.target.value })} placeholder="مثال: الجزء ج " />
+                <input className="input" value={form.part} onChange={(e) => setForm({ ...form, part: e.target.value })} placeholder="مثال: الجزء ج" />
               </Field>
             </div>
 
@@ -994,14 +1060,12 @@ async function uploadSelectedImages() {
             <div className="col-3">
               <Field label="الحالة">
                 <select className="select" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
-                  {STATUS_OPTIONS.filter((s) => ['available', 'reserved', 'sold', 'rented'].includes(s.key)).map((s) => (
-                    <option key={s.key} value={s.key}>{s.label}</option>
-                  ))}
+                  {STATUS_OPTIONS.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
                 </select>
               </Field>
             </div>
 
-            {/* ✅ رابط الموقع + خريطة */}
+            {/* رابط الموقع + خريطة */}
             <div className="col-12">
               <Field
                 label="موقع العقار على الخريطة"
@@ -1024,6 +1088,7 @@ async function uploadSelectedImages() {
                       }}
                       placeholder="https://maps.google.com/..."
                     />
+
                     <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', marginTop: 8, gap: 8, flexWrap: 'wrap' }}>
                       <div className="muted" style={{ fontSize: 12 }}>
                         {hasCoords ? (
@@ -1059,9 +1124,12 @@ async function uploadSelectedImages() {
               </Field>
             </div>
 
-            {/* ===== رفع الصور ===== */}
+            {/* ===== رفع الصور والفيديو ===== */}
             <div className="col-12">
-              <Field label="الصور" hint="اسحب الصور هنا أو اضغط (اختيار صور). بعد ذلك: حدد الصور التي تريد رفعها ثم اضغط (رفع المحدد).">
+              <Field
+                label="الصور والفيديو"
+                hint="اسحب الملفات هنا أو اضغط (اختيار ملفات). ثم اضغط (رفع المحدد)."
+              >
                 <div
                   className="dropzone"
                   onClick={openPicker}
@@ -1071,32 +1139,31 @@ async function uploadSelectedImages() {
                   tabIndex={0}
                   onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') openPicker(); }}
                 >
-                  <div style={{ fontWeight: 900 }}>اسحب وأفلت الصور هنا</div>
-                  <div className="muted" style={{ marginTop: 6 }}>أو اضغط لاختيار الصور من الجهاز</div>
+                  <div style={{ fontWeight: 900 }}>اسحب وأفلت الصور والفيديوهات هنا</div>
+                  <div className="muted" style={{ marginTop: 6 }}>أو اضغط لاختيار الملفات من الجهاز</div>
                 </div>
 
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept="image/*"
+                  accept="image/*,video/*"
                   multiple
                   style={{ display: 'none' }}
                   onChange={(e) => {
                     addFiles(e.target.files);
-                    // reset حتى لو اختار نفس الملف مرة ثانية
                     e.target.value = '';
                   }}
                 />
 
-                <div className="row" style={{ marginTop: 12, justifyContent: 'space-between' }}>
-                  <div className="row">
-                    <button className="btn" type="button" onClick={openPicker}>اختيار صور</button>
-                    <button className="btnPrimary" type="button" disabled={uploading} onClick={uploadSelectedImages}>
-                      {uploading ? 'جاري الرفع…' : 'رفع المحدد'}
+                <div className="row" style={{ marginTop: 12, justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+                  <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+                    <button className="btn" type="button" onClick={openPicker}>اختيار ملفات</button>
+                    <button className="btnPrimary" type="button" disabled={uploading} onClick={uploadSelectedMedia}>
+                      {uploading ? 'جاري الرفع…' : `رفع المحدد (x${UPLOAD_CONCURRENCY})`}
                     </button>
-                    <button className="btn" type="button" onClick={clearQueue}>تفريغ المحددات</button>
+                    <button className="btn" type="button" onClick={clearQueue}>تفريغ القائمة</button>
                   </div>
-                  <div className="muted" style={{ fontSize: 12 }}>الصورة التي تم رفعها تُضاف تلقائيًا للإعلان.</div>
+                  <div className="muted" style={{ fontSize: 12 }}>الملفات التي تم رفعها تُضاف تلقائيًا للإعلان.</div>
                 </div>
 
                 {uploadErr ? (
@@ -1105,19 +1172,31 @@ async function uploadSelectedImages() {
                   </div>
                 ) : null}
 
+                {/* قائمة الانتظار */}
                 {queue.length ? (
-                  <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 10 }}>
+                  <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 10 }}>
                     {queue.map((q) => (
                       <div key={q.id} className="card" style={{ padding: 10 }}>
                         <div style={{ position: 'relative' }}>
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={q.preview} alt="" style={{ width: '100%', height: 92, objectFit: 'cover', borderRadius: 12 }} />
+                          {String(q.type || '').startsWith('video/') ? (
+                            <video
+                              src={q.preview}
+                              style={{ width: '100%', height: 96, objectFit: 'cover', borderRadius: 12, background: '#000' }}
+                              muted
+                              playsInline
+                            />
+                          ) : (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={q.preview} alt="" style={{ width: '100%', height: 96, objectFit: 'cover', borderRadius: 12 }} />
+                          )}
+
                           <div className="chip">
                             <input
                               type="checkbox"
                               checked={!!q.selected}
                               onChange={() => toggleQueued(q.id)}
-                              aria-label="تحديد الصورة"
+                              aria-label="تحديد الملف"
+                              disabled={q.status === 'uploading'}
                             />
                             <span style={{ fontSize: 12, fontWeight: 800 }}>تحديد</span>
                           </div>
@@ -1126,7 +1205,7 @@ async function uploadSelectedImages() {
                         <div style={{ marginTop: 8 }}>
                           <div className="row" style={{ justifyContent: 'space-between', gap: 8 }}>
                             <div className="muted" style={{ fontSize: 12 }}>
-                              {q.status === 'done' ? 'تم' : q.status === 'uploading' ? 'يرفع…' : q.status === 'error' ? 'فشل' : 'جاهز'}
+                              {q.status === 'done' ? 'تم ✅' : q.status === 'uploading' ? 'يرفع…' : q.status === 'error' ? 'فشل ❌' : 'جاهز'}
                             </div>
                             <button className="btnDanger" type="button" onClick={() => removeQueued(q.id)} style={{ padding: '6px 10px', borderRadius: 10, fontSize: 12 }}>
                               حذف
@@ -1136,6 +1215,8 @@ async function uploadSelectedImages() {
                           <div className="progress" style={{ marginTop: 8 }}>
                             <div className="progressBar" style={{ width: `${Math.max(0, Math.min(100, q.progress || 0))}%` }} />
                           </div>
+
+                          {q.error ? <div className="muted" style={{ marginTop: 8, color: '#b42318', fontSize: 12 }}>{q.error}</div> : null}
                         </div>
                       </div>
                     ))}
@@ -1144,15 +1225,25 @@ async function uploadSelectedImages() {
               </Field>
             </div>
 
+            {/* عرض الملفات المرفوعة */}
             {Array.isArray(form.images) && form.images.length ? (
               <div className="col-12">
-                <Field label="صور الإعلان" hint="هذه الصور ستظهر للزوار. يمكنك حذف أي صورة من الإعلان.">
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 10 }}>
+                <Field label="صور/فيديو الإعلان" hint="هذه الملفات ستظهر للزوار. يمكنك حذف أي ملف من الإعلان.">
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 10 }}>
                     {form.images.map((url) => (
                       <div key={url} className="card" style={{ padding: 10 }}>
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={url} alt="" style={{ width: '100%', height: 92, objectFit: 'cover', borderRadius: 12 }} />
-                        <button className="btnDanger" type="button" style={{ width: '100%', marginTop: 10 }} onClick={() => removeImageFromForm(url)}>
+                        {isVideoUrl(url) ? (
+                          <video
+                            src={url}
+                            style={{ width: '100%', height: 110, objectFit: 'cover', borderRadius: 12, background: '#000' }}
+                            controls
+                            playsInline
+                          />
+                        ) : (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={url} alt="" style={{ width: '100%', height: 110, objectFit: 'cover', borderRadius: 12 }} />
+                        )}
+                        <button className="btnDanger" type="button" style={{ width: '100%', marginTop: 10 }} onClick={() => removeMediaFromForm(url)}>
                           حذف من الإعلان
                         </button>
                       </div>
@@ -1170,6 +1261,15 @@ async function uploadSelectedImages() {
           </div>
 
           <style jsx>{`
+            .grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 15px; }
+            .col-12 { grid-column: span 12; }
+            .col-6 { grid-column: span 6; }
+            .col-3 { grid-column: span 3; }
+
+            @media (max-width: 768px) {
+              .col-6, .col-3 { grid-column: span 12; }
+            }
+
             .dropzone {
               border: 1px dashed rgba(214, 179, 91, 0.45);
               background: rgba(214, 179, 91, 0.06);
@@ -1201,8 +1301,8 @@ async function uploadSelectedImages() {
               height: 8px;
               border-radius: 999px;
               overflow: hidden;
-              background: rgba(255,255,255,0.08);
-              border: 1px solid rgba(255,255,255,0.12);
+              background: rgba(0,0,0,0.06);
+              border: 1px solid rgba(0,0,0,0.08);
             }
             .progressBar {
               height: 100%;
@@ -1214,7 +1314,7 @@ async function uploadSelectedImages() {
         </section>
       ) : (
         <section className="card" style={{ marginTop: 12 }}>
-          <div className="row" style={{ justifyContent: 'space-between' }}>
+          <div className="row" style={{ justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
             <div style={{ fontWeight: 800 }}>إدارة العروض</div>
             <button className="btn" onClick={loadList}>تحديث</button>
           </div>
@@ -1237,18 +1337,11 @@ async function uploadSelectedImages() {
                   </div>
                   <div style={{ marginTop: 8, fontWeight: 900 }}>{formatPriceSAR(item.price)}</div>
 
-                  <div className="row" style={{ marginTop: 10, justifyContent: 'space-between', gap: 8 }}>
+                  <div className="row" style={{ marginTop: 10, justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
                     <button className="btn" onClick={() => startEdit(item)}>تعديل</button>
                     <button className="btnDanger" disabled={actionBusyId === item.id} onClick={() => deleteListing(item)}>
                       {actionBusyId === item.id ? 'جاري الحذف…' : 'حذف'}
                     </button>
-                  </div>
-
-                  <div className="row" style={{ marginTop: 10 }}>
-                    <button className="btn" onClick={() => adminUpdateListing(item.id, { status: 'available' }).then(loadList)}>متاح</button>
-                    <button className="btn" onClick={() => adminUpdateListing(item.id, { status: 'reserved' }).then(loadList)}>محجوز</button>
-                    <button className="btnDanger" onClick={() => adminUpdateListing(item.id, { status: 'sold' }).then(loadList)}>مباع</button>
-                    <button className="btn" onClick={() => adminUpdateListing(item.id, { status: 'rented' }).then(loadList)}>مؤجر</button>
                   </div>
                 </div>
               ))}
