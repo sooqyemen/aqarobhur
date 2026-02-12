@@ -290,7 +290,7 @@ export default function MapClient() {
             <div style="opacity: .85; font-size: 12px; margin-bottom: 8px;">
               ${escapeHtml(it.neighborhood || '')} ${escapeHtml(it.plan || '')} ${escapeHtml(it.part || '')}
             </div>
-            <a href="/listings/${encodeURIComponent(it.id)}" style="color:#0b57d0; text-decoration:none; font-weight:900;">فتح التفاصيل</a>
+            <a href="/listing/${encodeURIComponent(it.id)}" style="color:#0b57d0; text-decoration:none; font-weight:900;">فتح التفاصيل</a>
           </div>
         `;
         infoRef.current.setContent(html);
