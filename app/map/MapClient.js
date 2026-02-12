@@ -18,34 +18,6 @@ function escapeHtml(s) {
     .replaceAll("'", '&#039;');
 }
 
-function formatPriceTag(price, isRent) {
-  const n = Number(price);
-  if (!Number.isFinite(n) || n <= 0) return '—';
-  let short = '';
-  if (n >= 1000000) {
-    const v = n / 1000000;
-    short = (v >= 10 ? v.toFixed(0) : v.toFixed(1)).replace(/\.0$/, '') + 'م';
-  } else if (n >= 1000) {
-    const v = n / 1000;
-    short = (v >= 10 ? v.toFixed(0) : v.toFixed(1)).replace(/\.0$/, '') + 'ألف';
-  } else {
-    short = String(Math.round(n));
-  }
-  return `${short} ر.س${isRent ? ' شهري' : ''}`;
-}
-
-function buildInfoHtml(it) {
-  return `
-    <div style="direction:rtl; font-family: Arial, sans-serif; max-width: 240px;">
-      <div style="font-weight: 900; margin-bottom: 6px;">${escapeHtml(it?.title || 'عرض')}</div>
-      <div style="opacity: .85; font-size: 12px; margin-bottom: 8px;">
-        ${escapeHtml(it?.neighborhood || '')} ${escapeHtml(it?.plan || '')} ${escapeHtml(it?.part || '')}
-      </div>
-      <a href="/listing/${encodeURIComponent(it?.id || '')}" style="color:#0b57d0; text-decoration:none; font-weight:900;">فتح التفاصيل</a>
-    </div>
-  `;
-}
-
 function loadGoogleMaps(apiKey) {
   return new Promise((resolve, reject) => {
     if (typeof window === 'undefined') return reject(new Error('no-window'));
@@ -59,7 +31,7 @@ function loadGoogleMaps(apiKey) {
     }
 
     const script = document.createElement('script');
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&v=weekly&loading=async&libraries=marker`;
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&v=weekly&loading=async`;
     script.async = true;
     script.defer = true;
     script.dataset.googleMaps = '1';
@@ -221,13 +193,7 @@ export default function MapClient() {
     const map = mapRef.current;
     if (!map || !window.google?.maps) return;
 
-    markersRef.current.forEach((m) => {
-      try {
-        if (m?.setMap) m.setMap(null); // Marker
-        else if (m && 'map' in m) m.map = null; // AdvancedMarkerElement
-        else if (m?.remove) m.remove();
-      } catch {}
-    });
+    markersRef.current.forEach((m) => m.setMap(null));
     markersRef.current = [];
     markerByIdRef.current = {};
 
@@ -236,81 +202,32 @@ export default function MapClient() {
 
     const bounds = new window.google.maps.LatLngBounds();
 
-        list.forEach((it) => {
+    list.forEach((it) => {
       const pos = { lat: Number(it.lat), lng: Number(it.lng) };
 
-      const canAdvanced = !!window.google?.maps?.marker?.AdvancedMarkerElement;
-
-      let marker;
-      if (canAdvanced) {
-        const tag = document.createElement('div');
-        tag.className = 'gmPriceTag';
-        tag.textContent = formatPriceTag(it.price, it.dealType === 'rent');
-
-        marker = new window.google.maps.marker.AdvancedMarkerElement({
-          position: pos,
-          map,
-          title: String(it.title || 'عرض'),
-          gmpClickable: true,
-        });
-
-        // AdvancedMarkerElement هو DOM element
-        try {
-          marker.append(tag);
-        } catch {
-          // احتياط لو اختلفت الواجهة
-          try {
-            marker.content = tag;
-          } catch {}
-        }
-      } else {
-        // fallback: Marker عادي (بدون شكل دبوس + نص فقط)
-        marker = new window.google.maps.Marker({
-          position: pos,
-          map,
-          title: String(it.title || 'عرض'),
-          icon: { path: window.google.maps.SymbolPath.CIRCLE, scale: 0 }, // نخفي الدائرة
-          label: {
-            text: formatPriceTag(it.price, it.dealType === 'rent'),
-            color: '#ffffff',
-            fontWeight: '900',
-            fontSize: '12px',
-          },
-        });
-      }
+      const marker = new window.google.maps.Marker({
+        position: pos,
+        map,
+        title: String(it.title || 'عرض'),
+      });
 
       markerByIdRef.current[it.id] = marker;
       markersRef.current.push(marker);
       bounds.extend(pos);
 
-      const onOpen = () => {
-        const html = buildInfoHtml(it);
+      marker.addListener('click', () => {
+        const html = `
+          <div style="direction:rtl; font-family: Arial, sans-serif; max-width: 240px;">
+            <div style="font-weight: 900; margin-bottom: 6px;">${escapeHtml(it.title || 'عرض')}</div>
+            <div style="opacity: .85; font-size: 12px; margin-bottom: 8px;">
+              ${escapeHtml(it.neighborhood || '')} ${escapeHtml(it.plan || '')} ${escapeHtml(it.part || '')}
+            </div>
+            <a href="/listing/${encodeURIComponent(it.id)}" style="color:#0b57d0; text-decoration:none; font-weight:900;">فتح التفاصيل</a>
+          </div>
+        `;
         infoRef.current.setContent(html);
-
-        // AdvancedMarkerElement قد لا يدعم anchor في بعض الإصدارات، لذلك نفتح على position احتياط
-        if (canAdvanced) {
-          try {
-            infoRef.current.setPosition(pos);
-            infoRef.current.open({ map });
-          } catch {
-            try {
-              infoRef.current.open({ anchor: marker, map });
-            } catch {}
-          }
-        } else {
-          infoRef.current.open({ anchor: marker, map });
-        }
-      };
-
-      if (canAdvanced && marker?.addListener) {
-        marker.addListener('gmp-click', onOpen);
-      } else if (marker?.addListener) {
-        marker.addListener('click', onOpen);
-      } else {
-        try {
-          window.google.maps.event.addListener(marker, canAdvanced ? 'gmp-click' : 'click', onOpen);
-        } catch {}
-      }
+        infoRef.current.open({ anchor: marker, map });
+      });
     });
 
     map.fitBounds(bounds);
@@ -321,42 +238,14 @@ export default function MapClient() {
     }
   }, [filteredItemsWithCoords]);
 
-    function focusOn(id) {
+  function focusOn(id) {
     const map = mapRef.current;
     const marker = markerByIdRef.current[id];
     if (!map || !marker || !window.google?.maps) return;
 
-    const it = (filteredItemsWithCoords || []).find((x) => x.id === id);
-
-    const pos =
-      (marker?.getPosition && marker.getPosition()) ||
-      marker?.position ||
-      (it ? { lat: Number(it.lat), lng: Number(it.lng) } : null);
-
-    if (!pos) return;
-
     map.setZoom(Math.max(map.getZoom(), 15));
-    map.panTo(pos);
-
-    if (it && infoRef.current) {
-      infoRef.current.setContent(buildInfoHtml(it));
-      // فتح آمن: AdvancedMarkerElement نستخدم position
-      if (marker?.position && !marker?.getPosition) {
-        try {
-          infoRef.current.setPosition(pos);
-          infoRef.current.open({ map });
-        } catch {}
-      } else {
-        try {
-          infoRef.current.open({ anchor: marker, map });
-        } catch {
-          try {
-            infoRef.current.setPosition(pos);
-            infoRef.current.open({ map });
-          } catch {}
-        }
-      }
-    }
+    map.panTo(marker.getPosition());
+    window.google.maps.event.trigger(marker, 'click');
   }
 
   const neighborhoodOptions = useMemo(() => {
@@ -568,38 +457,6 @@ export default function MapClient() {
           .mapTapFs:hover {
             background: rgba(255, 255, 255, 0.03);
           }
-        }
-      `}</style>
-
-
-      <style jsx global>{`
-        .gmPriceTag {
-          position: relative;
-          background: rgba(10, 13, 18, 0.92);
-          color: #fff;
-          border: 1px solid rgba(255, 255, 255, 0.18);
-          padding: 6px 10px;
-          border-radius: 999px;
-          font-weight: 950;
-          font-size: 13px;
-          line-height: 1;
-          white-space: nowrap;
-          box-shadow: 0 10px 24px rgba(0, 0, 0, 0.30);
-          transform: translateY(-6px);
-          cursor: pointer;
-          user-select: none;
-        }
-        .gmPriceTag::after {
-          content: '';
-          position: absolute;
-          left: 50%;
-          bottom: -6px;
-          transform: translateX(-50%);
-          width: 0;
-          height: 0;
-          border-left: 6px solid transparent;
-          border-right: 6px solid transparent;
-          border-top: 6px solid rgba(10, 13, 18, 0.92);
         }
       `}</style>
     </div>
