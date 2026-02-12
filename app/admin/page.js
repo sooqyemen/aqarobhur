@@ -3,12 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { getFirebase } from '@/lib/firebaseClient';
 import { signInWithEmailAndPassword, onAuthStateChanged, signOut } from 'firebase/auth';
-import {
-  ref as storageRef,
-  uploadBytesResumable,
-  getDownloadURL,
-  deleteObject,
-} from 'firebase/storage';
+import { ref as storageRef, uploadBytesResumable, getDownloadURL, deleteObject } from 'firebase/storage';
 import { doc, deleteDoc, getFirestore } from 'firebase/firestore';
 
 import { isAdminUser } from '@/lib/admin';
@@ -34,7 +29,9 @@ const WATCH_INTERVAL_MS = 1200;
 function Field({ label, children, hint }) {
   return (
     <div style={{ marginBottom: 16 }}>
-      <div className="muted" style={{ fontSize: 13, marginBottom: 6, fontWeight: 700 }}>{label}</div>
+      <div className="muted" style={{ fontSize: 13, marginBottom: 6, fontWeight: 700 }}>
+        {label}
+      </div>
       {children}
       {hint ? <div className="muted" style={{ fontSize: 12, marginTop: 6, opacity: 0.9 }}>{hint}</div> : null}
     </div>
@@ -110,7 +107,6 @@ function extractStoragePathFromDownloadURL(url) {
 
 function isVideoUrl(url) {
   if (!url) return false;
-  // يعتمد على الامتداد في الاسم (عادة موجود لأننا نحافظ على اسم الملف)
   return /\.(mp4|mov|webm|mkv|avi|wmv|flv|3gp|m4v)(\?|$)/i.test(String(url));
 }
 
@@ -118,32 +114,24 @@ function formatStorageError(e) {
   const code = String(e?.code || '');
   const msg = String(e?.message || '');
 
-  // App Check enforcement غالبًا يظهر ضمن unauthorized + رسالة فيها AppCheck
   if (msg.toLowerCase().includes('appcheck')) {
     return 'رفع الملفات مرفوض بسبب App Check. إذا كان (Enforce) مفعّل على Storage عطّله مؤقتًا أو جهّزه للتطبيق.';
   }
 
-  if (code === 'upload-stalled') {
-    return 'الرفع توقف بدون تقدم (تعليق). جرّب شبكة أخرى أو عطّل VPN/Proxy أو راجع صلاحيات Storage Rules.';
-  }
-  if (code === 'upload-timeout') {
-    return 'انتهت مهلة الرفع. قد يكون الملف كبيرًا جدًا أو الاتصال بطيء.';
-  }
+  if (code === 'upload-stalled') return 'الرفع توقف بدون تقدم (تعليق). جرّب شبكة أخرى أو عطّل VPN/Proxy أو راجع صلاحيات Storage Rules.';
+  if (code === 'upload-timeout') return 'انتهت مهلة الرفع. قد يكون الملف كبيرًا جدًا أو الاتصال بطيء.';
+
   if (code === 'storage/unauthorized' || code === 'permission-denied' || code === 'storage/unauthenticated') {
     return 'لا توجد صلاحيات لرفع الملفات. تحقق من Storage Rules (السماح للأدمن/المسجلين) وتأكد أنك مسجّل دخول.';
   }
   if (code === 'storage/bucket-not-found') {
-    return 'Storage Bucket غير صحيح. تأكد من NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET (عادةً يكون project-id.appspot.com أو project-id.firebasestorage.app حسب إعدادك).';
+    return 'Storage Bucket غير صحيح. تأكد من NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET.';
   }
   if (code === 'storage/retry-limit-exceeded' || msg.toLowerCase().includes('retry limit')) {
     return 'تعذر إكمال الرفع بسبب انقطاع/حظر في الشبكة. جرّب شبكة أخرى أو راجع إعدادات المتصفح.';
   }
-  if (code === 'storage/canceled') {
-    return 'تم إلغاء الرفع.';
-  }
-  if (code === 'storage/quota-exceeded') {
-    return 'تم تجاوز سعة التخزين في Firebase Storage.';
-  }
+  if (code === 'storage/canceled') return 'تم إلغاء الرفع.';
+  if (code === 'storage/quota-exceeded') return 'تم تجاوز سعة التخزين في Firebase Storage.';
   return msg || 'فشل رفع الملفات.';
 }
 
@@ -191,7 +179,7 @@ function loadGoogleMaps(apiKey) {
   return __gmapsPromise;
 }
 
-// ===================== Map Picker (ResizeObserver + Cleanup) =====================
+// ===================== Map Picker (Fix narrow map + robust resize) =====================
 function MapPicker({ value, onChange }) {
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
 
@@ -200,6 +188,7 @@ function MapPicker({ value, onChange }) {
   const markerRef = useRef(null);
   const listenersRef = useRef([]);
   const resizeObserverRef = useRef(null);
+  const winResizeRef = useRef(null);
 
   const [mapErr, setMapErr] = useState('');
   const [geoErr, setGeoErr] = useState('');
@@ -224,7 +213,9 @@ function MapPicker({ value, onChange }) {
         if (!mapElRef.current) return;
         if (mapRef.current) return;
 
-        const center = current ? { lat: current.lat, lng: current.lng } : { lat: defaultCenter.lat, lng: defaultCenter.lng };
+        const center = current
+          ? { lat: current.lat, lng: current.lng }
+          : { lat: defaultCenter.lat, lng: defaultCenter.lng };
 
         const map = new gmaps.Map(mapElRef.current, {
           center,
@@ -267,24 +258,46 @@ function MapPicker({ value, onChange }) {
           })
         );
 
+        // ✅ أهم إصلاح: إعادة حساب حجم الخريطة عدة مرات بعد الظهور
+        const forceResize = () => {
+          try {
+            if (!mapRef.current) return;
+            gmaps.event.trigger(mapRef.current, 'resize');
+            const pos = markerRef.current?.getPosition?.();
+            const c = pos ? { lat: pos.lat(), lng: pos.lng() } : center;
+            mapRef.current.panTo(c);
+          } catch {
+            // ignore
+          }
+        };
+
+        // بعد ما تجهز (idle) + مهلات قصيرة (تعالج مشكلة الشريط)
+        listenersRef.current.push(
+          gmaps.event.addListenerOnce(map, 'idle', () => {
+            setTimeout(forceResize, 60);
+            setTimeout(forceResize, 240);
+            setTimeout(forceResize, 900);
+          })
+        );
+
+        // ResizeObserver للعنصر نفسه
+        if (typeof window.ResizeObserver !== 'undefined') {
+          resizeObserverRef.current = new ResizeObserver(() => {
+            requestAnimationFrame(forceResize);
+          });
+          resizeObserverRef.current.observe(mapElRef.current);
+        }
+
+        // Window resize
+        winResizeRef.current = () => forceResize();
+        window.addEventListener('resize', winResizeRef.current);
+
         mapRef.current = map;
         markerRef.current = marker;
         setMapReady(true);
 
-        // ResizeObserver لتفادي قص/تشوه الخريطة عند تغير الحجم
-        if (typeof window.ResizeObserver !== 'undefined') {
-          resizeObserverRef.current = new ResizeObserver(() => {
-            try {
-              if (!mapRef.current) return;
-              gmaps.event.trigger(mapRef.current, 'resize');
-              const c = current ? { lat: current.lat, lng: current.lng } : center;
-              mapRef.current.panTo(c);
-            } catch {
-              // ignore
-            }
-          });
-          resizeObserverRef.current.observe(mapElRef.current);
-        }
+        // كمان نفذ Resize بعد التركيب مباشرة
+        setTimeout(forceResize, 50);
       } catch (e) {
         console.error(e);
         const msg = String(e?.message || '');
@@ -300,19 +313,22 @@ function MapPicker({ value, onChange }) {
 
     return () => {
       cancelled = true;
-      try {
-        listenersRef.current.forEach((l) => l?.remove?.());
-      } catch {}
+      try { listenersRef.current.forEach((l) => l?.remove?.()); } catch {}
       listenersRef.current = [];
-      try {
-        if (markerRef.current) markerRef.current.setMap(null);
-      } catch {}
+
+      try { if (markerRef.current) markerRef.current.setMap(null); } catch {}
+      markerRef.current = null;
+      mapRef.current = null;
+
       if (resizeObserverRef.current) {
         try { resizeObserverRef.current.disconnect(); } catch {}
         resizeObserverRef.current = null;
       }
-      markerRef.current = null;
-      mapRef.current = null;
+
+      if (winResizeRef.current) {
+        try { window.removeEventListener('resize', winResizeRef.current); } catch {}
+        winResizeRef.current = null;
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiKey]);
@@ -333,6 +349,11 @@ function MapPicker({ value, onChange }) {
     marker.setPosition({ lat: current.lat, lng: current.lng });
     map.panTo({ lat: current.lat, lng: current.lng });
     if ((map.getZoom?.() || 0) < 16) map.setZoom(16);
+
+    // ✅ بعد التحديث الخارجي نعمل Resize سريع لتفادي الشريط
+    try {
+      window.google?.maps?.event?.trigger?.(map, 'resize');
+    } catch {}
   }, [current]);
 
   async function useMyLocation() {
@@ -354,7 +375,7 @@ function MapPicker({ value, onChange }) {
   }
 
   return (
-    <div>
+    <div style={{ width: '100%' }}>
       <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
         <div className="muted" style={{ fontSize: 12 }}>
           اختر الموقع بالنقر على الخريطة أو اسحب العلامة. سيتم حفظ الإحداثيات بدقة.
@@ -364,8 +385,16 @@ function MapPicker({ value, onChange }) {
         </button>
       </div>
 
-      <div className="mapWrap" style={{ marginTop: 10 }}>
-        <div ref={mapElRef} className="mapEl" />
+      <div className="mapWrap" style={{ marginTop: 10, width: '100%' }}>
+        <div
+          ref={mapElRef}
+          className="mapEl"
+          style={{
+            width: '100%',
+            minWidth: '100%',
+            display: 'block',
+          }}
+        />
         {!mapReady && !mapErr ? <div className="mapOverlay muted">جاري تحميل الخريطة…</div> : null}
         {mapErr ? <div className="mapOverlay" style={{ color: '#b42318' }}>{mapErr}</div> : null}
       </div>
@@ -429,15 +458,19 @@ export default function AdminPage() {
   const [uploadErr, setUploadErr] = useState('');
   const fileInputRef = useRef(null);
 
+  // ✅ emptyForm expanded (Dynamic Fields)
   const emptyForm = useMemo(
     () => ({
       title: '',
       neighborhood: '',
       plan: '',
       part: '',
+      lotNumber: '',
+
       dealType: 'sale',
       propertyType: 'أرض',
       propertyClass: '',
+
       area: '',
       price: '',
       status: 'available',
@@ -446,7 +479,23 @@ export default function AdminPage() {
       lat: '',
       lng: '',
       description: '',
-      images: [], // صور + فيديو (روابط)
+      images: [],
+
+      // ✅ Dynamic fields
+      bedrooms: '',
+      bathrooms: '',
+      floor: '',
+      lounges: '',
+      majlis: '',
+      kitchen: false,     // مطبخ راكب؟
+      maidRoom: false,    // غرفة خادمة؟
+      streetWidth: '',
+      facade: '',
+      age: '',
+
+      // Villa extras
+      driverRoom: false,
+      yard: false,
     }),
     []
   );
@@ -456,6 +505,10 @@ export default function AdminPage() {
   const [loadingList, setLoadingList] = useState(false);
 
   const isAdmin = useMemo(() => isAdminUser(user), [user]);
+
+  const isApartment = form.propertyType === 'شقة';
+  const isVilla = form.propertyType === 'فيلا';
+  const isLand = form.propertyType === 'أرض';
 
   useEffect(() => {
     if (!auth) return;
@@ -564,7 +617,6 @@ export default function AdminPage() {
       const watcher = setInterval(() => {
         const now = Date.now();
 
-        // hard timeout
         if (now - startedAt > timeoutMs) {
           try { task.cancel(); } catch {}
           const err = new Error('upload-timeout');
@@ -574,7 +626,6 @@ export default function AdminPage() {
           return;
         }
 
-        // stall timeout (no progress)
         if (now - lastTick > STALL_MS) {
           try { task.cancel(); } catch {}
           const err = new Error('upload-stalled');
@@ -673,7 +724,6 @@ export default function AdminPage() {
         setForm((p) => ({ ...p, images: uniq([...(p.images || []), ...okUrls]) }));
       }
 
-      // بعد الرفع: نلغي تحديد العناصر التي انتهت (نجاح/فشل) حتى لا تعيد رفعها بالغلط
       setQueue((prev) => prev.map((x) => {
         const isTouched = selected.some((s) => s.id === x.id);
         if (!isTouched) return x;
@@ -681,7 +731,6 @@ export default function AdminPage() {
       }));
 
       if (errors.length) {
-        // رسالة مختصرة
         setUploadErr(`تم رفع ${okUrls.length} من ${selected.length}. بعض الملفات فشل رفعها — افتح تفاصيل كل ملف لرؤية السبب.`);
       }
     } finally {
@@ -718,6 +767,7 @@ export default function AdminPage() {
     setUploadErr('');
   }
 
+  // ✅ startEdit includes dynamic fields mapping
   function startEdit(item) {
     setCreatedId('');
     setEditingId(item.id);
@@ -734,27 +784,78 @@ export default function AdminPage() {
 
     setForm({
       ...emptyForm,
+
       title: toTextOrEmpty(item.title),
       neighborhood: toTextOrEmpty(item.neighborhood),
       plan: toTextOrEmpty(item.plan),
       part: toTextOrEmpty(item.part),
+      lotNumber: toTextOrEmpty(item.lotNumber || item.plotNumber || item.lot || item.lotNo || ''),
+
       dealType: toTextOrEmpty(item.dealType || 'sale'),
       propertyType: toTextOrEmpty(item.propertyType || 'أرض'),
       propertyClass: toTextOrEmpty(item.propertyClass || ''),
+
       area: item.area == null ? '' : String(item.area),
       price: item.price == null ? '' : String(item.price),
+
       status: toTextOrEmpty(item.status || 'available'),
       direct: !!item.direct,
+
       websiteUrl: urlFromItem,
       lat: latFinal == null ? '' : String(round6(latFinal)),
       lng: lngFinal == null ? '' : String(round6(lngFinal)),
+
       description: toTextOrEmpty(item.description),
       images: uniq(media),
+
+      // Dynamic fields
+      bedrooms: item.bedrooms == null ? '' : String(item.bedrooms),
+      bathrooms: item.bathrooms == null ? '' : String(item.bathrooms),
+      floor: item.floor == null ? '' : String(item.floor),
+      lounges: item.lounges == null ? '' : String(item.lounges),
+      majlis: item.majlis == null ? '' : String(item.majlis),
+      kitchen: !!item.kitchen,
+      maidRoom: !!item.maidRoom,
+      streetWidth: item.streetWidth == null ? '' : String(item.streetWidth),
+      facade: toTextOrEmpty(item.facade),
+      age: item.age == null ? '' : String(item.age),
+
+      driverRoom: !!item.driverRoom,
+      yard: !!item.yard,
     });
 
     clearQueue();
     setTab('create');
     try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch {}
+  }
+
+  function normalizePayloadNumbers(payload) {
+    const out = { ...payload };
+
+    // أرقام أساسية
+    out.area = toNumberOrNull(out.area);
+    out.price = toNumberOrNull(out.price);
+
+    // Dynamic numbers
+    out.bedrooms = toNumberOrNull(out.bedrooms);
+    out.bathrooms = toNumberOrNull(out.bathrooms);
+    out.floor = toNumberOrNull(out.floor);
+    out.lounges = toNumberOrNull(out.lounges);
+    out.majlis = toNumberOrNull(out.majlis);
+    out.streetWidth = toNumberOrNull(out.streetWidth);
+    out.age = toNumberOrNull(out.age);
+
+    // Booleans
+    out.kitchen = !!out.kitchen;
+    out.maidRoom = !!out.maidRoom;
+    out.driverRoom = !!out.driverRoom;
+    out.yard = !!out.yard;
+
+    // Text
+    out.facade = toTextOrEmpty(out.facade).trim();
+    out.lotNumber = toTextOrEmpty(out.lotNumber).trim();
+
+    return out;
   }
 
   async function saveListing() {
@@ -781,14 +882,15 @@ export default function AdminPage() {
       const hasCoords = isFiniteNumber(lat) && isFiniteNumber(lng);
       const finalWebsiteUrl = websiteUrl || (hasCoords ? buildGoogleMapsUrl(lat, lng) : '');
 
-      const payload = {
+      // ✅ payload + convert numbers/booleans correctly
+      let payload = {
         ...form,
-        area: toNumberOrNull(form.area),
-        price: toNumberOrNull(form.price),
         images,
         websiteUrl: finalWebsiteUrl,
         ...(hasCoords ? { lat: round6(lat), lng: round6(lng) } : {}),
       };
+
+      payload = normalizePayloadNumbers(payload);
 
       if (editingId) {
         await adminUpdateListing(editingId, payload);
@@ -820,17 +922,14 @@ export default function AdminPage() {
   }
 
   async function hardDeleteFromFirestore(listingId) {
-    // compat support
     if (db && typeof db.collection === 'function') {
       await db.collection(LISTINGS_COLLECTION).doc(listingId).delete();
       return;
     }
-    // modular instance
     if (db) {
       await deleteDoc(doc(db, LISTINGS_COLLECTION, listingId));
       return;
     }
-    // fallback via app
     if (app) {
       const f = getFirestore(app);
       await deleteDoc(doc(f, LISTINGS_COLLECTION, listingId));
@@ -953,6 +1052,13 @@ export default function AdminPage() {
   const lngNum = toNumberOrNull(form.lng);
   const hasCoords = isFiniteNumber(latNum) && isFiniteNumber(lngNum);
 
+  const yesNoSelect = (val, onVal) => (
+    <select className="select" value={val ? 'yes' : 'no'} onChange={(e) => onVal(e.target.value === 'yes')}>
+      <option value="yes">نعم</option>
+      <option value="no">لا</option>
+    </select>
+  );
+
   return (
     <div className="container" style={{ paddingTop: 16, paddingBottom: 40 }}>
       <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
@@ -1008,6 +1114,7 @@ export default function AdminPage() {
               </Field>
             </div>
 
+            {/* أرض: المخطط/الجزء/رقم القطعة */}
             <div className="col-3">
               <Field label="المخطط">
                 <input className="input" value={form.plan} onChange={(e) => setForm({ ...form, plan: e.target.value })} placeholder="مثال: مخطط الخالدية السياحي" />
@@ -1017,6 +1124,12 @@ export default function AdminPage() {
             <div className="col-3">
               <Field label="الجزء">
                 <input className="input" value={form.part} onChange={(e) => setForm({ ...form, part: e.target.value })} placeholder="مثال: الجزء ج" />
+              </Field>
+            </div>
+
+            <div className="col-3">
+              <Field label="رقم القطعة" hint="مهم للأراضي (اختياري لغيرها).">
+                <input className="input" value={form.lotNumber} onChange={(e) => setForm({ ...form, lotNumber: e.target.value })} placeholder="مثال: 250" />
               </Field>
             </div>
 
@@ -1065,13 +1178,120 @@ export default function AdminPage() {
               </Field>
             </div>
 
+            {/* ================= Dynamic Fields UI ================= */}
+            {isApartment ? (
+              <div className="col-12">
+                <div className="card" style={{ padding: 14, marginBottom: 10 }}>
+                  <div style={{ fontWeight: 900, marginBottom: 10 }}>تفاصيل الشقة</div>
+
+                  <div className="grid">
+                    <div className="col-3">
+                      <Field label="الدور">
+                        <input className="input" inputMode="numeric" value={form.floor} onChange={(e) => setForm({ ...form, floor: e.target.value })} placeholder="مثال: 3" />
+                      </Field>
+                    </div>
+
+                    <div className="col-3">
+                      <Field label="عدد الغرف">
+                        <input className="input" inputMode="numeric" value={form.bedrooms} onChange={(e) => setForm({ ...form, bedrooms: e.target.value })} placeholder="مثال: 4" />
+                      </Field>
+                    </div>
+
+                    <div className="col-3">
+                      <Field label="عدد الصالات">
+                        <input className="input" inputMode="numeric" value={form.lounges} onChange={(e) => setForm({ ...form, lounges: e.target.value })} placeholder="مثال: 1" />
+                      </Field>
+                    </div>
+
+                    <div className="col-3">
+                      <Field label="عدد المجالس">
+                        <input className="input" inputMode="numeric" value={form.majlis} onChange={(e) => setForm({ ...form, majlis: e.target.value })} placeholder="مثال: 1" />
+                      </Field>
+                    </div>
+
+                    <div className="col-3">
+                      <Field label="عدد دورات المياه">
+                        <input className="input" inputMode="numeric" value={form.bathrooms} onChange={(e) => setForm({ ...form, bathrooms: e.target.value })} placeholder="مثال: 3" />
+                      </Field>
+                    </div>
+
+                    <div className="col-3">
+                      <Field label="مطبخ راكب؟">{yesNoSelect(form.kitchen, (v) => setForm({ ...form, kitchen: v }))}</Field>
+                    </div>
+
+                    <div className="col-3">
+                      <Field label="غرفة خادمة؟">{yesNoSelect(form.maidRoom, (v) => setForm({ ...form, maidRoom: v }))}</Field>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
+            {isVilla ? (
+              <div className="col-12">
+                <div className="card" style={{ padding: 14, marginBottom: 10 }}>
+                  <div style={{ fontWeight: 900, marginBottom: 10 }}>تفاصيل الفيلا</div>
+
+                  <div className="grid">
+                    <div className="col-3">
+                      <Field label="عمر العقار (سنة)">
+                        <input className="input" inputMode="numeric" value={form.age} onChange={(e) => setForm({ ...form, age: e.target.value })} placeholder="مثال: 5" />
+                      </Field>
+                    </div>
+
+                    <div className="col-3">
+                      <Field label="عرض الشارع (م)">
+                        <input className="input" inputMode="numeric" value={form.streetWidth} onChange={(e) => setForm({ ...form, streetWidth: e.target.value })} placeholder="مثال: 20" />
+                      </Field>
+                    </div>
+
+                    <div className="col-3">
+                      <Field label="الواجهة">
+                        <input className="input" value={form.facade} onChange={(e) => setForm({ ...form, facade: e.target.value })} placeholder="شمال / جنوب / شرق / غرب" />
+                      </Field>
+                    </div>
+
+                    <div className="col-3">
+                      <Field label="عدد الغرف">
+                        <input className="input" inputMode="numeric" value={form.bedrooms} onChange={(e) => setForm({ ...form, bedrooms: e.target.value })} placeholder="مثال: 6" />
+                      </Field>
+                    </div>
+
+                    <div className="col-3">
+                      <Field label="عدد الصالات">
+                        <input className="input" inputMode="numeric" value={form.lounges} onChange={(e) => setForm({ ...form, lounges: e.target.value })} placeholder="مثال: 2" />
+                      </Field>
+                    </div>
+
+                    <div className="col-3">
+                      <Field label="عدد دورات المياه">
+                        <input className="input" inputMode="numeric" value={form.bathrooms} onChange={(e) => setForm({ ...form, bathrooms: e.target.value })} placeholder="مثال: 5" />
+                      </Field>
+                    </div>
+
+                    <div className="col-3">
+                      <Field label="غرفة خادمة؟">{yesNoSelect(form.maidRoom, (v) => setForm({ ...form, maidRoom: v }))}</Field>
+                    </div>
+
+                    <div className="col-3">
+                      <Field label="غرفة سائق؟">{yesNoSelect(form.driverRoom, (v) => setForm({ ...form, driverRoom: v }))}</Field>
+                    </div>
+
+                    <div className="col-3">
+                      <Field label="حوش؟">{yesNoSelect(form.yard, (v) => setForm({ ...form, yard: v }))}</Field>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
             {/* رابط الموقع + خريطة */}
             <div className="col-12">
               <Field
                 label="موقع العقار على الخريطة"
                 hint="حدد الموقع من الخريطة (الأفضل). ويمكنك أيضًا لصق رابط Google Maps وسيتم التقاط الإحداثيات تلقائيًا."
               >
-                <div className="grid" style={{ gap: 10 }}>
+                <div style={{ display: 'grid', gap: 10 }}>
                   <div>
                     <input
                       className="input"
@@ -1126,10 +1346,7 @@ export default function AdminPage() {
 
             {/* ===== رفع الصور والفيديو ===== */}
             <div className="col-12">
-              <Field
-                label="الصور والفيديو"
-                hint="اسحب الملفات هنا أو اضغط (اختيار ملفات). ثم اضغط (رفع المحدد)."
-              >
+              <Field label="الصور والفيديو" hint="اسحب الملفات هنا أو اضغط (اختيار ملفات). ثم اضغط (رفع المحدد).">
                 <div
                   className="dropzone"
                   onClick={openPicker}
@@ -1172,7 +1389,6 @@ export default function AdminPage() {
                   </div>
                 ) : null}
 
-                {/* قائمة الانتظار */}
                 {queue.length ? (
                   <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 10 }}>
                     {queue.map((q) => (
@@ -1225,7 +1441,6 @@ export default function AdminPage() {
               </Field>
             </div>
 
-            {/* عرض الملفات المرفوعة */}
             {Array.isArray(form.images) && form.images.length ? (
               <div className="col-12">
                 <Field label="صور/فيديو الإعلان" hint="هذه الملفات ستظهر للزوار. يمكنك حذف أي ملف من الإعلان.">
