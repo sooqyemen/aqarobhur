@@ -54,7 +54,7 @@ export default function ListingCard({ item, compact = false }) {
   const displayPrice = formatPriceSAR(price);
 
   // ✅ لا نفتح رابط إذا ما فيه ID صحيح
-  const detailLink = safeId ? `/listings/${encodeURIComponent(String(safeId))}` : '#';
+  const detailLink = safeId ? `/listing/${encodeURIComponent(String(safeId))}` : '#';
 
   // ✅ بدون placeholder file لتجنب 404
   const mainImage = images?.[0] || null;
