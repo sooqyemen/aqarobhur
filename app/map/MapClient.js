@@ -328,7 +328,7 @@ export default function MapClient() {
         <div>
           <h1 className="h1" style={{ margin: 0 }}>الخريطة</h1>
           <div className="muted" style={{ fontSize: 13 }}>
-            تظهر فقط العروض التي تحتوي على إحداثيات (lat/lng).
+             تظهر فقط العروض التي تمت اضافة مواقعها على الخريطة
           </div>
         </div>
 
