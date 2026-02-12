@@ -79,6 +79,34 @@ function extractLatLngFromUrl(url) {
   return { lat: null, lng: null };
 }
 
+function friendlyStorageError(err) {
+  const code = String(err?.code || '');
+  const msg = String(err?.message || '');
+
+  // رسائل شائعة
+  if (code === 'storage/unauthorized' || code === 'storage/unauthenticated') {
+    return 'لا توجد صلاحية لرفع الصور. تأكد من تفعيل Firebase Storage وضبط Storage Rules (السماح للأدمن بالرفع).';
+  }
+  if (code === 'storage/bucket-not-found') {
+    return 'تعذر العثور على Storage Bucket. راجع NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET في Vercel/.env.local وتأكد أنه اسم bucket الصحيح (غالبًا <project-id>.appspot.com).';
+  }
+  if (code === 'storage/retry-limit-exceeded' || code === 'storage/canceled') {
+    return 'تم إيقاف الرفع (انقطاع/بطء اتصال). جرّب مرة أخرى أو ارفع صورًا أصغر.';
+  }
+  if (code === 'storage/quota-exceeded') {
+    return 'تم تجاوز سعة Firebase Storage. راجع الباقة/الاستخدام في Firebase.';
+  }
+  if (code === 'storage/invalid-argument') {
+    return 'ملف غير صالح للرفع. جرّب صورة بصيغة JPG/PNG.';
+  }
+  if (code === 'upload-timeout') {
+    return 'الرفع أخذ وقتًا طويلًا بدون أي تقدم. غالبًا المشكلة من Storage Rules أو Storage Bucket أو حظر الشبكة. راجع الإعدادات ثم جرّب من جديد.';
+  }
+
+  // fallback
+  return msg || 'فشل رفع الصور.';
+}
+
 function nowId() {
   return `${Date.now()}_${Math.random().toString(16).slice(2)}`;
 }
@@ -508,20 +536,61 @@ export default function AdminPage() {
         // وضع uploading
         setQueue((prev) => prev.map((x) => (x.id === item.id ? { ...x, status: 'uploading', progress: 0, error: '' } : x)));
 
-        const task = uploadBytesResumable(r, file, { contentType: file.type || 'image/jpeg' });
-        await new Promise((resolve, reject) => {
-          task.on(
-            'state_changed',
-            (snap) => {
-              const p = snap.totalBytes ? Math.round((snap.bytesTransferred / snap.totalBytes) * 100) : 0;
-              setQueue((prev) => prev.map((x) => (x.id === item.id ? { ...x, progress: p } : x)));
-            },
-            (err) => reject(err),
-            () => resolve()
-          );
-        });
+        
+const task = uploadBytesResumable(r, file, { contentType: file.type || 'image/jpeg' });
 
-        const url = await getDownloadURL(r);
+// ✅ حماية من التعليق: لو ما فيه أي تقدم لمدة 20 ثانية نلغي المهمة ونطلع رسالة واضحة
+const startedAt = Date.now();
+let lastProgressAt = Date.now();
+let lastBytes = 0;
+
+await new Promise((resolve, reject) => {
+  const watch = setInterval(() => {
+    try {
+      const snap = task.snapshot;
+      const bytes = snap?.bytesTransferred || 0;
+      if (bytes !== lastBytes) {
+        lastBytes = bytes;
+        lastProgressAt = Date.now();
+      }
+      // لو ما صار أي تقدم لمدة 20 ثانية
+      if (Date.now() - lastProgressAt > 20000) {
+        clearInterval(watch);
+        try { task.cancel(); } catch {}
+        const e = new Error('upload-timeout');
+        e.code = 'upload-timeout';
+        reject(e);
+      }
+      // حد أقصى 3 دقائق لكل صورة (احتياط)
+      if (Date.now() - startedAt > 180000) {
+        clearInterval(watch);
+        try { task.cancel(); } catch {}
+        const e = new Error('upload-timeout');
+        e.code = 'upload-timeout';
+        reject(e);
+      }
+    } catch {}
+  }, 1000);
+
+  task.on(
+    'state_changed',
+    (snap) => {
+      lastProgressAt = Date.now();
+      const p = snap.totalBytes ? Math.round((snap.bytesTransferred / snap.totalBytes) * 100) : 0;
+      setQueue((prev) => prev.map((x) => (x.id === item.id ? { ...x, progress: p } : x)));
+    },
+    (err) => {
+      clearInterval(watch);
+      reject(err);
+    },
+    () => {
+      clearInterval(watch);
+      resolve();
+    }
+  );
+});
+
+const url = await getDownloadURL(task.snapshot.ref);
         urls.push(url);
         setQueue((prev) => prev.map((x) => (x.id === item.id ? { ...x, status: 'done', progress: 100 } : x)));
       }
@@ -531,8 +600,8 @@ export default function AdminPage() {
       setQueue((prev) => prev.map((x) => (x.status === 'done' ? { ...x, selected: false } : x)));
     } catch (e) {
       console.error(e);
-      setUploadErr(e?.message || 'فشل رفع الصور.');
-      setQueue((prev) => prev.map((x) => (x.status === 'uploading' ? { ...x, status: 'error', error: 'فشل الرفع' } : x)));
+      setUploadErr(friendlyStorageError(e));
+      setQueue((prev) => prev.map((x) => (x.status === 'uploading' ? { ...x, status: 'error', error: (e?.code ? String(e.code).replace('storage/','') : 'فشل الرفع') } : x)));
     } finally {
       setUploading(false);
     }

@@ -1,0 +1,23 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // ✅ حدّد الأدمن (بنفس إيميل تسجيل الدخول في Firebase Auth)
+    function isAdmin() {
+      return request.auth != null
+        && request.auth.token.email == "aqarobhr@gmail.com";
+    }
+
+    // ✅ صور الإعلانات
+    match /abhur_images/{uid}/{allPaths=**} {
+      allow read: if true;        // حتى تظهر الصور للزوار
+      allow write: if isAdmin();  // رفع/حذف للأدمن فقط
+    }
+
+    // ✅ أي مسارات أخرى (احتياط)
+    match /{allPaths=**} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+  }
+}
