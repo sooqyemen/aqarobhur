@@ -83,6 +83,251 @@ function nowId() {
   return `${Date.now()}_${Math.random().toString(16).slice(2)}`;
 }
 
+function isFiniteNumber(n) {
+  return typeof n === 'number' && Number.isFinite(n);
+}
+
+function round6(n) {
+  return Math.round(n * 1e6) / 1e6;
+}
+
+function buildGoogleMapsUrl(lat, lng) {
+  const a = round6(lat);
+  const b = round6(lng);
+  return `https://www.google.com/maps?q=${a},${b}`;
+}
+
+// ===================== Leaflet loader (CDN) =====================
+let _leafletPromise = null;
+
+function loadLeaflet() {
+  if (typeof window === 'undefined') return Promise.reject(new Error('Leaflet requires browser environment'));
+  if (window.L) return Promise.resolve(window.L);
+  if (_leafletPromise) return _leafletPromise;
+
+  _leafletPromise = new Promise((resolve, reject) => {
+    try {
+      // CSS
+      const cssId = 'leaflet-css';
+      if (!document.getElementById(cssId)) {
+        const link = document.createElement('link');
+        link.id = cssId;
+        link.rel = 'stylesheet';
+        link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+        document.head.appendChild(link);
+      }
+
+      // JS
+      const jsId = 'leaflet-js';
+      const existing = document.getElementById(jsId);
+      if (existing) {
+        const check = () => (window.L ? resolve(window.L) : setTimeout(check, 50));
+        check();
+        return;
+      }
+
+      const script = document.createElement('script');
+      script.id = jsId;
+      script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+      script.async = true;
+      script.onload = () => {
+        if (window.L) resolve(window.L);
+        else reject(new Error('Leaflet loaded but window.L not found'));
+      };
+      script.onerror = () => reject(new Error('Failed to load Leaflet from CDN'));
+      document.body.appendChild(script);
+    } catch (e) {
+      reject(e);
+    }
+  });
+
+  return _leafletPromise;
+}
+
+function approxSame(a, b, eps = 1e-7) {
+  return Math.abs(a - b) <= eps;
+}
+
+function MapPicker({ value, onChange }) {
+  const mapElRef = useRef(null);
+  const mapObjRef = useRef(null);
+  const markerRef = useRef(null);
+
+  const [mapErr, setMapErr] = useState('');
+  const [geoErr, setGeoErr] = useState('');
+  const [mapReady, setMapReady] = useState(false);
+
+  // Default center (شمال جدة تقريبًا)
+  const defaultCenter = useMemo(() => ({ lat: 21.75, lng: 39.12 }), []);
+  const defaultZoom = 13;
+
+  const current = useMemo(() => {
+    const v = value && isFiniteNumber(value.lat) && isFiniteNumber(value.lng) ? value : null;
+    return v;
+  }, [value]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function init() {
+      setMapErr('');
+      try {
+        const L = await loadLeaflet();
+        if (cancelled) return;
+        if (!mapElRef.current) return;
+        if (mapObjRef.current) return;
+
+        const center = current ? [current.lat, current.lng] : [defaultCenter.lat, defaultCenter.lng];
+
+        const map = L.map(mapElRef.current, {
+          zoomControl: true,
+          attributionControl: true,
+        }).setView(center, current ? 16 : defaultZoom);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          maxZoom: 20,
+          attribution: '&copy; OpenStreetMap contributors',
+        }).addTo(map);
+
+        const marker = L.marker(center, { draggable: true }).addTo(map);
+
+        const emit = (latlng) => {
+          const lat = round6(latlng.lat);
+          const lng = round6(latlng.lng);
+          onChange?.({ lat, lng });
+        };
+
+        map.on('click', (e) => {
+          marker.setLatLng(e.latlng);
+          emit(e.latlng);
+        });
+
+        marker.on('dragend', () => {
+          const ll = marker.getLatLng();
+          emit(ll);
+        });
+
+        mapObjRef.current = map;
+        markerRef.current = marker;
+        setMapReady(true);
+      } catch (e) {
+        console.error(e);
+        setMapErr('تعذر تحميل الخريطة. تأكد من السماح بالاتصال بـ unpkg.com أو جرّب شبكة أخرى.');
+      }
+    }
+
+    init();
+
+    return () => {
+      cancelled = true;
+      try {
+        if (mapObjRef.current) {
+          mapObjRef.current.remove();
+          mapObjRef.current = null;
+          markerRef.current = null;
+        }
+      } catch {}
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Sync external value to map/marker
+  useEffect(() => {
+    try {
+      const map = mapObjRef.current;
+      const marker = markerRef.current;
+      if (!map || !marker) return;
+      if (!current) return;
+
+      const ll = marker.getLatLng();
+      if (approxSame(ll.lat, current.lat) && approxSame(ll.lng, current.lng)) return;
+
+      marker.setLatLng([current.lat, current.lng]);
+      map.setView([current.lat, current.lng], Math.max(map.getZoom() || 16, 16), { animate: true });
+    } catch {}
+  }, [current]);
+
+  async function useMyLocation() {
+    setGeoErr('');
+    try {
+      if (typeof navigator === 'undefined' || !navigator.geolocation) {
+        setGeoErr('المتصفح لا يدعم تحديد الموقع.');
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const lat = round6(pos.coords.latitude);
+          const lng = round6(pos.coords.longitude);
+          onChange?.({ lat, lng });
+        },
+        (err) => {
+          console.warn(err);
+          setGeoErr('لم يتم السماح بتحديد الموقع أو حدث خطأ في GPS.');
+        },
+        { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
+      );
+    } catch (e) {
+      console.error(e);
+      setGeoErr('تعذر تحديد موقعك.');
+    }
+  }
+
+  return (
+    <div>
+      <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+        <div className="muted" style={{ fontSize: 12 }}>
+          اختر الموقع بالنقر على الخريطة أو اسحب العلامة. سيتم حفظ الإحداثيات بدقة.
+        </div>
+        <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+          <button className="btn" type="button" onClick={useMyLocation}>استخدم موقعي الحالي</button>
+        </div>
+      </div>
+
+      <div className="mapWrap" style={{ marginTop: 10 }}>
+        <div ref={mapElRef} className="mapEl" />
+        {!mapReady && !mapErr ? (
+          <div className="mapOverlay muted">جاري تحميل الخريطة…</div>
+        ) : null}
+        {mapErr ? (
+          <div className="mapOverlay" style={{ color: '#b42318' }}>{mapErr}</div>
+        ) : null}
+      </div>
+
+      {geoErr ? (
+        <div className="muted" style={{ marginTop: 8, color: '#b42318', fontSize: 12 }}>{geoErr}</div>
+      ) : null}
+
+      <style jsx>{`
+        .mapWrap {
+          position: relative;
+          border-radius: 16px;
+          overflow: hidden;
+          border: 1px solid rgba(214, 179, 91, 0.28);
+          background: rgba(255,255,255,0.03);
+          min-height: 320px;
+        }
+        .mapEl {
+          width: 100%;
+          height: 320px;
+        }
+        .mapOverlay {
+          position: absolute;
+          inset: 0;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 14px;
+          text-align: center;
+          background: rgba(0,0,0,0.18);
+          backdrop-filter: blur(6px);
+          font-weight: 800;
+        }
+      `}</style>
+    </div>
+  );
+}
+
+// ===================== Page =====================
 export default function AdminPage() {
   const fb = getFirebase();
   const auth = fb?.auth;
@@ -122,6 +367,8 @@ export default function AdminPage() {
       status: 'available',
       direct: true,
       websiteUrl: '', // رابط موقع العقار
+      lat: '', // ✅ يتم حفظه تلقائيًا من الخريطة/الرابط
+      lng: '', // ✅ يتم حفظه تلقائيًا من الخريطة/الرابط
       description: '',
       images: [], // URLs
     }),
@@ -295,6 +542,14 @@ export default function AdminPage() {
     setEditingId(item.id);
 
     const images = Array.isArray(item.images) ? item.images : [];
+    const urlFromItem = toTextOrEmpty(item.websiteUrl || item.website || item.url || '');
+    const fromUrl = extractLatLngFromUrl(urlFromItem);
+
+    const latFromItem = toNumberOrNull(item.lat);
+    const lngFromItem = toNumberOrNull(item.lng);
+
+    const latFinal = isFiniteNumber(latFromItem) ? latFromItem : (isFiniteNumber(fromUrl.lat) ? fromUrl.lat : null);
+    const lngFinal = isFiniteNumber(lngFromItem) ? lngFromItem : (isFiniteNumber(fromUrl.lng) ? fromUrl.lng : null);
 
     setForm({
       ...emptyForm,
@@ -309,7 +564,9 @@ export default function AdminPage() {
       price: item.price == null ? '' : String(item.price),
       status: toTextOrEmpty(item.status || 'available'),
       direct: !!item.direct,
-      websiteUrl: toTextOrEmpty(item.websiteUrl || item.website || item.url || ''),
+      websiteUrl: urlFromItem,
+      lat: latFinal == null ? '' : String(round6(latFinal)),
+      lng: lngFinal == null ? '' : String(round6(lngFinal)),
       description: toTextOrEmpty(item.description),
       images: uniq(images),
     });
@@ -323,6 +580,21 @@ export default function AdminPage() {
     setForm((p) => ({ ...p, images: (p.images || []).filter((u) => u !== url) }));
   }
 
+  function setCoords(lat, lng, { updateUrl = true } = {}) {
+    const a = round6(lat);
+    const b = round6(lng);
+    setForm((p) => ({
+      ...p,
+      lat: String(a),
+      lng: String(b),
+      websiteUrl: updateUrl ? buildGoogleMapsUrl(a, b) : p.websiteUrl,
+    }));
+  }
+
+  function clearCoords() {
+    setForm((p) => ({ ...p, lat: '', lng: '' }));
+  }
+
   async function saveListing() {
     setBusy(true);
     setCreatedId('');
@@ -330,17 +602,34 @@ export default function AdminPage() {
       const images = uniq(form.images || []);
       const websiteUrl = String(form.websiteUrl || '').trim();
 
-      // ✅ نلتقط الإحداثيات من رابط الموقع (بدون حقول lat/lng)
-      const { lat, lng } = extractLatLngFromUrl(websiteUrl);
-      const hasCoords = Number.isFinite(lat) && Number.isFinite(lng);
+      // ✅ أولاً: نعتمد إحداثيات الخريطة إن وجدت
+      const latFromForm = toNumberOrNull(form.lat);
+      const lngFromForm = toNumberOrNull(form.lng);
+
+      let lat = isFiniteNumber(latFromForm) ? latFromForm : null;
+      let lng = isFiniteNumber(lngFromForm) ? lngFromForm : null;
+
+      // ✅ ثانياً: لو ما فيه إحداثيات من الخريطة، نجرب نلتقطها من الرابط
+      if (!isFiniteNumber(lat) || !isFiniteNumber(lng)) {
+        const fromUrl = extractLatLngFromUrl(websiteUrl);
+        if (isFiniteNumber(fromUrl.lat) && isFiniteNumber(fromUrl.lng)) {
+          lat = fromUrl.lat;
+          lng = fromUrl.lng;
+        }
+      }
+
+      const hasCoords = isFiniteNumber(lat) && isFiniteNumber(lng);
+
+      // ✅ لو عندنا إحداثيات ولا يوجد رابط، نبنيه تلقائيًا
+      const finalWebsiteUrl = websiteUrl || (hasCoords ? buildGoogleMapsUrl(lat, lng) : '');
 
       const payload = {
         ...form,
         area: toNumberOrNull(form.area),
         price: toNumberOrNull(form.price),
         images,
-        websiteUrl,
-        ...(hasCoords ? { lat, lng } : {}),
+        websiteUrl: finalWebsiteUrl,
+        ...(hasCoords ? { lat: round6(lat), lng: round6(lng) } : {}),
       };
 
       if (editingId) {
@@ -500,6 +789,10 @@ export default function AdminPage() {
     );
   }
 
+  const latNum = toNumberOrNull(form.lat);
+  const lngNum = toNumberOrNull(form.lng);
+  const hasCoords = isFiniteNumber(latNum) && isFiniteNumber(lngNum);
+
   return (
     <div className="container" style={{ paddingTop: 16 }}>
       <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
@@ -614,12 +907,55 @@ export default function AdminPage() {
               </Field>
             </div>
 
+            {/* ✅ رابط الموقع + خريطة */}
             <div className="col-12">
               <Field
-                label="رابط موقع العقار"
-                hint="ضع رابط قوقل ماب أو أي رابط. (إذا كان الرابط يحتوي إحداثيات، سيتم التقاطها تلقائيًا لعرضه على الخريطة بدون إدخال lat/lng)."
+                label="موقع العقار على الخريطة"
+                hint="حدد الموقع من الخريطة (الأفضل). ويمكنك أيضًا لصق رابط Google Maps وسيتم التقاط الإحداثيات تلقائيًا."
               >
-                <input className="input" value={form.websiteUrl} onChange={(e) => setForm({ ...form, websiteUrl: e.target.value })} placeholder="https://maps.google.com/..." />
+                <div className="grid" style={{ gap: 10 }}>
+                  <div>
+                    <input
+                      className="input"
+                      value={form.websiteUrl}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        const fromUrl = extractLatLngFromUrl(v);
+                        const ok = isFiniteNumber(fromUrl.lat) && isFiniteNumber(fromUrl.lng);
+                        setForm((p) => ({
+                          ...p,
+                          websiteUrl: v,
+                          ...(ok ? { lat: String(round6(fromUrl.lat)), lng: String(round6(fromUrl.lng)) } : {}),
+                        }));
+                      }}
+                      placeholder="https://maps.google.com/..."
+                    />
+                    <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', marginTop: 8, gap: 8, flexWrap: 'wrap' }}>
+                      <div className="muted" style={{ fontSize: 12 }}>
+                        {hasCoords ? (
+                          <>تم تحديد: <b>{round6(latNum)}</b>, <b>{round6(lngNum)}</b></>
+                        ) : (
+                          <>لم يتم تحديد موقع بعد.</>
+                        )}
+                      </div>
+                      <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+                        {hasCoords ? (
+                          <>
+                            <a className="btn" href={buildGoogleMapsUrl(latNum, lngNum)} target="_blank" rel="noreferrer">
+                              فتح في خرائط Google
+                            </a>
+                            <button className="btnDanger" type="button" onClick={clearCoords}>مسح الموقع</button>
+                          </>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+
+                  <MapPicker
+                    value={hasCoords ? { lat: latNum, lng: lngNum } : null}
+                    onChange={({ lat, lng }) => setCoords(lat, lng, { updateUrl: true })}
+                  />
+                </div>
               </Field>
             </div>
 
