@@ -97,51 +97,48 @@ function buildGoogleMapsUrl(lat, lng) {
   return `https://www.google.com/maps?q=${a},${b}`;
 }
 
-// ===================== Leaflet loader (CDN) =====================
-let _leafletPromise = null;
+// ===================== Google Maps loader (ONLY) =====================
+let __gmapsPromise = null;
 
-function loadLeaflet() {
-  if (typeof window === 'undefined') return Promise.reject(new Error('Leaflet requires browser environment'));
-  if (window.L) return Promise.resolve(window.L);
-  if (_leafletPromise) return _leafletPromise;
+function loadGoogleMaps(apiKey) {
+  if (typeof window === 'undefined') return Promise.reject(new Error('Google Maps requires browser environment'));
+  if (window.google?.maps) return Promise.resolve(window.google.maps);
+  if (__gmapsPromise) return __gmapsPromise;
 
-  _leafletPromise = new Promise((resolve, reject) => {
+  __gmapsPromise = new Promise((resolve, reject) => {
     try {
-      // CSS
-      const cssId = 'leaflet-css';
-      if (!document.getElementById(cssId)) {
-        const link = document.createElement('link');
-        link.id = cssId;
-        link.rel = 'stylesheet';
-        link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
-        document.head.appendChild(link);
+      if (!apiKey) {
+        reject(new Error('Missing NEXT_PUBLIC_GOOGLE_MAPS_API_KEY'));
+        return;
       }
 
-      // JS
-      const jsId = 'leaflet-js';
-      const existing = document.getElementById(jsId);
+      const id = 'google-maps-js';
+      const existing = document.getElementById(id);
       if (existing) {
-        const check = () => (window.L ? resolve(window.L) : setTimeout(check, 50));
+        const check = () => (window.google?.maps ? resolve(window.google.maps) : setTimeout(check, 60));
         check();
         return;
       }
 
       const script = document.createElement('script');
-      script.id = jsId;
-      script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+      script.id = id;
       script.async = true;
+      script.defer = true;
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&v=weekly&language=ar&region=SA`;
+
       script.onload = () => {
-        if (window.L) resolve(window.L);
-        else reject(new Error('Leaflet loaded but window.L not found'));
+        if (window.google?.maps) resolve(window.google.maps);
+        else reject(new Error('Google Maps loaded but window.google.maps not found'));
       };
-      script.onerror = () => reject(new Error('Failed to load Leaflet from CDN'));
-      document.body.appendChild(script);
+      script.onerror = () => reject(new Error('Failed to load Google Maps script'));
+
+      document.head.appendChild(script);
     } catch (e) {
       reject(e);
     }
   });
 
-  return _leafletPromise;
+  return __gmapsPromise;
 }
 
 function approxSame(a, b, eps = 1e-7) {
@@ -149,9 +146,12 @@ function approxSame(a, b, eps = 1e-7) {
 }
 
 function MapPicker({ value, onChange }) {
+  const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
+
   const mapElRef = useRef(null);
-  const mapObjRef = useRef(null);
+  const mapRef = useRef(null);
   const markerRef = useRef(null);
+  const listenersRef = useRef([]);
 
   const [mapErr, setMapErr] = useState('');
   const [geoErr, setGeoErr] = useState('');
@@ -172,47 +172,68 @@ function MapPicker({ value, onChange }) {
     async function init() {
       setMapErr('');
       try {
-        const L = await loadLeaflet();
+        const gmaps = await loadGoogleMaps(apiKey);
         if (cancelled) return;
         if (!mapElRef.current) return;
-        if (mapObjRef.current) return;
+        if (mapRef.current) return;
 
-        const center = current ? [current.lat, current.lng] : [defaultCenter.lat, defaultCenter.lng];
+        const center = current ? { lat: current.lat, lng: current.lng } : { lat: defaultCenter.lat, lng: defaultCenter.lng };
 
-        const map = L.map(mapElRef.current, {
+        const map = new gmaps.Map(mapElRef.current, {
+          center,
+          zoom: current ? 16 : defaultZoom,
+          mapTypeControl: false,
+          streetViewControl: false,
+          fullscreenControl: false,
+          clickableIcons: false,
+          gestureHandling: 'greedy',
           zoomControl: true,
-          attributionControl: true,
-        }).setView(center, current ? 16 : defaultZoom);
+          zoomControlOptions: { position: gmaps.ControlPosition.RIGHT_CENTER },
+        });
 
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-          maxZoom: 20,
-          attribution: '&copy; OpenStreetMap contributors',
-        }).addTo(map);
+        const marker = new gmaps.Marker({
+          map,
+          position: center,
+          draggable: true,
+        });
 
-        const marker = L.marker(center, { draggable: true }).addTo(map);
-
-        const emit = (latlng) => {
-          const lat = round6(latlng.lat);
-          const lng = round6(latlng.lng);
-          onChange?.({ lat, lng });
+        const emit = (lat, lng) => {
+          const a = round6(lat);
+          const b = round6(lng);
+          onChange?.({ lat: a, lng: b });
         };
 
-        map.on('click', (e) => {
-          marker.setLatLng(e.latlng);
-          emit(e.latlng);
-        });
+        // click on map
+        listenersRef.current.push(
+          map.addListener('click', (e) => {
+            if (!e?.latLng) return;
+            const lat = e.latLng.lat();
+            const lng = e.latLng.lng();
+            marker.setPosition({ lat, lng });
+            emit(lat, lng);
+          })
+        );
 
-        marker.on('dragend', () => {
-          const ll = marker.getLatLng();
-          emit(ll);
-        });
+        // drag marker
+        listenersRef.current.push(
+          marker.addListener('dragend', () => {
+            const pos = marker.getPosition();
+            if (!pos) return;
+            emit(pos.lat(), pos.lng());
+          })
+        );
 
-        mapObjRef.current = map;
+        mapRef.current = map;
         markerRef.current = marker;
         setMapReady(true);
       } catch (e) {
         console.error(e);
-        setMapErr('تعذر تحميل الخريطة. تأكد من السماح بالاتصال بـ unpkg.com أو جرّب شبكة أخرى.');
+        const msg = String(e?.message || '');
+        if (msg.includes('Missing NEXT_PUBLIC_GOOGLE_MAPS_API_KEY')) {
+          setMapErr('مفتاح Google Maps غير موجود. أضف NEXT_PUBLIC_GOOGLE_MAPS_API_KEY في Vercel/.env.local');
+        } else {
+          setMapErr('تعذر تحميل خريطة Google. تأكد من المفتاح وتفعيل Google Maps JavaScript API والسماح بالاتصال بـ maps.googleapis.com');
+        }
       }
     }
 
@@ -221,12 +242,14 @@ function MapPicker({ value, onChange }) {
     return () => {
       cancelled = true;
       try {
-        if (mapObjRef.current) {
-          mapObjRef.current.remove();
-          mapObjRef.current = null;
-          markerRef.current = null;
-        }
+        listenersRef.current.forEach((l) => l?.remove?.());
+        listenersRef.current = [];
       } catch {}
+      try {
+        if (markerRef.current) markerRef.current.setMap(null);
+      } catch {}
+      markerRef.current = null;
+      mapRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -234,16 +257,21 @@ function MapPicker({ value, onChange }) {
   // Sync external value to map/marker
   useEffect(() => {
     try {
-      const map = mapObjRef.current;
+      const map = mapRef.current;
       const marker = markerRef.current;
       if (!map || !marker) return;
       if (!current) return;
 
-      const ll = marker.getLatLng();
-      if (approxSame(ll.lat, current.lat) && approxSame(ll.lng, current.lng)) return;
+      const pos = marker.getPosition();
+      const curLat = pos?.lat?.();
+      const curLng = pos?.lng?.();
+      if (typeof curLat === 'number' && typeof curLng === 'number') {
+        if (approxSame(curLat, current.lat) && approxSame(curLng, current.lng)) return;
+      }
 
-      marker.setLatLng([current.lat, current.lng]);
-      map.setView([current.lat, current.lng], Math.max(map.getZoom() || 16, 16), { animate: true });
+      marker.setPosition({ lat: current.lat, lng: current.lng });
+      map.panTo({ lat: current.lat, lng: current.lng });
+      if ((map.getZoom?.() || 0) < 16) map.setZoom(16);
     } catch {}
   }, [current]);
 
@@ -304,11 +332,11 @@ function MapPicker({ value, onChange }) {
           overflow: hidden;
           border: 1px solid rgba(214, 179, 91, 0.28);
           background: rgba(255,255,255,0.03);
-          min-height: 320px;
+          min-height: 360px;
         }
         .mapEl {
           width: 100%;
-          height: 320px;
+          height: 360px;
         }
         .mapOverlay {
           position: absolute;
@@ -694,7 +722,7 @@ export default function AdminPage() {
 
   async function deleteListing(item) {
     if (!item?.id) return;
-    const ok = confirm(`تأكيد حذف الإعلان نهائيًا؟\n\n${item.title || item.id}`);
+    const ok = confirm(`تأكيد حذف الإعلان نهائيًا?\n\n${item.title || item.id}`);
     if (!ok) return;
 
     setActionBusyId(item.id);
