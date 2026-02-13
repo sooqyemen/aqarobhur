@@ -119,10 +119,7 @@ export default function Footer() {
           font-size: 18px;
           font-weight: 900;
           margin: 0;
-          background: linear-gradient(to right, var(--primary), #fff);
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
-          background-clip: text;
+          color: var(--text); /* تم تغييره من التدرج الذهبي إلى الأسود */
         }
 
         .logoSubtitle {
