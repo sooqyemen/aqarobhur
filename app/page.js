@@ -1,12 +1,46 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, Suspense } from 'react';
 import Link from 'next/link';
-import { useRouter, usePathname } from 'next/navigation';
+import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 
 import ListingCard from '@/components/ListingCard';
 import NeighborhoodGrid from '@/components/NeighborhoodGrid';
 import { fetchLatestListings } from '@/lib/listings';
+
+function QuickLinks() {
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const dealType = searchParams.get('dealType') || '';
+
+  const links = [
+    { href: '/listings', label: 'كل العروض', value: '' },
+    { href: '/listings?dealType=sale', label: 'بيع', value: 'sale' },
+    { href: '/listings?dealType=rent', label: 'إيجار', value: 'rent' },
+    { href: '/map', label: 'الخريطة', value: 'map' },
+  ];
+
+  const isActive = (link) => {
+    if (link.href.startsWith('/listings')) {
+      return pathname === '/listings' && dealType === link.value;
+    }
+    return pathname === link.href;
+  };
+
+  return (
+    <div className="quickBar">
+      {links.map((link) => (
+        <Link
+          key={link.href}
+          href={link.href}
+          className={`pill ${isActive(link) ? 'active' : ''}`}
+        >
+          {link.label}
+        </Link>
+      ))}
+    </div>
+  );
+}
 
 export default function HomePage() {
   const router = useRouter();
@@ -45,7 +79,7 @@ export default function HomePage() {
     }));
   }, [items]);
 
-  const handleSearch = (e) => {
+  const onSearch = (e) => {
     e.preventDefault();
     const value = (q || '').trim();
     if (!value) {
@@ -57,9 +91,28 @@ export default function HomePage() {
 
   return (
     <div className="container" style={{ paddingBottom: 92 }}>
-      <SearchBar q={q} setQ={setQ} onSubmit={handleSearch} />
+      <form className="searchBar" onSubmit={onSearch}>
+        <div className="searchTitle">بحث</div>
+        <div className="searchRow">
+          <input
+            className="input"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="ابحث (مثلاً: الزمرد، 99جس، أرض، شقة...)"
+            aria-label="بحث"
+          />
+          <button className="btn btnPrimary" type="submit">
+            بحث
+          </button>
+        </div>
+      </form>
+
       <NeighborhoodGrid />
-      <QuickLinks />
+
+      {/* لف QuickLinks بـ Suspense لأن useSearchParams يحتاج ذلك */}
+      <Suspense fallback={<div className="quickBar">جاري التحميل...</div>}>
+        <QuickLinks />
+      </Suspense>
 
       <div className="sectionHead">
         <h2 className="h2">أحدث العروض</h2>
@@ -116,42 +169,44 @@ export default function HomePage() {
         .quickBar {
           margin: 12px 0 18px;
           display: flex;
-          gap: 12px;
+          gap: 10px;
           flex-wrap: wrap;
         }
+
+        /* تصميم الشيبس الجديد يشبه تصميم الخريطة */
         .pill {
-          background: rgba(30, 30, 40, 0.7);
-          backdrop-filter: blur(4px);
-          border: 1px solid rgba(214, 179, 91, 0.25);
-          color: #f0e9d8;
-          padding: 12px 24px;
-          border-radius: 40px;
+          background: #ffffff;
+          border: 1px solid #d1d5db;
+          color: #000000;
+          padding: 10px 20px;
+          border-radius: 999px;
           text-decoration: none;
-          font-weight: 600;
-          font-size: 15px;
-          letter-spacing: 0.3px;
+          font-weight: 700;
+          font-size: 14px;
           transition: all 0.2s ease;
-          box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
           display: inline-flex;
           align-items: center;
           justify-content: center;
         }
+
         .pill.active {
-          background: linear-gradient(145deg, #d6b35b, #c09c44);
-          color: #1a1a1a;
+          background: linear-gradient(135deg, var(--primary), var(--primary2));
+          color: #1f2937;
           border-color: transparent;
-          font-weight: 700;
-          box-shadow: 0 6px 14px rgba(214, 179, 91, 0.3);
+          font-weight: 800;
+          box-shadow: 0 4px 10px rgba(214, 179, 91, 0.3);
         }
+
         .pill:hover {
-          transform: translateY(-3px);
-          background: rgba(50, 50, 60, 0.9);
-          border-color: rgba(214, 179, 91, 0.5);
-          box-shadow: 0 8px 18px rgba(0, 0, 0, 0.25);
+          transform: translateY(-2px);
+          background: #f3f4f6;
+          border-color: #9ca3af;
         }
+
         .pill.active:hover {
-          background: linear-gradient(145deg, #e0bc6c, #c9a74d);
-          filter: brightness(1.02);
+          background: linear-gradient(135deg, var(--primary2), var(--primary));
+          filter: brightness(0.98);
         }
 
         .sectionHead {
@@ -180,57 +235,6 @@ export default function HomePage() {
           margin-bottom: 24px;
         }
       `}</style>
-    </div>
-  );
-}
-
-function SearchBar({ q, setQ, onSubmit }) {
-  return (
-    <form className="searchBar" onSubmit={onSubmit}>
-      <div className="searchTitle">بحث</div>
-      <div className="searchRow">
-        <input
-          className="input"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="ابحث (مثلاً: الزمرد، 99جس، أرض، شقة...)"
-          aria-label="بحث"
-        />
-        <button className="btn btnPrimary" type="submit">
-          بحث
-        </button>
-      </div>
-    </form>
-  );
-}
-
-function QuickLinks() {
-  const pathname = usePathname();
-
-  const links = [
-    { href: '/listings', label: 'كل العروض' },
-    { href: '/listings?dealType=sale', label: 'بيع' },
-    { href: '/listings?dealType=rent', label: 'إيجار' },
-    { href: '/map', label: 'الخريطة' },
-  ];
-
-  // دالة بسيطة لتحديد إذا كان الرابط هو الرابط النشط (تجاهل query parameters)
-  const isActive = (href) => {
-    const baseHref = href.split('?')[0];
-    return pathname === baseHref;
-  };
-
-  return (
-    <div className="quickBar">
-      {links.map((link) => (
-        <Link
-          key={link.href}
-          href={link.href}
-          className={`pill ${isActive(link.href) ? 'active' : ''}`}
-        >
-          {link.label}
-        </Link>
-      ))}
     </div>
   );
 }
