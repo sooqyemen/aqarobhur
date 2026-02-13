@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, Suspense } from 'react';
 import Link from 'next/link';
-import { useRouter, usePathname, useSearchParams } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 
 import ListingCard from '@/components/ListingCard';
 import NeighborhoodGrid from '@/components/NeighborhoodGrid';
@@ -28,7 +28,7 @@ function QuickLinks() {
   };
 
   return (
-    <div className="quickBar quickBarHome" role="navigation" aria-label="اختصارات سريعة">
+    <div className="quickBarHome">
       {links.map((link) => (
         <Link
           key={link.href}
@@ -43,11 +43,9 @@ function QuickLinks() {
 }
 
 export default function HomePage() {
-  const router = useRouter();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
-  const [q, setQ] = useState('');
 
   useEffect(() => {
     let alive = true;
@@ -63,6 +61,7 @@ export default function HomePage() {
         if (alive) setLoading(false);
       }
     })();
+
     return () => {
       alive = false;
     };
@@ -75,120 +74,46 @@ export default function HomePage() {
     }));
   }, [items]);
 
-  const onSearch = (e) => {
-    e.preventDefault();
-    const value = (q || '').trim();
-    router.push(value ? `/listings?q=${encodeURIComponent(value)}` : '/listings');
-  };
-
   return (
-    <div className="container" style={{ paddingBottom: 92 }}>
-      <form className="searchBar" onSubmit={onSearch}>
-        <div className="searchTitle">بحث</div>
-        <div className="searchRow">
-          <input
-            className="input"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="ابحث (مثلاً: الزمرد، 99جس، أرض، شقة...)"
-            aria-label="بحث"
-          />
-          <button className="btn btnPrimary" type="submit">
-            بحث
-          </button>
-        </div>
-      </form>
-
+    <div className="container">
+      {/* ✅ أحياء */}
       <NeighborhoodGrid />
 
-      <Suspense fallback={<div className="quickBar quickBarHome">جاري التحميل...</div>}>
+      {/* ✅ اختصارات سريعة */}
+      <Suspense fallback={null}>
         <QuickLinks />
       </Suspense>
 
-      <div className="sectionHead">
-        <h2 className="h2">أحدث العروض</h2>
-        <Link href="/listings" className="more">
+      <div className="row" style={{ justifyContent: 'space-between', marginTop: 8 }}>
+        <div className="sectionTitle" style={{ margin: 0 }}>
+          أحدث العروض
+        </div>
+        <Link href="/listings" className="btn">
           تصفح الكل
         </Link>
       </div>
 
-      {err && (
-        <div className="card" style={{ padding: 14 }}>
+      {err ? (
+        <div className="card" style={{ padding: 14, marginTop: 12 }}>
           {err}
         </div>
-      )}
-      {loading && (
-        <div className="muted" style={{ padding: '10px 0' }}>
+      ) : null}
+
+      {loading ? (
+        <div className="card" style={{ padding: 14, marginTop: 12 }}>
           جاري التحميل…
         </div>
-      )}
-      {!loading && safeItems.length === 0 && (
-        <div className="card" style={{ padding: 16 }}>
+      ) : safeItems.length === 0 ? (
+        <div className="card" style={{ padding: 14, marginTop: 12 }}>
           لا توجد عروض حتى الآن.
         </div>
-      )}
-      {!loading && safeItems.length > 0 && (
-        <div className="list">
+      ) : (
+        <div style={{ marginTop: 12, display: 'grid', gap: 12 }}>
           {safeItems.map((it) => (
             <ListingCard key={it.__key} item={it} />
           ))}
         </div>
       )}
-
-      <style jsx>{`
-        .searchBar {
-          margin: 14px 0 12px;
-          padding: 14px;
-          border-radius: 16px;
-          border: 1px solid var(--border);
-          background: rgba(255, 255, 255, 0.04);
-        }
-        .searchTitle {
-          font-weight: 950;
-          font-size: 16px;
-          margin-bottom: 10px;
-        }
-        .searchRow {
-          display: flex;
-          gap: 10px;
-          align-items: center;
-        }
-        .searchRow :global(.input) {
-          flex: 1;
-          min-width: 0;
-        }
-
-        /* ✅ تنسيقات الأزرار السريعة (كل العروض/بيع/إيجار/الخريطة)
-           صارت في app/globals.css لتكون جاهزة قبل الهيدرشن وتمنع ظهور النصوص بدون ترتيب عند التحديث.
-        */
-
-        /* ========== باقي التنسيقات ========== */
-        .sectionHead {
-          margin: 18px 0 12px;
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 12px;
-        }
-        .h2 {
-          margin: 0;
-          font-size: 18px;
-          font-weight: 950;
-        }
-        .more {
-          text-decoration: none;
-          color: var(--primary);
-          font-weight: 950;
-          font-size: 14px;
-        }
-        .list {
-          margin-top: 12px;
-          display: flex;
-          flex-direction: column;
-          gap: 12px;
-          margin-bottom: 24px;
-        }
-      `}</style>
     </div>
   );
 }
