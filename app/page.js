@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 
 import ListingCard from '@/components/ListingCard';
 import NeighborhoodGrid from '@/components/NeighborhoodGrid';
@@ -15,7 +15,6 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
 
-  // ✅ بحث بسيط
   const [q, setQ] = useState('');
 
   useEffect(() => {
@@ -39,7 +38,6 @@ export default function HomePage() {
     };
   }, []);
 
-  // ✅ مفاتيح ثابتة تمنع التهنيق (بدون Math.random)
   const safeItems = useMemo(() => {
     return (items || []).map((it, index) => ({
       __key: it?.id || it?.docId || `idx-${index}`,
@@ -47,7 +45,7 @@ export default function HomePage() {
     }));
   }, [items]);
 
-  function onSearch(e) {
+  const handleSearch = (e) => {
     e.preventDefault();
     const value = (q || '').trim();
     if (!value) {
@@ -55,47 +53,14 @@ export default function HomePage() {
       return;
     }
     router.push(`/listings?q=${encodeURIComponent(value)}`);
-  }
+  };
 
   return (
     <div className="container" style={{ paddingBottom: 92 }}>
-      {/* ✅ بحث */}
-      <form className="searchBar" onSubmit={onSearch}>
-        <div className="searchTitle">بحث</div>
-        <div className="searchRow">
-          <input
-            className="input"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="ابحث (مثلاً: الزمرد، 99جس، أرض، شقة...)"
-            aria-label="بحث"
-          />
-          <button className="btn btnPrimary" type="submit">
-            بحث
-          </button>
-        </div>
-      </form>
-
-      {/* ✅ الأحياء (شريط أفقي بسيط) */}
+      <SearchBar q={q} setQ={setQ} onSubmit={handleSearch} />
       <NeighborhoodGrid />
+      <QuickLinks />
 
-      {/* ✅ اختصارات سريعة */}
-      <div className="quickBar">
-        <Link href="/listings" className="pill active">
-          كل العروض
-        </Link>
-        <Link href="/listings?dealType=sale" className="pill">
-          بيع
-        </Link>
-        <Link href="/listings?dealType=rent" className="pill">
-          إيجار
-        </Link>
-        <Link href="/map" className="pill">
-          الخريطة
-        </Link>
-      </div>
-
-      {/* ✅ أحدث العروض */}
       <div className="sectionHead">
         <h2 className="h2">أحدث العروض</h2>
         <Link href="/listings" className="more">
@@ -103,11 +68,11 @@ export default function HomePage() {
         </Link>
       </div>
 
-      {err ? (
+      {err && (
         <div className="card" style={{ padding: 14 }}>
           {err}
         </div>
-      ) : null}
+      )}
 
       {loading ? (
         <div className="muted" style={{ padding: '10px 0' }}>
@@ -151,31 +116,42 @@ export default function HomePage() {
         .quickBar {
           margin: 12px 0 18px;
           display: flex;
-          gap: 10px;
+          gap: 12px;
           flex-wrap: wrap;
         }
         .pill {
-          background: rgba(214, 179, 91, 0.1);
-          border: 1px solid rgba(214, 179, 91, 0.18);
-          color: #f6f0df;
-          padding: 10px 16px;
-          border-radius: 999px;
+          background: rgba(30, 30, 40, 0.7);
+          backdrop-filter: blur(4px);
+          border: 1px solid rgba(214, 179, 91, 0.25);
+          color: #f0e9d8;
+          padding: 12px 24px;
+          border-radius: 40px;
           text-decoration: none;
-          font-weight: 950;
-          font-size: 14px;
-          transition: transform 120ms ease, background 120ms ease;
+          font-weight: 600;
+          font-size: 15px;
+          letter-spacing: 0.3px;
+          transition: all 0.2s ease;
+          box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
         }
         .pill.active {
-          background: linear-gradient(135deg, var(--primary), var(--primary2));
-          color: #1f2937;
+          background: linear-gradient(145deg, #d6b35b, #c09c44);
+          color: #1a1a1a;
           border-color: transparent;
+          font-weight: 700;
+          box-shadow: 0 6px 14px rgba(214, 179, 91, 0.3);
         }
         .pill:hover {
-          transform: translateY(-1px);
-          background: #f3f4f6;
+          transform: translateY(-3px);
+          background: rgba(50, 50, 60, 0.9);
+          border-color: rgba(214, 179, 91, 0.5);
+          box-shadow: 0 8px 18px rgba(0, 0, 0, 0.25);
         }
         .pill.active:hover {
-          filter: brightness(0.98);
+          background: linear-gradient(145deg, #e0bc6c, #c9a74d);
+          filter: brightness(1.02);
         }
 
         .sectionHead {
@@ -204,6 +180,57 @@ export default function HomePage() {
           margin-bottom: 24px;
         }
       `}</style>
+    </div>
+  );
+}
+
+function SearchBar({ q, setQ, onSubmit }) {
+  return (
+    <form className="searchBar" onSubmit={onSubmit}>
+      <div className="searchTitle">بحث</div>
+      <div className="searchRow">
+        <input
+          className="input"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="ابحث (مثلاً: الزمرد، 99جس، أرض، شقة...)"
+          aria-label="بحث"
+        />
+        <button className="btn btnPrimary" type="submit">
+          بحث
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function QuickLinks() {
+  const pathname = usePathname();
+
+  const links = [
+    { href: '/listings', label: 'كل العروض' },
+    { href: '/listings?dealType=sale', label: 'بيع' },
+    { href: '/listings?dealType=rent', label: 'إيجار' },
+    { href: '/map', label: 'الخريطة' },
+  ];
+
+  // دالة بسيطة لتحديد إذا كان الرابط هو الرابط النشط (تجاهل query parameters)
+  const isActive = (href) => {
+    const baseHref = href.split('?')[0];
+    return pathname === baseHref;
+  };
+
+  return (
+    <div className="quickBar">
+      {links.map((link) => (
+        <Link
+          key={link.href}
+          href={link.href}
+          className={`pill ${isActive(link.href) ? 'active' : ''}`}
+        >
+          {link.label}
+        </Link>
+      ))}
     </div>
   );
 }
