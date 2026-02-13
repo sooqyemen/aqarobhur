@@ -18,28 +18,36 @@ function escapeHtml(s) {
     .replaceAll("'", '&#039;');
 }
 
-/** تنسيق السعر بشكل مختصر */
+/** تنسيق السعر بالعربية (مثل: 1.4 مليون, 650 ألف) */
 function formatPrice(price) {
   if (price == null) return '?';
   const num = Number(price);
   if (Number.isNaN(num)) return '?';
-  if (num >= 1_000_000) return (num / 1_000_000).toFixed(1) + 'M';
-  if (num >= 1_000) return (num / 1_000).toFixed(1) + 'K';
+  
+  if (num >= 1_000_000) {
+    const millions = (num / 1_000_000).toFixed(1);
+    // حذف .0 إذا كانت زائدة
+    return millions.replace(/\.0$/, '') + ' مليون';
+  }
+  if (num >= 1_000) {
+    const thousands = (num / 1_000).toFixed(1);
+    return thousands.replace(/\.0$/, '') + ' ألف';
+  }
   return String(num);
 }
 
-/** لون العلامة حسب نوع الصفقة */
+/** ألوان العلامة حسب نوع الصفقة */
 function getMarkerColors(dealType) {
   // للبيع: أخضر غامق مع نص أبيض
   if (dealType === 'sale') return { bg: '#10b981', text: '#ffffff' };
-  // للإيجار: أزرق مع نص أسود
-  if (dealType === 'rent') return { bg: '#3b82f6', text: '#000000' };
+  // للإيجار: أزرق مع نص أبيض
+  if (dealType === 'rent') return { bg: '#3b82f6', text: '#ffffff' };
   // افتراضي: رمادي مع نص أبيض
   return { bg: '#6b7280', text: '#ffffff' };
 }
 
 /**
- * ✅ تحميل Google Maps بشكل ثابت (Singleton) + Timeout
+ * ✅ تحميل Google Maps بشكل ثابت (مع مكتبة marker)
  */
 let __gmapsPromise = null;
 
@@ -98,7 +106,8 @@ function loadGoogleMaps(apiKey) {
     script.id = SCRIPT_ID;
     script.async = true;
     script.defer = true;
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&v=weekly&loading=async`;
+    // نضيف مكتبة marker لاستخدام AdvancedMarkerElement
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&v=weekly&libraries=marker&loading=async`;
 
     script.onload = () => {
       clearTimeout(t);
@@ -128,6 +137,7 @@ export default function MapClient() {
 
   const [mapReady, setMapReady] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [useAdvancedMarker, setUseAdvancedMarker] = useState(false); // للكشف عن دعم AdvancedMarker
 
   const mapDivRef = useRef(null);
   const mapRef = useRef(null);
@@ -178,7 +188,7 @@ export default function MapClient() {
     load();
   }, [filters]);
 
-  // init map (بدون libraries.marker)
+  // init map
   useEffect(() => {
     let cancelled = false;
 
@@ -208,6 +218,11 @@ export default function MapClient() {
           fullscreenControl: false,
         });
         infoRef.current = new window.google.maps.InfoWindow();
+
+        // التحقق من دعم AdvancedMarkerElement
+        if (window.google.maps.marker && window.google.maps.marker.AdvancedMarkerElement) {
+          setUseAdvancedMarker(true);
+        }
 
         setMapReady(true);
 
@@ -268,7 +283,7 @@ export default function MapClient() {
     }
   }, [isFullscreen]);
 
-  // markers (Marker عادي مع أيقونة دائرية ونص)
+  // markers
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !window.google?.maps) return;
@@ -290,51 +305,99 @@ export default function MapClient() {
       const priceText = formatPrice(it.price);
       const colors = getMarkerColors(it.dealType);
 
-      // إنشاء أيقونة دائرية مخصصة
-      const markerIcon = {
-        path: window.google.maps.SymbolPath.CIRCLE,
-        fillColor: colors.bg,
-        fillOpacity: 1,
-        strokeColor: '#ffffff',
-        strokeWeight: 2,
-        scale: 20, // قطر 40 بكسل
-        labelOrigin: new window.google.maps.Point(0, 8), // محاولة توسيط النص
-      };
+      let marker;
 
-      const marker = new window.google.maps.Marker({
-        position: pos,
-        map,
-        title: String(it.title || 'عرض'),
-        icon: markerIcon,
-        label: {
-          text: priceText,
-          color: colors.text,
-          fontWeight: 'bold',
-          fontSize: '12px',
-        },
-      });
+      if (useAdvancedMarker && window.google.maps.marker?.AdvancedMarkerElement) {
+        // استخدام AdvancedMarkerElement مع عنصر HTML مخصص (مستطيل)
+        const pinDiv = document.createElement('div');
+        pinDiv.style.backgroundColor = colors.bg;
+        pinDiv.style.color = colors.text;
+        pinDiv.style.fontWeight = '900';
+        pinDiv.style.fontSize = '16px';
+        pinDiv.style.padding = '8px 16px';
+        pinDiv.style.borderRadius = '8px'; // زوايا مدورة قليلاً (يمكن جعلها 0 إذا أردت مستطيلاً حاداً)
+        pinDiv.style.border = '2px solid #1e293b';
+        pinDiv.style.boxShadow = '0 2px 6px rgba(0,0,0,0.3)';
+        pinDiv.style.whiteSpace = 'nowrap';
+        pinDiv.style.fontFamily = 'Arial, sans-serif';
+        pinDiv.style.direction = 'rtl';
+        pinDiv.textContent = priceText;
 
+        marker = new window.google.maps.marker.AdvancedMarkerElement({
+          position: pos,
+          map,
+          title: String(it.title || 'عرض'),
+          content: pinDiv,
+        });
+
+        // ربط الحدث click (AdvancedMarkerElement يستخدم addEventListener)
+        pinDiv.addEventListener('click', () => {
+          const html = `
+            <div style="direction:rtl; font-family: Arial, sans-serif; max-width: 240px;">
+              <div style="font-weight: 900; margin-bottom: 6px;">${escapeHtml(it.title || 'عرض')}</div>
+              <div style="opacity: .85; font-size: 12px; margin-bottom: 8px;">
+                ${escapeHtml(it.neighborhood || '')} ${escapeHtml(it.plan || '')} ${escapeHtml(it.part || '')}
+              </div>
+              <div style="font-size: 13px; margin-bottom: 8px;">
+                النوع: ${it.dealType === 'sale' ? 'بيع' : it.dealType === 'rent' ? 'إيجار' : 'غير محدد'}
+                | السعر: ${escapeHtml(priceText)}
+              </div>
+              <a href="/listing/${encodeURIComponent(it.id)}" style="color:#0b57d0; text-decoration:none; font-weight:900;">فتح التفاصيل</a>
+            </div>
+          `;
+          infoRef.current.setContent(html);
+          infoRef.current.open({ anchor: marker, map });
+        });
+      } else {
+        // Fallback: استخدام Marker العادي مع شكل مستطيل عبر SVG path
+        // أبعاد المستطيل مناسبة للنص: عرض ≈ 120 بكسل، ارتفاع 40 بكسل
+        const markerIcon = {
+          path: 'M -60,-20 L 60,-20 L 60,20 L -60,20 Z', // مستطيل عرض 120، ارتفاع 40
+          fillColor: colors.bg,
+          fillOpacity: 1,
+          strokeColor: '#1e293b',
+          strokeWeight: 2,
+          scale: 1,
+          labelOrigin: new window.google.maps.Point(0, 0), // وسط المستطيل
+          anchor: new window.google.maps.Point(0, 0), // نقطة الارتكاز في المنتصف
+        };
+
+        marker = new window.google.maps.Marker({
+          position: pos,
+          map,
+          title: String(it.title || 'عرض'),
+          icon: markerIcon,
+          label: {
+            text: priceText,
+            color: colors.text,
+            fontWeight: '900',
+            fontSize: '16px',
+          },
+        });
+
+        marker.addListener('click', () => {
+          const html = `
+            <div style="direction:rtl; font-family: Arial, sans-serif; max-width: 240px;">
+              <div style="font-weight: 900; margin-bottom: 6px;">${escapeHtml(it.title || 'عرض')}</div>
+              <div style="opacity: .85; font-size: 12px; margin-bottom: 8px;">
+                ${escapeHtml(it.neighborhood || '')} ${escapeHtml(it.plan || '')} ${escapeHtml(it.part || '')}
+              </div>
+              <div style="font-size: 13px; margin-bottom: 8px;">
+                النوع: ${it.dealType === 'sale' ? 'بيع' : it.dealType === 'rent' ? 'إيجار' : 'غير محدد'}
+                | السعر: ${escapeHtml(priceText)}
+              </div>
+              <a href="/listing/${encodeURIComponent(it.id)}" style="color:#0b57d0; text-decoration:none; font-weight:900;">فتح التفاصيل</a>
+            </div>
+          `;
+          infoRef.current.setContent(html);
+          infoRef.current.open({ anchor: marker, map });
+        });
+      }
+
+      // تخزين العلامة للوصول إليها لاحقاً
       markerByIdRef.current[it.id] = marker;
       markersRef.current.push(marker);
       bounds.extend(pos);
-
-      marker.addListener('click', () => {
-        const html = `
-          <div style="direction:rtl; font-family: Arial, sans-serif; max-width: 240px;">
-            <div style="font-weight: 900; margin-bottom: 6px;">${escapeHtml(it.title || 'عرض')}</div>
-            <div style="opacity: .85; font-size: 12px; margin-bottom: 8px;">
-              ${escapeHtml(it.neighborhood || '')} ${escapeHtml(it.plan || '')} ${escapeHtml(it.part || '')}
-            </div>
-            <div style="font-size: 13px; margin-bottom: 8px;">
-              النوع: ${it.dealType === 'sale' ? 'بيع' : it.dealType === 'rent' ? 'إيجار' : 'غير محدد'}
-              | السعر: ${escapeHtml(priceText)}
-            </div>
-            <a href="/listing/${encodeURIComponent(it.id)}" style="color:#0b57d0; text-decoration:none; font-weight:900;">فتح التفاصيل</a>
-          </div>
-        `;
-        infoRef.current.setContent(html);
-        infoRef.current.open({ anchor: marker, map });
-      });
     });
 
     map.fitBounds(bounds);
@@ -343,7 +406,7 @@ export default function MapClient() {
       map.setZoom(15);
       map.setCenter({ lat: Number(list[0].lat), lng: Number(list[0].lng) });
     }
-  }, [filteredItemsWithCoords, mapReady]); // mapReady يضمن أن الخريطة جاهزة
+  }, [filteredItemsWithCoords, mapReady, useAdvancedMarker]); // إضافة useAdvancedMarker للتبعية
 
   function focusOn(id) {
     const map = mapRef.current;
@@ -352,7 +415,13 @@ export default function MapClient() {
 
     map.setZoom(Math.max(map.getZoom(), 15));
     map.panTo(marker.getPosition());
-    window.google.maps.event.trigger(marker, 'click');
+    // محاكاة النقر على العلامة
+    if (useAdvancedMarker && marker.content) {
+      // AdvancedMarker: نطلق حدث click على العنصر
+      marker.content.dispatchEvent(new Event('click'));
+    } else {
+      window.google.maps.event.trigger(marker, 'click');
+    }
   }
 
   const neighborhoodOptions = useMemo(() => {
