@@ -1,141 +1,112 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 
 import { FEATURED_NEIGHBORHOODS } from '@/lib/taxonomy';
 
-function hashHue(text) {
-  const s = String(text || '');
-  let h = 0;
-  for (let i = 0; i < s.length; i += 1) h = (h * 31 + s.charCodeAt(i)) >>> 0;
-  return h % 360;
-}
+// ✅ شريط أحياء أفقي بالسحب: نفس التصميم، **أسماء فقط** (بدون أي رموز)
+export default function NeighborhoodGrid({
+  title = 'الأحياء',
+  showViewAll = true,
+  maxItems = 12,
+}) {
+  const router = useRouter();
 
-function emojiForNeighborhood(label) {
-  const s = String(label || '');
-  if (s.includes('زمرد')) return '💎';
-  if (s.includes('ياقوت')) return '🔷';
-  if (s.includes('اللؤلؤ')) return '🦪';
-  if (s.includes('الشراع')) return '⛵️';
-  if (s.includes('الصواري')) return '🧭';
-  if (s.includes('أبحر')) return '🌊';
-  if (s.includes('خليج')) return '🏝️';
-  if (s.includes('جوهرة')) return '✨';
-  return '🏘️';
-}
+  const items = (FEATURED_NEIGHBORHOODS || []).slice(0, Math.max(1, Number(maxItems) || 12));
 
-function IconBadge({ label }) {
-  const hue = useMemo(() => hashHue(label), [label]);
-  const emoji = useMemo(() => emojiForNeighborhood(label), [label]);
-  return (
-    <span
-      className="icon"
-      aria-hidden="true"
-      style={{
-        background: `hsla(${hue}, 70%, 55%, 0.18)`,
-        borderColor: `hsla(${hue}, 70%, 60%, 0.35)`,
-      }}
-    >
-      {emoji}
-    </span>
-  );
-}
-
-export default function NeighborhoodGrid() {
-  const items = useMemo(() => FEATURED_NEIGHBORHOODS || [], []);
+  function go(label) {
+    router.push(`/listings?neighborhood=${encodeURIComponent(label)}`);
+  }
 
   return (
-    <section className="wrap" aria-label="الأحياء">
+    <section className="strip">
       <div className="head">
-        <div className="title">الأحياء</div>
-        <Link className="all" href="/neighborhoods">
-          عرض الكل
-        </Link>
+        <h3 className="title">{title}</h3>
+        {showViewAll ? (
+          <Link className="all" href="/neighborhoods">عرض الكل</Link>
+        ) : null}
       </div>
 
-      <div className="rail" role="list">
+      <div className="row" role="list" aria-label="شريط الأحياء">
         {items.map((n) => (
-          <Link
+          <button
             key={n.key}
-            href={`/listings?neighborhood=${encodeURIComponent(n.label)}`}
+            type="button"
             className="chip"
+            onClick={() => go(n.label)}
             role="listitem"
           >
-            <IconBadge label={n.label} />
             <span className="label">{n.label}</span>
-          </Link>
+          </button>
         ))}
       </div>
 
       <style jsx>{`
-        .wrap {
-          margin-top: 10px;
+        .strip {
+          margin: 14px 0 10px;
         }
         .head {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          gap: 10px;
+          gap: 12px;
           margin-bottom: 10px;
         }
         .title {
-          font-weight: 950;
+          margin: 0;
           font-size: 16px;
+          font-weight: 950;
+          letter-spacing: 0.2px;
         }
         .all {
+          color: var(--primary);
           font-weight: 900;
           font-size: 13px;
-          color: var(--primary);
-          text-decoration: none;
-          border: 1px solid rgba(214, 179, 91, 0.18);
-          padding: 8px 12px;
+          padding: 6px 10px;
           border-radius: 999px;
+          border: 1px solid rgba(214, 179, 91, 0.25);
           background: rgba(214, 179, 91, 0.08);
+          text-decoration: none;
         }
 
-        .rail {
+        /* ✅ أفقي بالسحب */
+        .row {
           display: flex;
           gap: 10px;
           overflow-x: auto;
           -webkit-overflow-scrolling: touch;
-          padding-bottom: 6px;
+          padding-bottom: 4px;
+          white-space: nowrap;
+
+          /* إخفاء سكرول بار (اختياري، ما يأثر على السحب) */
+          scrollbar-width: none;
+        }
+        .row::-webkit-scrollbar {
+          display: none;
         }
 
         .chip {
           flex: 0 0 auto;
-          display: inline-flex;
-          align-items: center;
-          gap: 10px;
-          padding: 10px 14px;
-          border-radius: 999px;
           border: 1px solid var(--border);
           background: rgba(255, 255, 255, 0.06);
           color: var(--text);
-          text-decoration: none;
+          padding: 10px 14px;
+          border-radius: 999px;
           font-weight: 950;
-          white-space: nowrap;
+          font-size: 14px;
+          cursor: pointer;
           transition: transform 120ms ease, background 120ms ease, border-color 120ms ease;
+          display: inline-flex;
+          align-items: center;
+        }
+        .label {
+          white-space: nowrap;
         }
         .chip:hover {
           transform: translateY(-1px);
-          border-color: rgba(214, 179, 91, 0.45);
-          background: rgba(214, 179, 91, 0.08);
-        }
-
-        .icon {
-          width: 34px;
-          height: 34px;
-          border-radius: 14px;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 18px;
-          border: 1px solid rgba(255, 255, 255, 0.14);
-          background: rgba(255, 255, 255, 0.06);
-        }
-        .label {
-          font-size: 13px;
+          background: rgba(255, 255, 255, 0.09);
+          border-color: var(--border2);
         }
       `}</style>
     </section>
