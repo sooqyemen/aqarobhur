@@ -298,18 +298,16 @@ export default function MapClient() {
       const priceText = formatPrice(it.price);
       const colors = getMarkerColors(it.dealType);
 
-      // إنشاء أيقونة مستطيلة مخصصة
-      // الأبعاد: عرض 140 بكسل، ارتفاع 50 بكسل (يوسع لاستيعاب "1.4 مليون")
-      // path عبارة عن مستطيل بإحداثيات تبدأ من (-70, -25) إلى (70, 25)
+      // إنشاء أيقونة مستطيلة بحجم مناسب (عرض 120، ارتفاع 40)
       const markerIcon = {
-        path: 'M -70,-25 L 70,-25 L 70,25 L -70,25 Z',
+        path: 'M -60,-20 L 60,-20 L 60,20 L -60,20 Z',
         fillColor: colors.bg,
         fillOpacity: 1,
-        strokeColor: '#1e293b',  // حد داكن للوضوح
+        strokeColor: '#1e293b',
         strokeWeight: 2,
         scale: 1,
-        labelOrigin: new window.google.maps.Point(0, 0),  // توسيط النص
-        anchor: new window.google.maps.Point(0, 0),       // نقطة الارتكاز في المنتصف
+        labelOrigin: new window.google.maps.Point(0, 0),
+        anchor: new window.google.maps.Point(0, 0),
       };
 
       const marker = new window.google.maps.Marker({
@@ -321,7 +319,7 @@ export default function MapClient() {
           text: priceText,
           color: colors.text,
           fontWeight: '900',
-          fontSize: '18px',
+          fontSize: '14px',
         },
       });
 
