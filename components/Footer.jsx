@@ -23,7 +23,8 @@ export default function Footer() {
           {/* الشعار */}
           <div className="brand">
             <div className="footerLogo">
-              <span className="logoIcon">🏠</span>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img className="logoIcon" src="/logo-icon-128.png" alt="" />
               <div className="logoText">
                 <h3 className="logoTitle">عقار أبحر</h3>
                 <span className="logoSubtitle">شمال جدة</span>
@@ -34,15 +35,15 @@ export default function Footer() {
           {/* معلومات الاتصال - أفقية */}
           <div className="contactRow">
             <a href={whatsappLink} className="contactItem" target="_blank" rel="noopener noreferrer">
-              <span className="contactIcon">📱</span>
+              <span className="contactLabel">واتساب</span>
               <span className="contactValue">{phone}</span>
             </a>
             <div className="contactItem">
-              <span className="contactIcon">📧</span>
+              <span className="contactLabel">البريد</span>
               <span className="contactValue">info@aqarobhur.com</span>
             </div>
             <div className="contactItem">
-              <span className="contactIcon">🕐</span>
+              <span className="contactLabel">الدوام</span>
               <span className="contactValue">9ص - 12م</span>
             </div>
           </div>
@@ -103,11 +104,9 @@ export default function Footer() {
           width: 36px;
           height: 36px;
           border-radius: 8px;
-          background: linear-gradient(135deg, var(--primary), var(--primary2));
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 20px;
+          background: rgba(255, 255, 255, 0.10);
+          padding: 6px;
+          object-fit: contain;
           box-shadow: var(--shadow-primary);
         }
 

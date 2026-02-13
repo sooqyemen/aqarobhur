@@ -4,14 +4,12 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 
-import MobileDrawer from '@/components/MobileDrawer';
-
 export default function Header() {
   const pathname = usePathname() || '/';
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
   const [isScrolled, setIsScrolled] = useState(false);
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   const isActive = (href) => (href === '/' ? pathname === '/' : pathname.startsWith(href));
 
@@ -29,26 +27,10 @@ export default function Header() {
     if (pathname === '/') setSearchQuery('');
   }, [pathname]);
 
-  // إغلاق القائمة الجانبية عند تغيير الصفحة
+  // إغلاق القائمة الجانبية عند تغيير المسار
   useEffect(() => {
-    setDrawerOpen(false);
+    setIsMenuOpen(false);
   }, [pathname]);
-
-  // قفل التمرير عند فتح القائمة + إغلاق بالـ ESC
-  useEffect(() => {
-    try {
-      document.body.style.overflow = drawerOpen ? 'hidden' : '';
-    } catch {}
-
-    const onKeyDown = (e) => {
-      if (e.key === 'Escape') setDrawerOpen(false);
-    };
-    if (drawerOpen) window.addEventListener('keydown', onKeyDown);
-    return () => {
-      window.removeEventListener('keydown', onKeyDown);
-      try { document.body.style.overflow = ''; } catch {}
-    };
-  }, [drawerOpen]);
 
   const handleSearch = (e) => {
     e.preventDefault();
@@ -70,6 +52,16 @@ export default function Header() {
     { href: '/account', label: 'الحساب' },
   ], []);
 
+  const mobileLinks = useMemo(() => [
+    { href: '/', label: 'الرئيسية' },
+    { href: '/listings', label: 'كل العروض' },
+    { href: '/listings?dealType=sale', label: 'بيع' },
+    { href: '/listings?dealType=rent', label: 'إيجار' },
+    { href: '/map', label: 'الخريطة' },
+    { href: '/neighborhoods', label: 'الأحياء' },
+    { href: '/request', label: 'أرسل طلبك' },
+  ], []);
+
   return (
     <header className={`header ${isScrolled ? 'scrolled' : ''}`}>
       <div className="container headerInner">
@@ -77,7 +69,9 @@ export default function Header() {
         <Link className="brand" href="/" aria-label="عقار أبحر - الرئيسية">
           <div className="brandMark" aria-hidden="true">
             <div className="markInner">
-              <span className="markIcon">🏠</span>
+              {/* الشعار بدل رمز المنزل */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img className="markLogo" src="/logo-icon-128.png" alt="" />
             </div>
           </div>
           <div className="brandText">
@@ -98,7 +92,6 @@ export default function Header() {
               aria-label="نص البحث"
             />
             <button className="searchButton" type="submit" aria-label="تنفيذ البحث">
-              <span className="searchIcon">🔍</span>
               <span className="searchText">بحث</span>
             </button>
           </div>
@@ -121,17 +114,53 @@ export default function Header() {
         {/* زر القائمة الجانبية للجوال */}
         <button
           className="menuToggle"
-          aria-label="فتح القائمة"
-          aria-expanded={drawerOpen ? 'true' : 'false'}
-          onClick={() => setDrawerOpen((v) => !v)}
+          aria-label={isMenuOpen ? 'إغلاق القائمة' : 'فتح القائمة'}
+          aria-expanded={isMenuOpen ? 'true' : 'false'}
+          onClick={() => setIsMenuOpen((s) => !s)}
           type="button"
         >
-          <span className="menuIcon">☰</span>
+          <span className="hamburger" aria-hidden="true">
+            <span className="line" />
+            <span className="line" />
+            <span className="line" />
+          </span>
         </button>
       </div>
 
       {/* ✅ قائمة جانبية للجوال */}
-      <MobileDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
+      {isMenuOpen ? (
+        <div className="drawerRoot" role="dialog" aria-modal="true" aria-label="القائمة">
+          <button className="drawerOverlay" type="button" onClick={() => setIsMenuOpen(false)} aria-label="إغلاق" />
+          <aside className="drawer">
+            <div className="drawerHead">
+              <div className="drawerBrand">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img className="drawerLogo" src="/logo-icon-128.png" alt="" />
+                <div>
+                  <div className="drawerTitle">عقار أبحر</div>
+                  <div className="drawerSub">شمال جدة</div>
+                </div>
+              </div>
+              <button className="drawerClose" type="button" onClick={() => setIsMenuOpen(false)} aria-label="إغلاق">
+                ×
+              </button>
+            </div>
+
+            <div className="drawerLinks">
+              {mobileLinks.map((l) => (
+                <button
+                  key={l.href}
+                  type="button"
+                  className={`drawerLink ${isActive(l.href.split('?')[0]) && l.href === '/' ? 'active' : ''}`}
+                  onClick={() => router.push(l.href)}
+                >
+                  {l.label}
+                </button>
+              ))}
+            </div>
+          </aside>
+        </div>
+      ) : null}
 
       <style jsx>{`
         .header {
@@ -195,9 +224,11 @@ export default function Header() {
           backdrop-filter: blur(5px);
         }
 
-        .markIcon {
-          font-size: 20px;
-          filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
+        .markLogo {
+          width: 22px;
+          height: 22px;
+          object-fit: contain;
+          filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.25));
         }
 
         .brandText {
@@ -286,10 +317,6 @@ export default function Header() {
           transform: translateY(0);
         }
 
-        .searchIcon {
-          font-size: 14px;
-        }
-
         .searchText {
           font-size: 13px;
         }
@@ -351,9 +378,107 @@ export default function Header() {
           border-color: var(--primary);
         }
 
-        .menuIcon {
-          font-size: 20px;
-          font-weight: bold;
+        .hamburger {
+          width: 18px;
+          height: 14px;
+          display: inline-flex;
+          flex-direction: column;
+          justify-content: space-between;
+        }
+
+        .line {
+          height: 2px;
+          border-radius: 2px;
+          background: rgba(255, 255, 255, 0.92);
+          display: block;
+        }
+
+        /* ===== Drawer ===== */
+        .drawerRoot {
+          position: fixed;
+          inset: 0;
+          z-index: 2000;
+          display: flex;
+          justify-content: flex-end;
+        }
+        .drawerOverlay {
+          position: absolute;
+          inset: 0;
+          background: rgba(0, 0, 0, 0.35);
+          backdrop-filter: blur(4px);
+          border: 0;
+        }
+        .drawer {
+          position: relative;
+          width: min(340px, 88vw);
+          height: 100%;
+          background: rgba(18, 22, 29, 0.98);
+          border-left: 1px solid rgba(255, 255, 255, 0.08);
+          box-shadow: -18px 0 40px rgba(0, 0, 0, 0.35);
+          padding: 14px;
+          display: flex;
+          flex-direction: column;
+          gap: 14px;
+        }
+        .drawerHead {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+        }
+        .drawerBrand {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          min-width: 0;
+        }
+        .drawerLogo {
+          width: 34px;
+          height: 34px;
+          border-radius: 10px;
+          background: rgba(255, 255, 255, 0.06);
+          padding: 6px;
+          object-fit: contain;
+        }
+        .drawerTitle {
+          font-weight: 950;
+          color: #fff;
+          line-height: 1.1;
+        }
+        .drawerSub {
+          font-size: 12px;
+          color: rgba(255, 255, 255, 0.65);
+          margin-top: 2px;
+          font-weight: 700;
+        }
+        .drawerClose {
+          width: 40px;
+          height: 40px;
+          border-radius: 12px;
+          border: 1px solid rgba(255, 255, 255, 0.12);
+          background: rgba(255, 255, 255, 0.06);
+          color: #fff;
+          font-size: 22px;
+          cursor: pointer;
+        }
+        .drawerLinks {
+          display: grid;
+          gap: 10px;
+          margin-top: 4px;
+        }
+        .drawerLink {
+          text-align: right;
+          padding: 12px 12px;
+          border-radius: 14px;
+          border: 1px solid rgba(255, 255, 255, 0.10);
+          background: rgba(255, 255, 255, 0.05);
+          color: #fff;
+          font-weight: 900;
+          cursor: pointer;
+        }
+        .drawerLink:hover {
+          border-color: rgba(214, 179, 91, 0.35);
+          background: rgba(214, 179, 91, 0.12);
         }
 
         /* التجاوب مع الشاشات المختلفة */
@@ -393,7 +518,7 @@ export default function Header() {
           }
           
           .searchText {
-            display: none;
+            display: inline;
           }
           
           .searchButton {

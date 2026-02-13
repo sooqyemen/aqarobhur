@@ -112,22 +112,18 @@ export default function WhatsAppBar() {
     {
       label: 'عروض البيع',
       text: 'السلام عليكم، أريد عروض للبيع في عقار أبحر.',
-      icon: '💰'
     },
     {
       label: 'عروض الإيجار',
       text: 'السلام عليكم، أريد عروض للإيجار في عقار أبحر.',
-      icon: '🏠'
     },
     {
       label: 'استفسار عام',
       text: 'السلام عليكم، عندي استفسار عن عقار أبحر.',
-      icon: '❓'
     },
     {
       label: 'طلب خاص',
       text: 'السلام عليكم، عندي طلب خاص وأريد مساعدتكم.',
-      icon: '📝'
     }
   ];
 
@@ -142,7 +138,7 @@ export default function WhatsAppBar() {
       {hasNotification && (
         <div className="whatsappNotification">
           <div className="notificationContent">
-            <div className="notificationIcon">💬</div>
+            <div className="notificationIcon" aria-hidden="true" />
             <div className="notificationText">
               <strong>تواصل معنا!</strong>
               <span>اسأل عن أي عرض عبر واتساب</span>
@@ -188,7 +184,6 @@ export default function WhatsAppBar() {
                   rel="noopener noreferrer"
                   aria-label={`إرسال رسالة: ${link.label}`}
                 >
-                  <span className="messageIcon">{link.icon}</span>
                   <span className="messageLabel">{link.label}</span>
                 </a>
               ))}
@@ -209,7 +204,6 @@ export default function WhatsAppBar() {
                 rel="noopener noreferrer"
                 aria-label="إرسال الرسالة المخصصة"
               >
-                <span className="sendIcon">✈️</span>
                 <span className="sendText">إرسال الرسالة</span>
               </a>
             </div>
@@ -217,11 +211,10 @@ export default function WhatsAppBar() {
           
           <div className="expandedFooter">
             <div className="contactInfo">
-              <span className="contactIcon">📱</span>
+              <span className="contactLabel">واتساب:</span>
               <span className="contactNumber">{phone}</span>
             </div>
             <div className="responseTime">
-              <span className="timeIcon">⏱️</span>
               <span className="timeText">متوسط وقت الرد: 15 دقيقة</span>
             </div>
           </div>
@@ -265,10 +258,7 @@ export default function WhatsAppBar() {
             </div>
           )}
 
-          {/* أيقونة التوسيع/التقليص */}
-          <div className="expandIcon">
-            <span className="iconArrow">{isExpanded ? '▼' : '▲'}</span>
-          </div>
+          {/* بدون رموز */}
         </div>
 
         {/* تأثير التوهج */}
@@ -286,7 +276,20 @@ export default function WhatsAppBar() {
         rel="noopener noreferrer"
         aria-label="فتح واتساب مباشرة"
       >
-        <span className="mobileIcon">💬</span>
+        <span className="mobileIcon" aria-hidden="true">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
+            <path
+              d="M12 2a9.5 9.5 0 0 0-8.2 14.3L3 22l5.9-0.8A9.5 9.5 0 1 0 12 2Z"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinejoin="round"
+            />
+            <path
+              d="M9.2 8.5c.2-.5.4-.5.6-.5h.6c.2 0 .4 0 .5.4l.7 1.7c.1.3.1.5-.1.7l-.4.5c-.1.2-.1.4 0 .6.5.8 1.4 1.7 2.2 2.2.2.1.4.1.6 0l.5-.4c.2-.2.4-.2.7-.1l1.7.7c.3.1.4.3.4.5v.6c0 .2 0 .4-.5.6-.5.2-1.6.6-3.7-.3-2.1-1-3.7-3.1-4.1-3.8-.4-.7-.9-2.4-.3-3.8Z"
+              fill="currentColor"
+            />
+          </svg>
+        </span>
       </a>
 
       <style jsx>{`
@@ -657,20 +660,6 @@ export default function WhatsAppBar() {
           justify-content: center;
           border: 2px solid var(--bg2);
           animation: pulse 2s infinite;
-        }
-
-        .expandIcon {
-          color: white;
-          font-size: 18px;
-          transition: transform 0.3s ease;
-        }
-
-        .whatsappButton.active .expandIcon {
-          transform: rotate(180deg);
-        }
-
-        .iconArrow {
-          display: block;
         }
 
         /* تأثير التوهج */

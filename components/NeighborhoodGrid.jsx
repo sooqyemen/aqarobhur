@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 
 import { FEATURED_NEIGHBORHOODS } from '@/lib/taxonomy';
 
-// ✅ شريط أحياء أفقي بالسحب: نفس التصميم، **أسماء فقط** (بدون أي رموز)
+// ✅ شريط أحياء أفقي (مثل حراج): أسماء فقط، بدون رموز/بطاقات كبيرة
 export default function NeighborhoodGrid({
   title = 'الأحياء',
   showViewAll = true,
@@ -37,7 +37,7 @@ export default function NeighborhoodGrid({
             onClick={() => go(n.label)}
             role="listitem"
           >
-            <span className="label">{n.label}</span>
+            {n.label}
           </button>
         ))}
       </div>
@@ -70,7 +70,6 @@ export default function NeighborhoodGrid({
           text-decoration: none;
         }
 
-        /* ✅ أفقي بالسحب */
         .row {
           display: flex;
           gap: 10px;
@@ -78,14 +77,7 @@ export default function NeighborhoodGrid({
           -webkit-overflow-scrolling: touch;
           padding-bottom: 4px;
           white-space: nowrap;
-
-          /* إخفاء سكرول بار (اختياري، ما يأثر على السحب) */
-          scrollbar-width: none;
         }
-        .row::-webkit-scrollbar {
-          display: none;
-        }
-
         .chip {
           flex: 0 0 auto;
           border: 1px solid var(--border);
@@ -97,11 +89,6 @@ export default function NeighborhoodGrid({
           font-size: 14px;
           cursor: pointer;
           transition: transform 120ms ease, background 120ms ease, border-color 120ms ease;
-          display: inline-flex;
-          align-items: center;
-        }
-        .label {
-          white-space: nowrap;
         }
         .chip:hover {
           transform: translateY(-1px);
