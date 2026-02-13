@@ -46,14 +46,13 @@ export default function AccountPage() {
     }
   }
 
-  // لم نعد نستخدم isAdmin في العرض، لكن يمكن الاحتفاظ بالمنطق إن أردت توجيه الأدمن تلقائياً مستقبلاً
-  // const isAdmin = isAdminUser(user);
+  const isAdmin = isAdminUser(user);
 
   return (
     <div className="container">
       <div className="head">
         <h1 className="h1">الحساب</h1>
-        {/* تم إزالة النص الذي كان يذكر الأدمن */}
+        {/* تم حذف النص: الأدمن لا يظهر للزوار — فقط هنا إذا كنت أدمن */}
       </div>
 
       {user ? (
@@ -61,15 +60,22 @@ export default function AccountPage() {
           <div className="row">
             <div>
               <div className="name">{user.email}</div>
-              {/* تم إزالة عرض الصلاحية */}
+              <div className="muted" style={{ fontSize: 12 }}>
+                {isAdmin ? 'صلاحية: أدمن' : 'صلاحية: مستخدم'}
+              </div>
             </div>
             <button className="btn" onClick={doLogout} disabled={busy}>تسجيل خروج</button>
           </div>
-          {/* تم إزالة قسم الأدمن بالكامل */}
+
+          {isAdmin ? (
+            <div className="admin">
+              <Link href="/admin" className="btn btnPrimary">الدخول إلى لوحة الأدمن</Link>
+            </div>
+          ) : null}
         </div>
       ) : (
         <form className="card box" onSubmit={doLogin}>
-          {/* لم يعد هناك نص إضافي قبل الحقول */}
+          {/* تم حذف النص: سجّل دخولك لإدارة العروض (للأدمن فقط) */}
 
           <label className="lbl">البريد</label>
           <input className="input" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="email@example.com" />
@@ -93,6 +99,7 @@ export default function AccountPage() {
         .name{font-weight:900}
         .lbl{display:block;margin-top:10px;margin-bottom:6px;font-weight:900}
         .err{margin-top:10px;color:var(--danger);font-weight:900}
+        .admin{margin-top:12px}
       `}</style>
     </div>
   );
