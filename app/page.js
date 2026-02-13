@@ -167,12 +167,12 @@ export default function HomePage() {
         }
         .pill.active {
           background: linear-gradient(135deg, var(--primary), var(--primary2));
-          color: #0a0d12;
+          color: #1f2937;
           border-color: transparent;
         }
         .pill:hover {
           transform: translateY(-1px);
-          background: rgba(255, 255, 255, 0.09);
+          background: #f3f4f6;
         }
         .pill.active:hover {
           filter: brightness(0.98);
