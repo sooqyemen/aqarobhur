@@ -1,381 +1,159 @@
 'use client';
 
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
 
 export default function Header() {
-  const pathname = usePathname() || '/';
+  const pathname = usePathname();
   const router = useRouter();
-  const [searchQuery, setSearchQuery] = useState('');
-  const [isScrolled, setIsScrolled] = useState(false);
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
 
-  const isActive = (href) => (href === '/' ? pathname === '/' : pathname.startsWith(href));
+  const [q, setQ] = useState('');
+  const [menuOpen, setMenuOpen] = useState(false);
 
-  // تتبع التمرير لتغيير مظهر الهيدر
+  const navLinks = useMemo(
+    () => [
+      { href: '/', label: 'الرئيسية' },
+      { href: '/listings', label: 'كل العروض' },
+      { href: '/map', label: 'الخريطة' },
+      { href: '/neighborhoods', label: 'الأحياء' },
+      { href: '/request', label: 'أرسل طلبك' },
+    ],
+    []
+  );
+
+  // قفل/فتح القائمة يمنع التمرير بالخلفية
   useEffect(() => {
-    const handleScroll = () => {
-      setIsScrolled(window.scrollY > 10);
+    if (typeof document === 'undefined') return;
+    if (menuOpen) document.body.style.overflow = 'hidden';
+    else document.body.style.overflow = '';
+    return () => {
+      document.body.style.overflow = '';
     };
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
+  }, [menuOpen]);
+
+  // إغلاق بالضغط على Escape
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === 'Escape') setMenuOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  // إعادة تعيين البحث عند العودة للصفحة الرئيسية
-  useEffect(() => {
-    if (pathname === '/') setSearchQuery('');
-  }, [pathname]);
-
-  // إغلاق القائمة الجانبية عند تغيير المسار
-  useEffect(() => {
-    setIsMenuOpen(false);
-  }, [pathname]);
-
-  const handleSearch = (e) => {
+  function onSearch(e) {
     e.preventDefault();
-    const query = String(searchQuery || '').trim();
-    
-    if (!query) {
+    const value = (q || '').trim();
+    if (!value) {
       router.push('/listings');
       return;
     }
-    
-    router.push(`/listings?q=${encodeURIComponent(query)}`);
-  };
+    router.push(`/listings?q=${encodeURIComponent(value)}`);
+  }
 
-  // روابط التنقل الرئيسية
-  const navLinks = useMemo(() => [
-    { href: '/listings', label: 'كل العروض' },
-    { href: '/map', label: 'الخريطة' },
-    { href: '/request', label: 'أرسل طلبك' },
-    { href: '/account', label: 'الحساب' },
-  ], []);
-
-  const mobileLinks = useMemo(() => [
-    { href: '/', label: 'الرئيسية' },
-    { href: '/listings', label: 'كل العروض' },
-    { href: '/listings?dealType=sale', label: 'بيع' },
-    { href: '/listings?dealType=rent', label: 'إيجار' },
-    { href: '/map', label: 'الخريطة' },
-    { href: '/neighborhoods', label: 'الأحياء' },
-    { href: '/request', label: 'أرسل طلبك' },
-  ], []);
+  function isActive(href) {
+    if (href === '/') return pathname === '/';
+    return pathname?.startsWith(href);
+  }
 
   return (
-    <header className={`header ${isScrolled ? 'scrolled' : ''}`}>
-      <div className="container headerInner">
-        {/* الشعار */}
-        <Link className="brand" href="/" aria-label="عقار أبحر - الرئيسية">
-          <div className="brandMark" aria-hidden="true">
-            <div className="markInner">
-              {/* الشعار بدل رمز المنزل */}
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img className="markLogo" src="/logo-icon-128.png" alt="" />
+    <>
+      <header className="header">
+        <div className="container bar">
+          <button
+            type="button"
+            className="menuBtn"
+            aria-label="القائمة"
+            aria-expanded={menuOpen ? 'true' : 'false'}
+            onClick={() => setMenuOpen(true)}
+          >
+            <span className="hamburger" aria-hidden="true">
+              <span />
+              <span />
+              <span />
+            </span>
+          </button>
+
+          <Link href="/" className="brand" aria-label="الصفحة الرئيسية">
+            <div className="brandText">
+              <div className="brandTitle">عقار أبحر</div>
+              <div className="brandSub">شمال جدة</div>
             </div>
-          </div>
-          <div className="brandText">
-            <span className="brandTitle">عقار أبحر</span>
-            <span className="brandSub">شمال جدة</span>
-          </div>
-        </Link>
+          </Link>
 
-        {/* شريط البحث */}
-        <form className="searchForm" onSubmit={handleSearch} role="search" aria-label="بحث عن عقارات">
-          <div className="searchWrapper">
+          <form className="search" onSubmit={onSearch} role="search" aria-label="بحث">
             <input
-              className="searchInput"
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="ابحث عن حي / مخطط / جزء..."
-              aria-label="نص البحث"
+              className="input searchInput"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="ابحث عن حي / مخطط / جزء…"
             />
-            <button className="searchButton" type="submit" aria-label="تنفيذ البحث">
-              <span className="searchText">بحث</span>
-            </button>
-          </div>
-        </form>
+            <button className="btn btnPrimary searchBtn" type="submit">بحث</button>
+          </form>
+        </div>
+      </header>
 
-        {/* روابط التنقل (لأجهزة سطح المكتب) */}
-        <nav className="desktopNav" aria-label="القائمة الرئيسية">
-          {navLinks.map((link) => (
+      {/* Sidebar / Drawer */}
+      <div className={menuOpen ? 'overlay show' : 'overlay'} onClick={() => setMenuOpen(false)} />
+
+      <aside className={menuOpen ? 'drawer show' : 'drawer'} aria-hidden={menuOpen ? 'false' : 'true'}>
+        <div className="drawerHead">
+          <div className="drawerBrand">
+            <div className="drawerTitle">عقار أبحر</div>
+            <div className="drawerSub">القائمة</div>
+          </div>
+
+          <button type="button" className="closeBtn" onClick={() => setMenuOpen(false)}>
+            إغلاق
+          </button>
+        </div>
+
+        <nav className="drawerNav" aria-label="روابط التنقل">
+          {navLinks.map((l) => (
             <Link
-              key={link.href}
-              href={link.href}
-              className={`navLink ${isActive(link.href) ? 'active' : ''}`}
-              aria-current={isActive(link.href) ? 'page' : undefined}
+              key={l.href}
+              href={l.href}
+              className={isActive(l.href) ? 'drawerLink active' : 'drawerLink'}
+              onClick={() => setMenuOpen(false)}
             >
-              {link.label}
+              {l.label}
             </Link>
           ))}
         </nav>
 
-        {/* زر القائمة الجانبية للجوال */}
-        <button
-          className="menuToggle"
-          aria-label={isMenuOpen ? 'إغلاق القائمة' : 'فتح القائمة'}
-          aria-expanded={isMenuOpen ? 'true' : 'false'}
-          onClick={() => setIsMenuOpen((s) => !s)}
-          type="button"
-        >
-          <span className="hamburger" aria-hidden="true">
-            <span className="line" />
-            <span className="line" />
-            <span className="line" />
-          </span>
-        </button>
-      </div>
-
-      {/* ✅ قائمة جانبية للجوال */}
-      {isMenuOpen ? (
-        <div className="drawerRoot" role="dialog" aria-modal="true" aria-label="القائمة">
-          <button className="drawerOverlay" type="button" onClick={() => setIsMenuOpen(false)} aria-label="إغلاق" />
-          <aside className="drawer">
-            <div className="drawerHead">
-              <div className="drawerBrand">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img className="drawerLogo" src="/logo-icon-128.png" alt="" />
-                <div>
-                  <div className="drawerTitle">عقار أبحر</div>
-                  <div className="drawerSub">شمال جدة</div>
-                </div>
-              </div>
-              <button className="drawerClose" type="button" onClick={() => setIsMenuOpen(false)} aria-label="إغلاق">
-                ×
-              </button>
-            </div>
-
-            <div className="drawerLinks">
-              {mobileLinks.map((l) => (
-                <button
-                  key={l.href}
-                  type="button"
-                  className={`drawerLink ${isActive(l.href.split('?')[0]) && l.href === '/' ? 'active' : ''}`}
-                  onClick={() => router.push(l.href)}
-                >
-                  {l.label}
-                </button>
-              ))}
-            </div>
-          </aside>
+        <div className="drawerFoot muted">
+          استخدم البحث للوصول السريع للعروض.
         </div>
-      ) : null}
+      </aside>
 
       <style jsx>{`
         .header {
           position: sticky;
           top: 0;
-          z-index: 100;
-          background: rgba(10, 13, 18, 0.85);
-          backdrop-filter: blur(15px);
+          z-index: 50;
+          backdrop-filter: blur(12px);
+          background: rgba(255, 255, 255, 0.85);
           border-bottom: 1px solid var(--border);
-          transition: all 0.3s ease;
-          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
         }
 
-        .header.scrolled {
-          background: rgba(10, 13, 18, 0.95);
-          border-bottom: 1px solid rgba(214, 179, 91, 0.2);
-          box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-        }
-
-        .headerInner {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 16px;
-          padding: 14px 0;
-          height: 70px;
-        }
-
-        /* الشعار */
-        .brand {
+        .bar {
           display: flex;
           align-items: center;
           gap: 12px;
-          text-decoration: none;
-          color: white;
-          min-width: 0;
-          flex-shrink: 0;
+          padding: 10px 0;
         }
 
-        .brandMark {
-          width: 44px;
-          height: 44px;
+        .menuBtn {
+          width: 42px;
+          height: 42px;
           border-radius: 14px;
-          background: linear-gradient(135deg, var(--primary), var(--primary2));
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          box-shadow: var(--shadow-primary);
-          position: relative;
-          overflow: hidden;
-        }
-
-        .markInner {
-          width: 36px;
-          height: 36px;
-          background: rgba(255, 255, 255, 0.15);
-          border-radius: 10px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          backdrop-filter: blur(5px);
-        }
-
-        .markLogo {
-          width: 22px;
-          height: 22px;
-          object-fit: contain;
-          filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.25));
-        }
-
-        .brandText {
-          display: flex;
-          flex-direction: column;
-          line-height: 1.2;
-        }
-
-        .brandTitle {
-          font-weight: 900;
-          font-size: 18px;
-          letter-spacing: -0.3px;
-          background: linear-gradient(to right, #fff, var(--primary));
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
-          background-clip: text;
-        }
-
-        .brandSub {
-          font-size: 11px;
-          color: var(--muted);
-          font-weight: 700;
-          margin-top: 2px;
-        }
-
-        /* شريط البحث */
-        .searchForm {
-          flex: 1;
-          max-width: 500px;
-          min-width: 200px;
-        }
-
-        .searchWrapper {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          background: rgba(255, 255, 255, 0.08);
           border: 1px solid var(--border);
-          border-radius: 14px;
-          padding: 6px;
-          transition: all 0.2s ease;
-        }
-
-        .searchWrapper:focus-within {
-          background: rgba(255, 255, 255, 0.12);
-          border-color: var(--primary);
-          box-shadow: 0 0 0 3px var(--primary-light);
-        }
-
-        .searchInput {
-          flex: 1;
-          border: none;
-          background: transparent;
-          color: white;
-          font-size: 14px;
-          padding: 10px 14px;
-          outline: none;
-          min-width: 0;
-        }
-
-        .searchInput::placeholder {
-          color: rgba(255, 255, 255, 0.5);
-        }
-
-        .searchButton {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          background: linear-gradient(135deg, var(--primary), var(--primary2));
-          border: none;
-          color: #000;
-          font-weight: 800;
-          padding: 10px 16px;
-          border-radius: 12px;
+          background: #ffffff;
           cursor: pointer;
-          transition: all 0.2s ease;
-          white-space: nowrap;
-        }
-
-        .searchButton:hover {
-          transform: translateY(-1px);
-          box-shadow: 0 8px 20px rgba(214, 179, 91, 0.3);
-        }
-
-        .searchButton:active {
-          transform: translateY(0);
-        }
-
-        .searchText {
-          font-size: 13px;
-        }
-
-        /* روابط التنقل (سطح المكتب) */
-        .desktopNav {
-          display: none;
-          align-items: center;
-          gap: 20px;
-        }
-
-        .navLink {
-          color: rgba(255, 255, 255, 0.8);
-          text-decoration: none;
-          font-weight: 700;
-          font-size: 13px;
-          padding: 6px 0;
-          position: relative;
-          transition: color 0.2s ease;
-          white-space: nowrap;
-        }
-
-        .navLink:hover {
-          color: white;
-        }
-
-        .navLink.active {
-          color: var(--primary);
-        }
-
-        .navLink.active::after {
-          content: '';
-          position: absolute;
-          bottom: 0;
-          left: 0;
-          right: 0;
-          height: 2px;
-          background: var(--primary);
-          border-radius: 1px;
-        }
-
-        /* زر القائمة الجانبية */
-        .menuToggle {
-          display: flex;
+          display: inline-flex;
           align-items: center;
           justify-content: center;
-          width: 44px;
-          height: 44px;
-          background: rgba(255, 255, 255, 0.08);
-          border: 1px solid var(--border);
-          border-radius: 12px;
-          color: white;
-          cursor: pointer;
-          transition: all 0.2s ease;
-        }
-
-        .menuToggle:hover {
-          background: rgba(255, 255, 255, 0.12);
-          border-color: var(--primary);
+          box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
         }
 
         .hamburger {
@@ -385,186 +163,176 @@ export default function Header() {
           flex-direction: column;
           justify-content: space-between;
         }
-
-        .line {
+        .hamburger span {
           height: 2px;
-          border-radius: 2px;
-          background: rgba(255, 255, 255, 0.92);
-          display: block;
+          width: 100%;
+          background: var(--text);
+          border-radius: 999px;
         }
 
-        /* ===== Drawer ===== */
-        .drawerRoot {
+        .brand {
+          display: inline-flex;
+          align-items: center;
+          gap: 10px;
+          text-decoration: none;
+          color: var(--text);
+        }
+
+        .brandTitle {
+          font-weight: 950;
+          line-height: 1.2;
+        }
+        .brandSub {
+          font-size: 12px;
+          color: var(--muted);
+          font-weight: 800;
+          margin-top: 2px;
+        }
+
+        .search {
+          flex: 1;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        }
+        .searchInput {
+          height: 42px;
+        }
+        .searchBtn {
+          height: 42px;
+          padding: 0 16px;
+        }
+
+        /* Drawer */
+        .overlay {
           position: fixed;
           inset: 0;
-          z-index: 2000;
-          display: flex;
-          justify-content: flex-end;
+          background: rgba(15, 23, 42, 0.25);
+          opacity: 0;
+          pointer-events: none;
+          transition: opacity 180ms ease;
+          z-index: 60;
         }
-        .drawerOverlay {
-          position: absolute;
-          inset: 0;
-          background: rgba(0, 0, 0, 0.35);
-          backdrop-filter: blur(4px);
-          border: 0;
+        .overlay.show {
+          opacity: 1;
+          pointer-events: auto;
         }
+
         .drawer {
-          position: relative;
-          width: min(340px, 88vw);
-          height: 100%;
-          background: rgba(18, 22, 29, 0.98);
-          border-left: 1px solid rgba(255, 255, 255, 0.08);
-          box-shadow: -18px 0 40px rgba(0, 0, 0, 0.35);
-          padding: 14px;
+          position: fixed;
+          top: 0;
+          bottom: 0;
+          right: 0;
+          width: min(86vw, 340px);
+          background: #ffffff; /* خلفية بيضاء صلبة */
+          border-left: 1px solid var(--border);
+          box-shadow: -8px 0 30px rgba(15, 23, 42, 0.15);
+          transform: translateX(110%);
+          transition: transform 220ms ease;
+          z-index: 70;
           display: flex;
           flex-direction: column;
-          gap: 14px;
+          padding: 14px;
         }
+        .drawer.show {
+          transform: translateX(0);
+        }
+
         .drawerHead {
           display: flex;
           align-items: center;
           justify-content: space-between;
           gap: 10px;
+          margin-bottom: 12px;
+          padding-bottom: 8px;
+          border-bottom: 1px solid var(--border);
         }
+
         .drawerBrand {
           display: flex;
-          align-items: center;
-          gap: 10px;
-          min-width: 0;
+          flex-direction: column;
         }
-        .drawerLogo {
-          width: 34px;
-          height: 34px;
-          border-radius: 10px;
-          background: rgba(255, 255, 255, 0.06);
-          padding: 6px;
-          object-fit: contain;
-        }
+
         .drawerTitle {
           font-weight: 950;
-          color: #fff;
-          line-height: 1.1;
+          line-height: 1.2;
+          color: #000000; /* أسود صريح */
+          font-size: 18px;
         }
         .drawerSub {
           font-size: 12px;
-          color: rgba(255, 255, 255, 0.65);
-          margin-top: 2px;
-          font-weight: 700;
+          color: var(--muted);
+          font-weight: 800;
         }
-        .drawerClose {
-          width: 40px;
-          height: 40px;
-          border-radius: 12px;
-          border: 1px solid rgba(255, 255, 255, 0.12);
-          background: rgba(255, 255, 255, 0.06);
-          color: #fff;
-          font-size: 22px;
+
+        .closeBtn {
+          background: #f1f5f9;
+          border: 1px solid var(--border);
+          border-radius: 30px;
+          padding: 8px 16px;
+          font-weight: 900;
+          font-size: 14px;
+          color: var(--text);
           cursor: pointer;
+          transition: all 0.1s ease;
         }
-        .drawerLinks {
+        .closeBtn:hover {
+          background: #e2e8f0;
+        }
+
+        .drawerNav {
           display: grid;
           gap: 10px;
-          margin-top: 4px;
+          margin-top: 6px;
+          flex: 1;
         }
+
         .drawerLink {
-          text-align: right;
-          padding: 12px 12px;
+          border: 1px solid var(--border);
+          background: #f8fafc;
+          color: #000000; /* نص أسود */
+          text-decoration: none;
+          padding: 14px 16px;
           border-radius: 14px;
-          border: 1px solid rgba(255, 255, 255, 0.10);
-          background: rgba(255, 255, 255, 0.05);
-          color: #fff;
-          font-weight: 900;
-          cursor: pointer;
+          font-weight: 950;
+          font-size: 16px;
+          transition: all 0.1s ease;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.05);
         }
+
         .drawerLink:hover {
-          border-color: rgba(214, 179, 91, 0.35);
-          background: rgba(214, 179, 91, 0.12);
+          background: #f1f5f9;
+          border-color: var(--border2);
         }
 
-        /* التجاوب مع الشاشات المختلفة */
-        @media (min-width: 1024px) {
-          .desktopNav {
-            display: flex;
-          }
-          
-          .menuToggle {
-            display: none;
-          }
-          
-          .brandTitle {
-            font-size: 19px;
-          }
+        .drawerLink.active {
+          border-color: rgba(214, 179, 91, 0.7);
+          background: rgba(214, 179, 91, 0.15);
+          color: #000000;
         }
 
+        .drawerFoot {
+          margin-top: auto;
+          padding-top: 12px;
+          border-top: 1px solid var(--border);
+          font-size: 12px;
+          color: var(--muted);
+          font-weight: 700;
+        }
+
+        /* Responsive tweaks */
         @media (max-width: 768px) {
-          .headerInner {
-            gap: 12px;
-            padding: 12px 0;
-            height: 64px;
+          .bar {
+            flex-wrap: wrap;
           }
-          
-          .brandMark {
-            width: 40px;
-            height: 40px;
+          .brand {
+            min-width: unset;
           }
-          
-          .markInner {
-            width: 32px;
-            height: 32px;
+          .search {
+            width: 100%;
           }
-          
-          .brandSub {
-            display: none;
-          }
-          
-          .searchText {
-            display: inline;
-          }
-          
-          .searchButton {
-            padding: 10px;
-          }
-        }
-
-        @media (max-width: 480px) {
-          .brandTitle {
-            font-size: 16px;
-          }
-          
-          .searchInput {
-            font-size: 13px;
-            padding: 8px 12px;
-          }
-          
-          .searchButton {
-            padding: 8px;
-          }
-          
-          .menuToggle {
-            width: 40px;
-            height: 40px;
-          }
-        }
-
-        /* تحسينات للوضع المظلم في المتصفح */
-        @media (prefers-color-scheme: dark) {
-          .header {
-            background: rgba(10, 13, 18, 0.95);
-          }
-        }
-
-        /* تحسينات للوصول */
-        .navLink:focus-visible,
-        .searchButton:focus-visible,
-        .menuToggle:focus-visible {
-          outline: 2px solid var(--primary);
-          outline-offset: 2px;
-        }
-
-        .searchInput:focus-visible {
-          outline: none;
         }
       `}</style>
-    </header>
+    </>
   );
 }
