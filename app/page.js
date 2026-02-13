@@ -8,6 +8,7 @@ import ListingCard from '@/components/ListingCard';
 import NeighborhoodGrid from '@/components/NeighborhoodGrid';
 import { fetchLatestListings } from '@/lib/listings';
 
+// مكون منفصل للشيبس حتى نتمكن من استخدام useSearchParams بأمان
 function QuickLinks() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -20,6 +21,7 @@ function QuickLinks() {
     { href: '/map', label: 'الخريطة', value: 'map' },
   ];
 
+  // تحديد الرابط النشط
   const isActive = (link) => {
     if (link.href.startsWith('/listings')) {
       return pathname === '/listings' && dealType === link.value;
@@ -79,7 +81,7 @@ export default function HomePage() {
     }));
   }, [items]);
 
-  const onSearch = (e) => {
+  function onSearch(e) {
     e.preventDefault();
     const value = (q || '').trim();
     if (!value) {
@@ -87,10 +89,11 @@ export default function HomePage() {
       return;
     }
     router.push(`/listings?q=${encodeURIComponent(value)}`);
-  };
+  }
 
   return (
     <div className="container" style={{ paddingBottom: 92 }}>
+      {/* بحث */}
       <form className="searchBar" onSubmit={onSearch}>
         <div className="searchTitle">بحث</div>
         <div className="searchRow">
@@ -107,13 +110,15 @@ export default function HomePage() {
         </div>
       </form>
 
+      {/* الأحياء */}
       <NeighborhoodGrid />
 
-      {/* لف QuickLinks بـ Suspense لأن useSearchParams يحتاج ذلك */}
+      {/* الشيبس - نلفها بـ Suspense لأنها تستخدم useSearchParams */}
       <Suspense fallback={<div className="quickBar">جاري التحميل...</div>}>
         <QuickLinks />
       </Suspense>
 
+      {/* أحدث العروض */}
       <div className="sectionHead">
         <h2 className="h2">أحدث العروض</h2>
         <Link href="/listings" className="more">
@@ -172,40 +177,28 @@ export default function HomePage() {
           gap: 10px;
           flex-wrap: wrap;
         }
-
-        /* تصميم الشيبس الجديد يشبه تصميم الخريطة */
         .pill {
-          background: #ffffff;
-          border: 1px solid #d1d5db;
-          color: #000000;
-          padding: 10px 20px;
+          background: rgba(214, 179, 91, 0.1);
+          border: 1px solid rgba(214, 179, 91, 0.18);
+          color: #f6f0df;
+          padding: 10px 16px;
           border-radius: 999px;
           text-decoration: none;
-          font-weight: 700;
+          font-weight: 950;
           font-size: 14px;
-          transition: all 0.2s ease;
-          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
+          transition: transform 120ms ease, background 120ms ease;
+          white-space: nowrap; /* يمنع النص من الالتفاف */
         }
-
         .pill.active {
           background: linear-gradient(135deg, var(--primary), var(--primary2));
           color: #1f2937;
           border-color: transparent;
-          font-weight: 800;
-          box-shadow: 0 4px 10px rgba(214, 179, 91, 0.3);
         }
-
         .pill:hover {
-          transform: translateY(-2px);
+          transform: translateY(-1px);
           background: #f3f4f6;
-          border-color: #9ca3af;
         }
-
         .pill.active:hover {
-          background: linear-gradient(135deg, var(--primary2), var(--primary));
           filter: brightness(0.98);
         }
 
