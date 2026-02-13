@@ -11,11 +11,11 @@ import { NEIGHBORHOODS } from '@/lib/taxonomy';
 
 function escapeHtml(s) {
   return String(s || '')
-    .replaceAll('&', 'amp;')
-    .replaceAll('<', 'lt;')
-    .replaceAll('>', 'gt;')
-    .replaceAll('"', 'quot;')
-    .replaceAll("'", '#039;');
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
 }
 
 /**
@@ -158,7 +158,7 @@ export default function MapClient() {
 
   useEffect(() => {
     load();
-  }, [filters]);
+  }, [filters]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // تهيئة الخريطة
   useEffect(() => {
@@ -182,6 +182,7 @@ export default function MapClient() {
         });
         infoRef.current = new window.google.maps.InfoWindow();
         setMapReady(true);
+        console.log('✅ الخريطة جاهزة');
 
         setTimeout(() => {
           try { window.google?.maps?.event?.trigger(mapRef.current, 'resize'); } catch {}
@@ -229,8 +230,15 @@ export default function MapClient() {
 
   // إنشاء العلامات (AdvancedMarkerElement) مع عرض السعر
   useEffect(() => {
+    // التأكد من أن الخريطة جاهزة والمراجع موجودة
+    if (!mapReady || !mapRef.current || !window.google?.maps) {
+      console.log('⏳ الخريطة ليست جاهزة بعد أو مكتبة google maps غير متاحة');
+      return;
+    }
+
     const map = mapRef.current;
-    if (!map || !window.google?.maps) return;
+    const list = filteredItemsWithCoords;
+    console.log(`🔍 عدد العناصر بإحداثيات: ${list.length}`);
 
     // إزالة العلامات القديمة
     markersRef.current.forEach((m) => {
@@ -245,13 +253,15 @@ export default function MapClient() {
     markersRef.current = [];
     markerByIdRef.current = {};
 
-    const list = filteredItemsWithCoords;
-    if (!list || list.length === 0) return;
+    if (!list || list.length === 0) {
+      console.log('ℹ️ لا توجد عناصر لإضافتها');
+      return;
+    }
 
     // التحقق من توفر AdvancedMarkerElement
     const AdvancedMarker = window.google.maps.marker?.AdvancedMarkerElement;
     if (!AdvancedMarker) {
-      console.error('AdvancedMarkerElement غير متوفر، تأكد من تحميل مكتبة marker.');
+      console.error('❌ AdvancedMarkerElement غير متوفر، تأكد من تحميل مكتبة marker.');
       return;
     }
 
@@ -312,7 +322,8 @@ export default function MapClient() {
       map.setZoom(15);
       map.setCenter({ lat: Number(list[0].lat), lng: Number(list[0].lng) });
     }
-  }, [filteredItemsWithCoords]);
+    console.log(`✅ تم إضافة ${list.length} علامة`);
+  }, [filteredItemsWithCoords, mapReady]); // إضافة mapReady إلى التبعيات
 
   function focusOn(id) {
     const map = mapRef.current;
