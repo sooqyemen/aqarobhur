@@ -28,7 +28,7 @@ function QuickLinks() {
   };
 
   return (
-    <div className="quickBar">
+    <div className="quickBar quickBarHome" role="navigation" aria-label="اختصارات سريعة">
       {links.map((link) => (
         <Link
           key={link.href}
@@ -63,7 +63,9 @@ export default function HomePage() {
         if (alive) setLoading(false);
       }
     })();
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+    };
   }, []);
 
   const safeItems = useMemo(() => {
@@ -91,25 +93,39 @@ export default function HomePage() {
             placeholder="ابحث (مثلاً: الزمرد، 99جس، أرض، شقة...)"
             aria-label="بحث"
           />
-          <button className="btn btnPrimary" type="submit">بحث</button>
+          <button className="btn btnPrimary" type="submit">
+            بحث
+          </button>
         </div>
       </form>
 
       <NeighborhoodGrid />
 
-      <Suspense fallback={<div className="quickBar">جاري التحميل...</div>}>
+      <Suspense fallback={<div className="quickBar quickBarHome">جاري التحميل...</div>}>
         <QuickLinks />
       </Suspense>
 
       <div className="sectionHead">
         <h2 className="h2">أحدث العروض</h2>
-        <Link href="/listings" className="more">تصفح الكل</Link>
+        <Link href="/listings" className="more">
+          تصفح الكل
+        </Link>
       </div>
 
-      {err && <div className="card" style={{ padding: 14 }}>{err}</div>}
-      {loading && <div className="muted" style={{ padding: '10px 0' }}>جاري التحميل…</div>}
+      {err && (
+        <div className="card" style={{ padding: 14 }}>
+          {err}
+        </div>
+      )}
+      {loading && (
+        <div className="muted" style={{ padding: '10px 0' }}>
+          جاري التحميل…
+        </div>
+      )}
       {!loading && safeItems.length === 0 && (
-        <div className="card" style={{ padding: 16 }}>لا توجد عروض حتى الآن.</div>
+        <div className="card" style={{ padding: 16 }}>
+          لا توجد عروض حتى الآن.
+        </div>
       )}
       {!loading && safeItems.length > 0 && (
         <div className="list">
@@ -142,55 +158,9 @@ export default function HomePage() {
           min-width: 0;
         }
 
-        /* ========== تنسيقات الأزرار السريعة (شيبس) ========== */
-        .quickBar {
-          margin: 20px 0 24px;
-          display: flex;
-          flex-wrap: wrap;
-          gap: 16px !important;          /* مسافة أفقية بين الأزرار */
-          row-gap: 12px;                  /* مسافة عمودية في حالة الالتفاف */
-          justify-content: flex-start;    /* محاذاة لليسار (في RTL تلقائي) */
-          align-items: center;
-        }
-
-        .pill {
-          display: inline-flex !important;
-          align-items: center;
-          justify-content: center;
-          padding: 12px 28px !important;
-          background: rgba(214, 179, 91, 0.1) !important;
-          border: 1px solid rgba(214, 179, 91, 0.18) !important;
-          border-radius: 999px !important;
-          color: #f6f0df !important;
-          font-weight: 950 !important;
-          font-size: 16px !important;
-          line-height: 1.2 !important;
-          text-decoration: none !important;
-          white-space: nowrap !important;      /* يمنع النص من الالتفاف */
-          letter-spacing: 0.3px !important;    /* مسافة بسيطة بين الأحرف */
-          transition: transform 120ms ease, background 120ms ease !important;
-          cursor: pointer !important;
-          box-shadow: 0 2px 8px rgba(0,0,0,0.05) !important;
-          margin: 0 !important;                 /* إلغاء أي هوامش */
-        }
-
-        .pill.active {
-          background: linear-gradient(135deg, var(--primary), var(--primary2)) !important;
-          color: #1f2937 !important;
-          border-color: transparent !important;
-          box-shadow: 0 6px 14px rgba(214, 179, 91, 0.3) !important;
-        }
-
-        .pill:hover {
-          transform: translateY(-2px) !important;
-          background: #f3f4f6 !important;
-          border-color: rgba(214, 179, 91, 0.3) !important;
-        }
-
-        .pill.active:hover {
-          background: linear-gradient(135deg, var(--primary2), var(--primary)) !important;
-          filter: brightness(1.02) !important;
-        }
+        /* ✅ تنسيقات الأزرار السريعة (كل العروض/بيع/إيجار/الخريطة)
+           صارت في app/globals.css لتكون جاهزة قبل الهيدرشن وتمنع ظهور النصوص بدون ترتيب عند التحديث.
+        */
 
         /* ========== باقي التنسيقات ========== */
         .sectionHead {
