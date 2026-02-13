@@ -19,76 +19,81 @@ function escapeHtml(s) {
 }
 
 /**
- * تنسيق السعر ليظهر بشكل مختصر (مثلاً 1.2M للمليون)
- */
-function formatPrice(price) {
-  if (price == null) return '?';
-  const num = Number(price);
-  if (isNaN(num)) return '?';
-  if (num >= 1_000_000) {
-    return (num / 1_000_000).toFixed(1) + 'M';
-  } else if (num >= 1_000) {
-    return (num / 1_000).toFixed(1) + 'K';
-  } else {
-    return num.toString();
-  }
-}
-
-/**
- * لون العلامة حسب نوع الصفقة
- */
-function getMarkerColor(dealType) {
-  switch (dealType) {
-    case 'sale': return '#f97316'; // برتقالي
-    case 'rent': return '#3b82f6'; // أزرق
-    default: return '#6b7280'; // رمادي
-  }
-}
-
-/**
- * ✅ تحميل Google Maps مع مكتبة marker
+ * ✅ تحميل Google Maps بشكل ثابت (Singleton) + Timeout
+ * يمنع تعليق "جاري التحميل..." بسبب race condition في App Router
  */
 let __gmapsPromise = null;
 
 function loadGoogleMaps(apiKey) {
   if (typeof window === 'undefined') return Promise.reject(new Error('no-window'));
   if (window.google && window.google.maps) return Promise.resolve(window.google.maps);
+
   if (__gmapsPromise) return __gmapsPromise;
 
   __gmapsPromise = new Promise((resolve, reject) => {
     const SCRIPT_ID = 'google-maps-js';
-    const t = setTimeout(() => reject(new Error('maps-timeout')), 12000);
 
+    const finishResolve = () => {
+      try {
+        if (window.google && window.google.maps) resolve(window.google.maps);
+        else reject(new Error('maps-loaded-but-not-available'));
+      } catch (e) {
+        reject(e);
+      }
+    };
+
+    const finishReject = (err) => reject(err || new Error('maps-load-failed'));
+
+    // Timeout يمنع التحميل الأبدي
+    const t = setTimeout(() => finishReject(new Error('maps-timeout')), 12000);
+
+    // لو كان السكربت موجود مسبقًا
     const existing = document.getElementById(SCRIPT_ID);
     if (existing) {
+      // لو كان حمل خلاص لكن google.maps ما ظهر (نادر) نعطيه فرصة بسيطة
       if (window.google && window.google.maps) {
         clearTimeout(t);
         return resolve(window.google.maps);
       }
 
-      const onLoad = () => { clearTimeout(t); resolve(window.google.maps); };
-      const onError = () => { clearTimeout(t); reject(new Error('maps-script-error')); };
+      const onLoad = () => {
+        clearTimeout(t);
+        finishResolve();
+      };
+      const onError = () => {
+        clearTimeout(t);
+        finishReject(new Error('maps-script-error'));
+      };
+
       existing.addEventListener('load', onLoad, { once: true });
       existing.addEventListener('error', onError, { once: true });
 
+      // احتياط: لو السكربت فعليًا جاهز لكن إيفنت load انتهى
       setTimeout(() => {
         if (window.google && window.google.maps) {
           clearTimeout(t);
           resolve(window.google.maps);
         }
       }, 300);
+
       return;
     }
 
+    // إنشاء السكربت لأول مرة
     const script = document.createElement('script');
     script.id = SCRIPT_ID;
     script.async = true;
     script.defer = true;
-    // إضافة مكتبة marker لاستخدام AdvancedMarkerElement
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&v=weekly&loading=async&libraries=marker`;
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&v=weekly&loading=async`;
 
-    script.onload = () => { clearTimeout(t); resolve(window.google.maps); };
-    script.onerror = () => { clearTimeout(t); reject(new Error('maps-script-error')); };
+    script.onload = () => {
+      clearTimeout(t);
+      finishResolve();
+    };
+    script.onerror = () => {
+      clearTimeout(t);
+      finishReject(new Error('maps-script-error'));
+    };
 
     document.head.appendChild(script);
   });
@@ -99,10 +104,8 @@ function loadGoogleMaps(apiKey) {
 export default function MapClient() {
   const sp = useSearchParams();
   const initialNeighborhood = sp.get('neighborhood') || '';
-  const initialDealType = sp.get('dealType') || '';
 
   const [neighborhood, setNeighborhood] = useState(initialNeighborhood);
-  const [dealType, setDealType] = useState(initialDealType); // '' = all, 'sale', 'rent'
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
@@ -121,13 +124,11 @@ export default function MapClient() {
 
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
 
-  // الفلاتر
   const filters = useMemo(() => {
     const f = {};
     if (neighborhood) f.neighborhood = neighborhood;
-    if (dealType) f.dealType = dealType;
     return f;
-  }, [neighborhood, dealType]);
+  }, [neighborhood]);
 
   const filteredItemsWithCoords = useMemo(() => {
     return (items || []).filter((it) => {
@@ -158,21 +159,33 @@ export default function MapClient() {
 
   useEffect(() => {
     load();
-  }, [filters]); // eslint-disable-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters]);
 
-  // تهيئة الخريطة
+  // ✅ init map (ثابت)
   useEffect(() => {
     let cancelled = false;
+
     async function init() {
-      if (!apiKey) { setMapReady(false); return; }
+      if (!apiKey) {
+        setMapReady(false);
+        return;
+      }
       if (!mapDivRef.current) return;
-      if (mapRef.current && window.google?.maps) { setMapReady(true); return; }
+
+      // لو الخريطة موجودة أصلاً، اعتبرها جاهزة فورًا
+      if (mapRef.current && window.google?.maps) {
+        setMapReady(true);
+        return;
+      }
 
       setMapReady(false);
+
       try {
         await loadGoogleMaps(apiKey);
         if (cancelled) return;
 
+        // إنشاء الخريطة
         mapRef.current = new window.google.maps.Map(mapDivRef.current, {
           center: { lat: 21.77, lng: 39.08 },
           zoom: 12,
@@ -181,17 +194,19 @@ export default function MapClient() {
           fullscreenControl: false,
         });
         infoRef.current = new window.google.maps.InfoWindow();
+
         setMapReady(true);
-        console.log('✅ الخريطة جاهزة');
 
         setTimeout(() => {
-          try { window.google?.maps?.event?.trigger(mapRef.current, 'resize'); } catch {}
+          try {
+            window.google?.maps?.event?.trigger(mapRef.current, 'resize');
+          } catch {}
         }, 120);
       } catch (e) {
         if (!cancelled) {
           const msg = String(e?.message || '');
           if (msg.includes('timeout')) {
-            setErr('تعذر تحميل خرائط Google (انتهت المهلة). تحقق من المفتاح/القيود.');
+            setErr('تعذر تحميل خرائط Google (انتهت المهلة). تحقق من المفتاح/القيود أو وجود مانع إعلانات.');
           } else {
             setErr('تعذر تحميل خريطة Google. تأكد من المفتاح وتفعيل Google Maps JavaScript API.');
           }
@@ -199,115 +214,81 @@ export default function MapClient() {
         }
       }
     }
+
     init();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [apiKey]);
 
-  // Fullscreen scroll lock
+  // ✅ Fullscreen scroll lock
   useEffect(() => {
     if (typeof document === 'undefined') return;
+
     const html = document.documentElement;
     const body = document.body;
 
     if (isFullscreen) {
       prevHtmlOverflowRef.current = html.style.overflow || '';
       prevBodyOverflowRef.current = body.style.overflow || '';
+
       html.style.overflow = 'hidden';
       body.style.overflow = 'hidden';
       body.classList.add('isMapFullscreen');
+
       setTimeout(() => {
-        try { window.google?.maps?.event?.trigger(mapRef.current, 'resize'); } catch {}
+        try {
+          window.google?.maps?.event?.trigger(mapRef.current, 'resize');
+        } catch {}
       }, 120);
     } else {
       html.style.overflow = prevHtmlOverflowRef.current;
       body.style.overflow = prevBodyOverflowRef.current;
       body.classList.remove('isMapFullscreen');
+
       setTimeout(() => {
-        try { window.google?.maps?.event?.trigger(mapRef.current, 'resize'); } catch {}
+        try {
+          window.google?.maps?.event?.trigger(mapRef.current, 'resize');
+        } catch {}
       }, 120);
     }
   }, [isFullscreen]);
 
-  // إنشاء العلامات (AdvancedMarkerElement) مع عرض السعر
+  // ✅ markers (Marker عادي ثابت)
   useEffect(() => {
-    // التأكد من أن الخريطة جاهزة والمراجع موجودة
-    if (!mapReady || !mapRef.current || !window.google?.maps) {
-      console.log('⏳ الخريطة ليست جاهزة بعد أو مكتبة google maps غير متاحة');
-      return;
-    }
-
     const map = mapRef.current;
-    const list = filteredItemsWithCoords;
-    console.log(`🔍 عدد العناصر بإحداثيات: ${list.length}`);
+    if (!map || !window.google?.maps) return;
 
-    // إزالة العلامات القديمة
     markersRef.current.forEach((m) => {
-      try {
-        if (typeof m.setMap === 'function') {
-          m.setMap(null);
-        } else {
-          m.map = null;
-        }
-      } catch {}
+      try { m.setMap(null); } catch {}
     });
     markersRef.current = [];
     markerByIdRef.current = {};
 
-    if (!list || list.length === 0) {
-      console.log('ℹ️ لا توجد عناصر لإضافتها');
-      return;
-    }
-
-    // التحقق من توفر AdvancedMarkerElement
-    const AdvancedMarker = window.google.maps.marker?.AdvancedMarkerElement;
-    if (!AdvancedMarker) {
-      console.error('❌ AdvancedMarkerElement غير متوفر، تأكد من تحميل مكتبة marker.');
-      return;
-    }
+    const list = filteredItemsWithCoords;
+    if (!list || list.length === 0) return;
 
     const bounds = new window.google.maps.LatLngBounds();
 
     list.forEach((it) => {
       const pos = { lat: Number(it.lat), lng: Number(it.lng) };
-      const priceText = formatPrice(it.price);
-      const bgColor = getMarkerColor(it.dealType);
 
-      // إنشاء عنصر HTML مخصص للعلامة
-      const contentDiv = document.createElement('div');
-      contentDiv.textContent = priceText;
-      contentDiv.style.backgroundColor = bgColor;
-      contentDiv.style.color = 'white';
-      contentDiv.style.padding = '6px 12px';
-      contentDiv.style.borderRadius = '20px';
-      contentDiv.style.fontWeight = 'bold';
-      contentDiv.style.fontSize = '14px';
-      contentDiv.style.boxShadow = '0 2px 6px rgba(0,0,0,0.3)';
-      contentDiv.style.border = '2px solid white';
-      contentDiv.style.whiteSpace = 'nowrap';
-      contentDiv.style.cursor = 'pointer';
-
-      const marker = new AdvancedMarker({
+      const marker = new window.google.maps.Marker({
         position: pos,
         map,
-        content: contentDiv,
-        title: it.title,
+        title: String(it.title || 'عرض'),
       });
 
       markerByIdRef.current[it.id] = marker;
       markersRef.current.push(marker);
       bounds.extend(pos);
 
-      // فتح نافذة المعلومات عند النقر
       marker.addListener('click', () => {
         const html = `
           <div style="direction:rtl; font-family: Arial, sans-serif; max-width: 240px;">
             <div style="font-weight: 900; margin-bottom: 6px;">${escapeHtml(it.title || 'عرض')}</div>
             <div style="opacity: .85; font-size: 12px; margin-bottom: 8px;">
               ${escapeHtml(it.neighborhood || '')} ${escapeHtml(it.plan || '')} ${escapeHtml(it.part || '')}
-            </div>
-            <div style="font-size: 13px; margin-bottom: 8px;">
-              النوع: ${it.dealType === 'sale' ? 'بيع' : it.dealType === 'rent' ? 'إيجار' : 'غير محدد'} 
-              | السعر: ${priceText}
             </div>
             <a href="/listing/${encodeURIComponent(it.id)}" style="color:#0b57d0; text-decoration:none; font-weight:900;">فتح التفاصيل</a>
           </div>
@@ -318,19 +299,20 @@ export default function MapClient() {
     });
 
     map.fitBounds(bounds);
+
     if (list.length === 1) {
       map.setZoom(15);
       map.setCenter({ lat: Number(list[0].lat), lng: Number(list[0].lng) });
     }
-    console.log(`✅ تم إضافة ${list.length} علامة`);
-  }, [filteredItemsWithCoords, mapReady]); // إضافة mapReady إلى التبعيات
+  }, [filteredItemsWithCoords]);
 
   function focusOn(id) {
     const map = mapRef.current;
     const marker = markerByIdRef.current[id];
     if (!map || !marker || !window.google?.maps) return;
+
     map.setZoom(Math.max(map.getZoom(), 15));
-    map.panTo(marker.position);
+    map.panTo(marker.getPosition());
     window.google.maps.event.trigger(marker, 'click');
   }
 
@@ -339,12 +321,6 @@ export default function MapClient() {
       (NEIGHBORHOODS || []).map((n) => ({ value: n, label: n }))
     );
   }, []);
-
-  const dealTypeOptions = [
-    { value: '', label: 'كل الأنواع' },
-    { value: 'sale', label: 'بيع' },
-    { value: 'rent', label: 'إيجار' },
-  ];
 
   return (
     <div className="container" style={{ paddingTop: 16 }}>
@@ -362,18 +338,18 @@ export default function MapClient() {
         </div>
       </div>
 
-      {!apiKey && (
+      {!apiKey ? (
         <section className="card" style={{ marginTop: 12, padding: 14 }}>
           <div style={{ fontWeight: 950, marginBottom: 6 }}>مفتاح Google Maps غير موجود</div>
           <div className="muted">أضف <b>NEXT_PUBLIC_GOOGLE_MAPS_API_KEY</b> في Vercel/المحلي.</div>
         </section>
-      )}
+      ) : null}
 
-      {err && (
+      {err ? (
         <section className="card" style={{ marginTop: 12, padding: 14 }}>
           <div className="badge err">{err}</div>
         </section>
-      )}
+      ) : null}
 
       <div className={`topBar ${isFullscreen ? 'topBarFs' : ''}`}>
         <button
@@ -385,12 +361,7 @@ export default function MapClient() {
         </button>
 
         <div className="barCenter">
-          {/* شريط الأحياء */}
           <ChipsRow value={neighborhood} options={neighborhoodOptions} onChange={setNeighborhood} />
-          {/* شريط أنواع الصفقات */}
-          <div style={{ marginTop: 8 }}>
-            <ChipsRow value={dealType} options={dealTypeOptions} onChange={setDealType} />
-          </div>
         </div>
 
         <div style={{ width: 44 }} />
@@ -399,19 +370,19 @@ export default function MapClient() {
       <div className={`mapHost ${isFullscreen ? 'mapHostFs' : ''}`}>
         <div ref={mapDivRef} className="mapBox" />
 
-        {!mapReady && <div className="mapLoading">جاري تحميل الخريطة…</div>}
+        {!mapReady ? <div className="mapLoading">جاري تحميل الخريطة…</div> : null}
 
-        {!isFullscreen && (
+        {!isFullscreen ? (
           <button
             type="button"
             className="mapTapFs"
             onClick={() => setIsFullscreen(true)}
             aria-label="فتح الخريطة ملء الشاشة"
           />
-        )}
+        ) : null}
       </div>
 
-      {!isFullscreen && (
+      {!isFullscreen ? (
         <section style={{ marginTop: 12 }}>
           <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
             <div style={{ fontWeight: 950 }}>العروض</div>
@@ -424,7 +395,7 @@ export default function MapClient() {
 
           {loading ? null : filteredItemsWithCoords.length === 0 ? (
             <div className="card muted" style={{ marginTop: 10, padding: 14 }}>
-              لا توجد عروض بإحداثيات ضمن الحي والنوع المختار.
+              لا توجد عروض بإحداثيات ضمن الحي المختار.
             </div>
           ) : (
             <div style={{ marginTop: 10, display: 'grid', gap: 10 }}>
@@ -442,7 +413,7 @@ export default function MapClient() {
             </div>
           )}
         </section>
-      )}
+      ) : null}
 
       <style jsx>{`
         .topBar {
@@ -452,7 +423,7 @@ export default function MapClient() {
           border-radius: 16px;
           padding: 10px;
           display: flex;
-          align-items: flex-start;
+          align-items: center;
           gap: 10px;
           box-shadow: 0 4px 16px rgba(15, 23, 42, 0.08);
         }
@@ -467,6 +438,7 @@ export default function MapClient() {
           border: 1px solid var(--border);
         }
 
+        /* تحسين وضوح أزرار الأحياء (Chips) داخل شريط الخريطة */
         .topBar :global(.chip) {
           background: #ffffff !important;
           color: #000000 !important;
