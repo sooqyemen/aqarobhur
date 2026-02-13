@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 
 import { FEATURED_NEIGHBORHOODS } from '@/lib/taxonomy';
 
-// ✅ شريط أحياء أفقي (مثل حراج): أسماء فقط، بدون رموز/بطاقات كبيرة
 export default function NeighborhoodGrid({
   title = 'الأحياء',
   showViewAll = true,
@@ -28,7 +27,7 @@ export default function NeighborhoodGrid({
         ) : null}
       </div>
 
-      <div className="row" role="list" aria-label="شريط الأحياء">
+      <div className="scrollableRow" role="list" aria-label="شريط الأحياء">
         {items.map((n) => (
           <button
             key={n.key}
@@ -70,18 +69,35 @@ export default function NeighborhoodGrid({
           text-decoration: none;
         }
 
-        .row {
+        /* حاوية التمرير الأفقي - مضمونة لمنع الالتفاف */
+        .scrollableRow {
           display: flex;
+          flex-direction: row;
+          flex-wrap: nowrap;           /* منع الالتفاف إلى السطر التالي */
           gap: 10px;
-          overflow-x: auto;
+          overflow-x: auto;             /* تفعيل التمرير الأفقي */
           -webkit-overflow-scrolling: touch;
-          padding-bottom: 4px;
-          white-space: nowrap;
+          padding-bottom: 8px;          /* مساحة لشريط التمرير */
+          white-space: nowrap;           /* دعم إضافي للنص */
+          scrollbar-width: thin;        /* تحسين مظهر شريط التمرير (فايرفوكس) */
         }
+
+        /* تخصيص شريط التمرير */
+        .scrollableRow::-webkit-scrollbar {
+          height: 4px;
+        }
+        .scrollableRow::-webkit-scrollbar-thumb {
+          background: var(--primary);
+          border-radius: 999px;
+        }
+        .scrollableRow::-webkit-scrollbar-track {
+          background: #f1f5f9;
+        }
+
         .chip {
-          flex: 0 0 auto;
+          flex: 0 0 auto;               /* منع التقلص، الحجم حسب المحتوى */
           border: 1px solid var(--border);
-          background: rgba(255, 255, 255, 0.06);
+          background: #ffffff;
           color: var(--text);
           padding: 10px 14px;
           border-radius: 999px;
@@ -92,7 +108,7 @@ export default function NeighborhoodGrid({
         }
         .chip:hover {
           transform: translateY(-1px);
-          background: rgba(255, 255, 255, 0.09);
+          background: #f1f5f9;
           border-color: var(--border2);
         }
       `}</style>
