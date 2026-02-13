@@ -8,11 +8,10 @@ import { FEATURED_NEIGHBORHOODS } from '@/lib/taxonomy';
 export default function NeighborhoodGrid({
   title = 'الأحياء',
   showViewAll = true,
-  maxItems = 12,
 }) {
   const router = useRouter();
 
-  const items = (FEATURED_NEIGHBORHOODS || []).slice(0, Math.max(1, Number(maxItems) || 12));
+  const items = FEATURED_NEIGHBORHOODS || [];
 
   function go(label) {
     router.push(`/listings?neighborhood=${encodeURIComponent(label)}`);
@@ -69,20 +68,20 @@ export default function NeighborhoodGrid({
           text-decoration: none;
         }
 
-        /* حاوية التمرير الأفقي - مضمونة لمنع الالتفاف */
+        /* حاوية التمرير الأفقي */
         .scrollableRow {
           display: flex;
           flex-direction: row;
-          flex-wrap: nowrap;           /* منع الالتفاف إلى السطر التالي */
+          flex-wrap: nowrap;
           gap: 10px;
-          overflow-x: auto;             /* تفعيل التمرير الأفقي */
+          overflow-x: auto;
           -webkit-overflow-scrolling: touch;
-          padding-bottom: 8px;          /* مساحة لشريط التمرير */
-          white-space: nowrap;           /* دعم إضافي للنص */
-          scrollbar-width: thin;        /* تحسين مظهر شريط التمرير (فايرفوكس) */
+          padding-bottom: 8px;
+          white-space: nowrap;
+          scrollbar-width: thin;
         }
 
-        /* تخصيص شريط التمرير */
+        /* تخصيص شريط التمرير (WebKit) */
         .scrollableRow::-webkit-scrollbar {
           height: 4px;
         }
@@ -95,7 +94,7 @@ export default function NeighborhoodGrid({
         }
 
         .chip {
-          flex: 0 0 auto;               /* منع التقلص، الحجم حسب المحتوى */
+          flex: 0 0 auto;
           border: 1px solid var(--border);
           background: #ffffff;
           color: var(--text);
