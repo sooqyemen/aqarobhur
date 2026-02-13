@@ -4,11 +4,14 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 
+import MobileDrawer from '@/components/MobileDrawer';
+
 export default function Header() {
   const pathname = usePathname() || '/';
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
   const [isScrolled, setIsScrolled] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   const isActive = (href) => (href === '/' ? pathname === '/' : pathname.startsWith(href));
 
@@ -25,6 +28,27 @@ export default function Header() {
   useEffect(() => {
     if (pathname === '/') setSearchQuery('');
   }, [pathname]);
+
+  // إغلاق القائمة الجانبية عند تغيير الصفحة
+  useEffect(() => {
+    setDrawerOpen(false);
+  }, [pathname]);
+
+  // قفل التمرير عند فتح القائمة + إغلاق بالـ ESC
+  useEffect(() => {
+    try {
+      document.body.style.overflow = drawerOpen ? 'hidden' : '';
+    } catch {}
+
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') setDrawerOpen(false);
+    };
+    if (drawerOpen) window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      try { document.body.style.overflow = ''; } catch {}
+    };
+  }, [drawerOpen]);
 
   const handleSearch = (e) => {
     e.preventDefault();
@@ -95,10 +119,19 @@ export default function Header() {
         </nav>
 
         {/* زر القائمة الجانبية للجوال */}
-        <button className="menuToggle" aria-label="فتح القائمة" aria-expanded="false">
+        <button
+          className="menuToggle"
+          aria-label="فتح القائمة"
+          aria-expanded={drawerOpen ? 'true' : 'false'}
+          onClick={() => setDrawerOpen((v) => !v)}
+          type="button"
+        >
           <span className="menuIcon">☰</span>
         </button>
       </div>
+
+      {/* ✅ قائمة جانبية للجوال */}
+      <MobileDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
 
       <style jsx>{`
         .header {
