@@ -8,7 +8,6 @@ import ListingCard from '@/components/ListingCard';
 import NeighborhoodGrid from '@/components/NeighborhoodGrid';
 import { fetchLatestListings } from '@/lib/listings';
 
-// مكون منفصل للشيبس حتى نتمكن من استخدام useSearchParams بأمان
 function QuickLinks() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -21,7 +20,6 @@ function QuickLinks() {
     { href: '/map', label: 'الخريطة', value: 'map' },
   ];
 
-  // تحديد الرابط النشط
   const isActive = (link) => {
     if (link.href.startsWith('/listings')) {
       return pathname === '/listings' && dealType === link.value;
@@ -46,16 +44,13 @@ function QuickLinks() {
 
 export default function HomePage() {
   const router = useRouter();
-
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
-
   const [q, setQ] = useState('');
 
   useEffect(() => {
     let alive = true;
-
     (async () => {
       try {
         const res = await fetchLatestListings(12);
@@ -68,10 +63,7 @@ export default function HomePage() {
         if (alive) setLoading(false);
       }
     })();
-
-    return () => {
-      alive = false;
-    };
+    return () => { alive = false; };
   }, []);
 
   const safeItems = useMemo(() => {
@@ -81,19 +73,14 @@ export default function HomePage() {
     }));
   }, [items]);
 
-  function onSearch(e) {
+  const onSearch = (e) => {
     e.preventDefault();
     const value = (q || '').trim();
-    if (!value) {
-      router.push('/listings');
-      return;
-    }
-    router.push(`/listings?q=${encodeURIComponent(value)}`);
-  }
+    router.push(value ? `/listings?q=${encodeURIComponent(value)}` : '/listings');
+  };
 
   return (
     <div className="container" style={{ paddingBottom: 92 }}>
-      {/* بحث */}
       <form className="searchBar" onSubmit={onSearch}>
         <div className="searchTitle">بحث</div>
         <div className="searchRow">
@@ -104,43 +91,27 @@ export default function HomePage() {
             placeholder="ابحث (مثلاً: الزمرد، 99جس، أرض، شقة...)"
             aria-label="بحث"
           />
-          <button className="btn btnPrimary" type="submit">
-            بحث
-          </button>
+          <button className="btn btnPrimary" type="submit">بحث</button>
         </div>
       </form>
 
-      {/* الأحياء */}
       <NeighborhoodGrid />
 
-      {/* الشيبس - نلفها بـ Suspense لأنها تستخدم useSearchParams */}
       <Suspense fallback={<div className="quickBar">جاري التحميل...</div>}>
         <QuickLinks />
       </Suspense>
 
-      {/* أحدث العروض */}
       <div className="sectionHead">
         <h2 className="h2">أحدث العروض</h2>
-        <Link href="/listings" className="more">
-          تصفح الكل
-        </Link>
+        <Link href="/listings" className="more">تصفح الكل</Link>
       </div>
 
-      {err && (
-        <div className="card" style={{ padding: 14 }}>
-          {err}
-        </div>
+      {err && <div className="card" style={{ padding: 14 }}>{err}</div>}
+      {loading && <div className="muted" style={{ padding: '10px 0' }}>جاري التحميل…</div>}
+      {!loading && safeItems.length === 0 && (
+        <div className="card" style={{ padding: 16 }}>لا توجد عروض حتى الآن.</div>
       )}
-
-      {loading ? (
-        <div className="muted" style={{ padding: '10px 0' }}>
-          جاري التحميل…
-        </div>
-      ) : safeItems.length === 0 ? (
-        <div className="card" style={{ padding: 16 }}>
-          لا توجد عروض حتى الآن.
-        </div>
-      ) : (
+      {!loading && safeItems.length > 0 && (
         <div className="list">
           {safeItems.map((it) => (
             <ListingCard key={it.__key} item={it} />
@@ -171,37 +142,57 @@ export default function HomePage() {
           min-width: 0;
         }
 
+        /* ========== تنسيقات الأزرار السريعة (شيبس) ========== */
         .quickBar {
-          margin: 12px 0 18px;
+          margin: 20px 0 24px;
           display: flex;
-          gap: 10px;
           flex-wrap: wrap;
-        }
-        .pill {
-          background: rgba(214, 179, 91, 0.1);
-          border: 1px solid rgba(214, 179, 91, 0.18);
-          color: #f6f0df;
-          padding: 10px 16px;
-          border-radius: 999px;
-          text-decoration: none;
-          font-weight: 950;
-          font-size: 14px;
-          transition: transform 120ms ease, background 120ms ease;
-          white-space: nowrap; /* يمنع النص من الالتفاف */
-        }
-        .pill.active {
-          background: linear-gradient(135deg, var(--primary), var(--primary2));
-          color: #1f2937;
-          border-color: transparent;
-        }
-        .pill:hover {
-          transform: translateY(-1px);
-          background: #f3f4f6;
-        }
-        .pill.active:hover {
-          filter: brightness(0.98);
+          gap: 16px !important;          /* مسافة أفقية بين الأزرار */
+          row-gap: 12px;                  /* مسافة عمودية في حالة الالتفاف */
+          justify-content: flex-start;    /* محاذاة لليسار (في RTL تلقائي) */
+          align-items: center;
         }
 
+        .pill {
+          display: inline-flex !important;
+          align-items: center;
+          justify-content: center;
+          padding: 12px 28px !important;
+          background: rgba(214, 179, 91, 0.1) !important;
+          border: 1px solid rgba(214, 179, 91, 0.18) !important;
+          border-radius: 999px !important;
+          color: #f6f0df !important;
+          font-weight: 950 !important;
+          font-size: 16px !important;
+          line-height: 1.2 !important;
+          text-decoration: none !important;
+          white-space: nowrap !important;      /* يمنع النص من الالتفاف */
+          letter-spacing: 0.3px !important;    /* مسافة بسيطة بين الأحرف */
+          transition: transform 120ms ease, background 120ms ease !important;
+          cursor: pointer !important;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.05) !important;
+          margin: 0 !important;                 /* إلغاء أي هوامش */
+        }
+
+        .pill.active {
+          background: linear-gradient(135deg, var(--primary), var(--primary2)) !important;
+          color: #1f2937 !important;
+          border-color: transparent !important;
+          box-shadow: 0 6px 14px rgba(214, 179, 91, 0.3) !important;
+        }
+
+        .pill:hover {
+          transform: translateY(-2px) !important;
+          background: #f3f4f6 !important;
+          border-color: rgba(214, 179, 91, 0.3) !important;
+        }
+
+        .pill.active:hover {
+          background: linear-gradient(135deg, var(--primary2), var(--primary)) !important;
+          filter: brightness(1.02) !important;
+        }
+
+        /* ========== باقي التنسيقات ========== */
         .sectionHead {
           margin: 18px 0 12px;
           display: flex;
