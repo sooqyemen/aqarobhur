@@ -68,7 +68,7 @@ function loadGoogleMaps(apiKey) {
       existing.addEventListener('load', onLoad, { once: true });
       existing.addEventListener('error', onError, { once: true });
 
-      // احتياط: لو السكربت فعليًا جاهز لكن 이벤트 load انتهى
+      // احتياط: لو السكربت فعليًا جاهز لكن إيفنت load انتهى
       setTimeout(() => {
         if (window.google && window.google.maps) {
           clearTimeout(t);
@@ -418,15 +418,14 @@ export default function MapClient() {
       <style jsx>{`
         .topBar {
           margin-top: 12px;
-          background: rgba(10, 13, 18, 0.92);
-          border: 1px solid rgba(255, 255, 255, 0.14);
+          background: #ffffff;
+          border: 1px solid var(--border);
           border-radius: 16px;
           padding: 10px;
           display: flex;
           align-items: center;
           gap: 10px;
-          backdrop-filter: blur(14px);
-          box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+          box-shadow: 0 4px 16px rgba(15, 23, 42, 0.08);
         }
 
         .topBarFs {
@@ -435,17 +434,41 @@ export default function MapClient() {
           left: calc(12px + env(safe-area-inset-left));
           right: calc(12px + env(safe-area-inset-right));
           z-index: 1000002;
+          background: #ffffff;
+          border: 1px solid var(--border);
+        }
+
+        /* تحسين وضوح أزرار الأحياء (Chips) داخل شريط الخريطة */
+        .topBar :global(.chip) {
+          background: #ffffff !important;
+          color: #000000 !important;
+          border: 1px solid #d1d5db !important;
+          font-weight: 700 !important;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .topBar :global(.chip.active) {
+          background: var(--primary) !important;
+          color: #1e293b !important;
+          border-color: var(--primary) !important;
         }
 
         .xBtn {
           width: 44px;
           height: 44px;
           border-radius: 14px;
-          border: 1px solid rgba(255, 255, 255, 0.14);
-          background: rgba(255, 255, 255, 0.06);
-          color: #fff;
+          border: 1px solid var(--border);
+          background: #f8fafc;
+          color: var(--text);
           font-weight: 950;
           cursor: pointer;
+          font-size: 18px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+        .xBtn:hover {
+          background: #f1f5f9;
         }
 
         .barCenter {
@@ -459,8 +482,8 @@ export default function MapClient() {
           min-height: 380px;
           border-radius: 16px;
           overflow: hidden;
-          border: 1px solid rgba(255, 255, 255, 0.10);
-          background: #0b1220;
+          border: 1px solid var(--border);
+          background: #f1f5f9;
           position: relative;
         }
 
@@ -488,9 +511,10 @@ export default function MapClient() {
           align-items: center;
           justify-content: center;
           font-weight: 950;
-          color: #e2e8f0;
-          background: rgba(0, 0, 0, 0.18);
+          color: var(--text);
+          background: rgba(255,255,255,0.8);
           z-index: 5;
+          backdrop-filter: blur(4px);
         }
 
         .mapTapFs {
@@ -505,7 +529,7 @@ export default function MapClient() {
         }
 
         @media (hover: hover) {
-          .mapTapFs:hover { background: rgba(255, 255, 255, 0.03); }
+          .mapTapFs:hover { background: rgba(255, 255, 255, 0.05); }
         }
       `}</style>
     </div>
