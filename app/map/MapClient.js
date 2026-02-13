@@ -186,7 +186,7 @@ export default function MapClient() {
     load();
   }, [filters]);
 
-  // init map (بدون libraries.marker)
+  // init map (مع إزالة zoom control وإضافة map type control)
   useEffect(() => {
     let cancelled = false;
 
@@ -211,9 +211,14 @@ export default function MapClient() {
         mapRef.current = new window.google.maps.Map(mapDivRef.current, {
           center: { lat: 21.77, lng: 39.08 },
           zoom: 12,
-          mapTypeControl: false,
+          mapTypeControl: true, // تمكين زر تغيير نوع الخريطة
+          mapTypeControlOptions: {
+            style: window.google.maps.MapTypeControlStyle.HORIZONTAL_BAR,
+            position: window.google.maps.ControlPosition.TOP_RIGHT,
+          },
           streetViewControl: false,
           fullscreenControl: false,
+          zoomControl: false, // إزالة أزرار التكبير/التصغير
         });
         infoRef.current = new window.google.maps.InfoWindow();
 
@@ -298,13 +303,13 @@ export default function MapClient() {
       const priceText = formatPrice(it.price);
       const colors = getMarkerColors(it.dealType);
 
-      // إنشاء أيقونة مستطيلة بحجم مناسب (عرض 120، ارتفاع 40)
+      // إنشاء أيقونة مستطيلة بحجم صغير (عرض 70، ارتفاع 24)
       const markerIcon = {
-        path: 'M -60,-20 L 60,-20 L 60,20 L -60,20 Z',
+        path: 'M -35,-12 L 35,-12 L 35,12 L -35,12 Z',
         fillColor: colors.bg,
         fillOpacity: 1,
         strokeColor: '#1e293b',
-        strokeWeight: 2,
+        strokeWeight: 1.5,
         scale: 1,
         labelOrigin: new window.google.maps.Point(0, 0),
         anchor: new window.google.maps.Point(0, 0),
@@ -319,7 +324,7 @@ export default function MapClient() {
           text: priceText,
           color: colors.text,
           fontWeight: '900',
-          fontSize: '14px',
+          fontSize: '10px', // خط أصغر
         },
       });
 
@@ -462,12 +467,12 @@ export default function MapClient() {
           ) : (
             <div style={{ marginTop: 10, display: 'grid', gap: 10 }}>
               {filteredItemsWithCoords.slice(0, 25).map((it) => (
-                <div key={it.id} className="card">
+                <div key={it.id} className="card" style={{ padding: '8px', fontSize: '12px' }}>
                   <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ fontWeight: 950 }}>{it.title || 'عرض'}</div>
-                    <button className="btn" onClick={() => focusOn(it.id)}>عرض</button>
+                    <div style={{ fontWeight: 950, fontSize: '13px' }}>{it.title || 'عرض'}</div>
+                    <button className="btn" style={{ fontSize: '12px', padding: '4px 8px' }} onClick={() => focusOn(it.id)}>عرض</button>
                   </div>
-                  <div style={{ marginTop: 8 }}>
+                  <div style={{ marginTop: 6 }}>
                     <ListingCard item={it} compact />
                   </div>
                 </div>
