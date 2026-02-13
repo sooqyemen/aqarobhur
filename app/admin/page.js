@@ -3,6 +3,11 @@
 /**
  * لوحة تحكم الأدمن - إدارة عقارات أبحر
  * refactored: أكثر احترافية وتنظيماً مع فصل المسؤوليات واستخدام hooks مخصصة
+ * التعديلات الأخيرة:
+ * - نوع العقار أولاً في النموذج
+ * - موقع افتراضي للخريطة: أبحر الشمالية (21.7628, 39.0994)
+ * - رفع تلقائي للملفات فور اختيارها
+ * - زر إضافة الإعلان بشكل أجمل
  */
 
 // ===================== الواردات =====================
@@ -157,7 +162,7 @@ const loadGoogleMaps = (apiKey) => {
   return gmapsPromise;
 };
 
-// ===================== مكون منتقي الخريطة =====================
+// ===================== مكون منتقي الخريطة (الموقع الافتراضي: أبحر الشمالية) =====================
 const MapPicker = ({ value, onChange }) => {
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
   const mapElRef = useRef(null);
@@ -171,7 +176,8 @@ const MapPicker = ({ value, onChange }) => {
   const [geoErr, setGeoErr] = useState('');
   const [mapReady, setMapReady] = useState(false);
 
-  const defaultCenter = useMemo(() => ({ lat: 21.75, lng: 39.12 }), []);
+  // تحديد الموقع الافتراضي: أبحر الشمالية، جدة
+  const defaultCenter = useMemo(() => ({ lat: 21.7628, lng: 39.0994 }), []);
   const current = useMemo(
     () => (value && isFiniteNumber(value.lat) && isFiniteNumber(value.lng) ? value : null),
     [value]
@@ -385,12 +391,13 @@ const useAuth = () => {
   return { user, email, setEmail, pass, setPass, authErr, busy, login, logout, isAdmin };
 };
 
-// ===================== Hook مخصص لرفع الملفات =====================
+// ===================== Hook مخصص لرفع الملفات (رفع تلقائي) =====================
 const useFileUpload = (user, storage, onUploaded) => {
   const [queue, setQueue] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [uploadErr, setUploadErr] = useState('');
   const fileInputRef = useRef(null);
+  const uploadTimeoutRef = useRef(null);
 
   const addFiles = useCallback((files) => {
     setUploadErr('');
@@ -412,6 +419,13 @@ const useFileUpload = (user, storage, onUploaded) => {
       }));
       return [...prev, ...newItems];
     });
+
+    // رفع تلقائي بعد إضافة الملفات (مع تأخير بسيط لتجميع الدفعات)
+    if (uploadTimeoutRef.current) clearTimeout(uploadTimeoutRef.current);
+    uploadTimeoutRef.current = setTimeout(() => {
+      uploadSelected();
+    }, 300);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const removeQueued = useCallback((id) => {
@@ -533,10 +547,7 @@ const useFileUpload = (user, storage, onUploaded) => {
     }
 
     const selected = queue.filter((q) => q.selected && q.status !== 'done' && q.status !== 'uploading');
-    if (!selected.length) {
-      setUploadErr('حدد ملفًا واحدًا على الأقل للرفع.');
-      return;
-    }
+    if (!selected.length) return; // لا يوجد ملفات محددة، نتجاهل
 
     setUploading(true);
     const uid = user.uid || 'anon';
@@ -687,7 +698,7 @@ const EMPTY_FORM = {
   yard: false,
 };
 
-// ===================== مكون النموذج الرئيسي =====================
+// ===================== مكون النموذج الرئيسي (مع إعادة ترتيب الحقول) =====================
 const CreateEditForm = ({
   editingId,
   form,
@@ -769,6 +780,22 @@ const CreateEditForm = ({
 
   const isApartment = form.propertyType === 'شقة';
   const isVilla = form.propertyType === 'فيلا';
+  const isLand = form.propertyType === 'أرض';
+
+  // أنماط زر الحفظ المحسّن
+  const saveButtonStyle = {
+    background: 'linear-gradient(135deg, var(--primary) 0%, #b68b40 100%)',
+    border: 'none',
+    color: 'white',
+    fontWeight: 'bold',
+    padding: '12px 32px',
+    borderRadius: '40px',
+    boxShadow: '0 8px 20px rgba(214, 179, 91, 0.3)',
+    fontSize: '1.1rem',
+    transition: 'all 0.2s ease',
+    cursor: busy ? 'not-allowed' : 'pointer',
+    opacity: busy ? 0.7 : 1,
+  };
 
   return (
     <section className="card" style={{ marginTop: 12 }}>
@@ -788,7 +815,24 @@ const CreateEditForm = ({
       )}
 
       <div className="grid" style={{ marginTop: 10 }}>
-        {/* الحقول الأساسية */}
+        {/* ===== أولاً: نوع العقار ===== */}
+        <div className="col-3">
+          <Field label="نوع العقار">
+            <select
+              className="select"
+              value={form.propertyType}
+              onChange={(e) => setForm({ ...form, propertyType: e.target.value })}
+            >
+              {PROPERTY_TYPES.map((p) => (
+                <option key={p} value={p}>
+                  {p}
+                </option>
+              ))}
+            </select>
+          </Field>
+        </div>
+
+        {/* باقي الحقول الأساسية */}
         <div className="col-6">
           <Field label="عنوان العرض">
             <input
@@ -802,7 +846,11 @@ const CreateEditForm = ({
 
         <div className="col-3">
           <Field label="الحي">
-            <select className="select" value={form.neighborhood} onChange={(e) => setForm({ ...form, neighborhood: e.target.value })}>
+            <select
+              className="select"
+              value={form.neighborhood}
+              onChange={(e) => setForm({ ...form, neighborhood: e.target.value })}
+            >
               <option value="">اختر</option>
               {NEIGHBORHOODS.map((n) => (
                 <option key={n} value={n}>
@@ -828,25 +876,44 @@ const CreateEditForm = ({
 
         <div className="col-3">
           <Field label="المخطط">
-            <input className="input" value={form.plan} onChange={(e) => setForm({ ...form, plan: e.target.value })} placeholder="مثال: مخطط الخالدية السياحي" />
+            <input
+              className="input"
+              value={form.plan}
+              onChange={(e) => setForm({ ...form, plan: e.target.value })}
+              placeholder="مثال: مخطط الخالدية السياحي"
+            />
           </Field>
         </div>
 
         <div className="col-3">
           <Field label="الجزء">
-            <input className="input" value={form.part} onChange={(e) => setForm({ ...form, part: e.target.value })} placeholder="مثال: الجزء ج" />
+            <input
+              className="input"
+              value={form.part}
+              onChange={(e) => setForm({ ...form, part: e.target.value })}
+              placeholder="مثال: الجزء ج"
+            />
           </Field>
         </div>
 
         <div className="col-3">
           <Field label="رقم القطعة" hint="مهم للأراضي">
-            <input className="input" value={form.lotNumber} onChange={(e) => setForm({ ...form, lotNumber: e.target.value })} placeholder="مثال: 250" />
+            <input
+              className="input"
+              value={form.lotNumber}
+              onChange={(e) => setForm({ ...form, lotNumber: e.target.value })}
+              placeholder="مثال: 250"
+            />
           </Field>
         </div>
 
         <div className="col-3">
           <Field label="بيع/إيجار">
-            <select className="select" value={form.dealType} onChange={(e) => setForm({ ...form, dealType: e.target.value })}>
+            <select
+              className="select"
+              value={form.dealType}
+              onChange={(e) => setForm({ ...form, dealType: e.target.value })}
+            >
               {DEAL_TYPES.map((d) => (
                 <option key={d.key} value={d.key}>
                   {d.label}
@@ -857,20 +924,12 @@ const CreateEditForm = ({
         </div>
 
         <div className="col-3">
-          <Field label="نوع العقار">
-            <select className="select" value={form.propertyType} onChange={(e) => setForm({ ...form, propertyType: e.target.value })}>
-              {PROPERTY_TYPES.map((p) => (
-                <option key={p} value={p}>
-                  {p}
-                </option>
-              ))}
-            </select>
-          </Field>
-        </div>
-
-        <div className="col-3">
           <Field label="سكني/تجاري" hint="اختياري">
-            <select className="select" value={form.propertyClass} onChange={(e) => setForm({ ...form, propertyClass: e.target.value })}>
+            <select
+              className="select"
+              value={form.propertyClass}
+              onChange={(e) => setForm({ ...form, propertyClass: e.target.value })}
+            >
               <option value="">تلقائي</option>
               {PROPERTY_CLASSES.map((c) => (
                 <option key={c.key} value={c.key}>
@@ -907,7 +966,11 @@ const CreateEditForm = ({
 
         <div className="col-3">
           <Field label="الحالة">
-            <select className="select" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
+            <select
+              className="select"
+              value={form.status}
+              onChange={(e) => setForm({ ...form, status: e.target.value })}
+            >
               {STATUS_OPTIONS.map((s) => (
                 <option key={s.key} value={s.key}>
                   {s.label}
@@ -917,79 +980,7 @@ const CreateEditForm = ({
           </Field>
         </div>
 
-        {/* الحقول الديناميكية للشقة */}
-        {isApartment && (
-          <div className="col-12">
-            <div className="card" style={{ padding: 14, marginBottom: 10 }}>
-              <div style={{ fontWeight: 900, marginBottom: 10 }}>تفاصيل الشقة</div>
-              <div className="grid">
-                <div className="col-3">
-                  <Field label="الدور">
-                    <input
-                      className="input"
-                      inputMode="numeric"
-                      value={form.floor}
-                      onChange={(e) => setForm({ ...form, floor: e.target.value })}
-                      placeholder="مثال: 3"
-                    />
-                  </Field>
-                </div>
-                <div className="col-3">
-                  <Field label="عدد الغرف">
-                    <input
-                      className="input"
-                      inputMode="numeric"
-                      value={form.bedrooms}
-                      onChange={(e) => setForm({ ...form, bedrooms: e.target.value })}
-                      placeholder="مثال: 4"
-                    />
-                  </Field>
-                </div>
-                <div className="col-3">
-                  <Field label="عدد الصالات">
-                    <input
-                      className="input"
-                      inputMode="numeric"
-                      value={form.lounges}
-                      onChange={(e) => setForm({ ...form, lounges: e.target.value })}
-                      placeholder="مثال: 1"
-                    />
-                  </Field>
-                </div>
-                <div className="col-3">
-                  <Field label="عدد المجالس">
-                    <input
-                      className="input"
-                      inputMode="numeric"
-                      value={form.majlis}
-                      onChange={(e) => setForm({ ...form, majlis: e.target.value })}
-                      placeholder="مثال: 1"
-                    />
-                  </Field>
-                </div>
-                <div className="col-3">
-                  <Field label="عدد دورات المياه">
-                    <input
-                      className="input"
-                      inputMode="numeric"
-                      value={form.bathrooms}
-                      onChange={(e) => setForm({ ...form, bathrooms: e.target.value })}
-                      placeholder="مثال: 3"
-                    />
-                  </Field>
-                </div>
-                <div className="col-3">
-                  <Field label="مطبخ راكب؟">{yesNoSelect(form.kitchen, (v) => setForm({ ...form, kitchen: v }))}</Field>
-                </div>
-                <div className="col-3">
-                  <Field label="غرفة خادمة؟">{yesNoSelect(form.maidRoom, (v) => setForm({ ...form, maidRoom: v }))}</Field>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* الحقول الديناميكية للفيلا */}
+        {/* ===== الحقول الديناميكية حسب نوع العقار (تظهر فوراً بعد اختيار النوع) ===== */}
         {isVilla && (
           <div className="col-12">
             <div className="card" style={{ padding: 14, marginBottom: 10 }}>
@@ -1074,7 +1065,109 @@ const CreateEditForm = ({
           </div>
         )}
 
-        {/* حقل الموقع + الخريطة */}
+        {isApartment && (
+          <div className="col-12">
+            <div className="card" style={{ padding: 14, marginBottom: 10 }}>
+              <div style={{ fontWeight: 900, marginBottom: 10 }}>تفاصيل الشقة</div>
+              <div className="grid">
+                <div className="col-3">
+                  <Field label="الدور">
+                    <input
+                      className="input"
+                      inputMode="numeric"
+                      value={form.floor}
+                      onChange={(e) => setForm({ ...form, floor: e.target.value })}
+                      placeholder="مثال: 3"
+                    />
+                  </Field>
+                </div>
+                <div className="col-3">
+                  <Field label="عدد الغرف">
+                    <input
+                      className="input"
+                      inputMode="numeric"
+                      value={form.bedrooms}
+                      onChange={(e) => setForm({ ...form, bedrooms: e.target.value })}
+                      placeholder="مثال: 4"
+                    />
+                  </Field>
+                </div>
+                <div className="col-3">
+                  <Field label="عدد الصالات">
+                    <input
+                      className="input"
+                      inputMode="numeric"
+                      value={form.lounges}
+                      onChange={(e) => setForm({ ...form, lounges: e.target.value })}
+                      placeholder="مثال: 1"
+                    />
+                  </Field>
+                </div>
+                <div className="col-3">
+                  <Field label="عدد المجالس">
+                    <input
+                      className="input"
+                      inputMode="numeric"
+                      value={form.majlis}
+                      onChange={(e) => setForm({ ...form, majlis: e.target.value })}
+                      placeholder="مثال: 1"
+                    />
+                  </Field>
+                </div>
+                <div className="col-3">
+                  <Field label="عدد دورات المياه">
+                    <input
+                      className="input"
+                      inputMode="numeric"
+                      value={form.bathrooms}
+                      onChange={(e) => setForm({ ...form, bathrooms: e.target.value })}
+                      placeholder="مثال: 3"
+                    />
+                  </Field>
+                </div>
+                <div className="col-3">
+                  <Field label="مطبخ راكب؟">{yesNoSelect(form.kitchen, (v) => setForm({ ...form, kitchen: v }))}</Field>
+                </div>
+                <div className="col-3">
+                  <Field label="غرفة خادمة؟">{yesNoSelect(form.maidRoom, (v) => setForm({ ...form, maidRoom: v }))}</Field>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {isLand && (
+          <div className="col-12">
+            <div className="card" style={{ padding: 14, marginBottom: 10 }}>
+              <div style={{ fontWeight: 900, marginBottom: 10 }}>تفاصيل الأرض</div>
+              <div className="grid">
+                <div className="col-3">
+                  <Field label="عرض الشارع (م)">
+                    <input
+                      className="input"
+                      inputMode="numeric"
+                      value={form.streetWidth}
+                      onChange={(e) => setForm({ ...form, streetWidth: e.target.value })}
+                      placeholder="مثال: 20"
+                    />
+                  </Field>
+                </div>
+                <div className="col-3">
+                  <Field label="الواجهة">
+                    <input
+                      className="input"
+                      value={form.facade}
+                      onChange={(e) => setForm({ ...form, facade: e.target.value })}
+                      placeholder="شمال / جنوب / شرق / غرب"
+                    />
+                  </Field>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ===== حقل الموقع + الخريطة (يأتي بعد التفاصيل) ===== */}
         <div className="col-12">
           <Field
             label="موقع العقار على الخريطة"
@@ -1133,7 +1226,7 @@ const CreateEditForm = ({
 
         {/* رفع الوسائط */}
         <div className="col-12">
-          <Field label="الصور والفيديو" hint="اسحب الملفات هنا أو اضغط (اختيار ملفات). ثم اضغط (رفع المحدد).">
+          <Field label="الصور والفيديو" hint="اسحب الملفات هنا أو اضغط لاختيارها. سيتم رفعها تلقائياً.">
             <div
               className="dropzone"
               onClick={openFilePicker}
@@ -1159,22 +1252,9 @@ const CreateEditForm = ({
               }}
             />
 
-            <div className="row" style={{ marginTop: 12, justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
-              <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
-                <button className="btn" type="button" onClick={openFilePicker}>
-                  اختيار ملفات
-                </button>
-                <button className="btnPrimary" type="button" disabled={uploading} onClick={uploadSelected}>
-                  {uploading ? 'جاري الرفع…' : `رفع المحدد (x${UPLOAD_CONCURRENCY})`}
-                </button>
-                <button className="btn" type="button" onClick={clearQueue}>
-                  تفريغ القائمة
-                </button>
-              </div>
-              <span className="muted" style={{ fontSize: 12 }}>
-                الملفات التي تم رفعها تُضاف تلقائياً للإعلان.
-              </span>
-            </div>
+            {uploading && (
+              <div className="muted" style={{ marginTop: 8, fontSize: 12 }}>جاري رفع الملفات…</div>
+            )}
 
             {uploadErr && (
               <div className="card" style={{ marginTop: 10, borderColor: 'rgba(180,35,24,.25)', background: 'rgba(180,35,24,.05)' }}>
@@ -1263,9 +1343,9 @@ const CreateEditForm = ({
           </div>
         )}
 
-        {/* زر الحفظ */}
-        <div className="col-12 row" style={{ justifyContent: 'flex-end' }}>
-          <button type="button" className="btnPrimary" disabled={busy} onClick={onSave}>
+        {/* زر الحفظ المحسّن */}
+        <div className="col-12 row" style={{ justifyContent: 'flex-end', marginTop: 20 }}>
+          <button type="button" style={saveButtonStyle} disabled={busy} onClick={onSave}>
             {busy ? 'جاري الحفظ…' : editingId ? 'تحديث الإعلان' : 'إضافة الإعلان'}
           </button>
         </div>
@@ -1476,14 +1556,6 @@ export default function AdminPage() {
   }, []);
 
   const saveListing = useCallback(async () => {
-    // تعطيل الأزرار أثناء الحفظ
-    // (يمكن إضافة حالة حفظ منفصلة لكننا نستخدم busy من useAuth)
-    // ولكن busy تستخدم للوجين فقط، لذا نستخدم useState محلي
-    // لتبسيط سنستخدم متغير محلي
-    const saveBusy = busy; // لكن busy خاصة بالدخول
-    // نضيف state للحفظ
-    // سنضيف حالة حفظ داخلية
-    // (يمكن إضافتها لكن للتبسيط نستخدم alert فقط)
     try {
       const images = uniq(form.images || []);
       const websiteUrl = String(form.websiteUrl || '').trim();
@@ -1624,7 +1696,7 @@ export default function AdminPage() {
           setForm={setForm}
           onSave={saveListing}
           onReset={resetForm}
-          busy={busy} // يمكن إضافة حالة حفظ منفصلة لكننا نمررها
+          busy={busy}
           createdId={createdId}
           uploader={uploader}
           storage={storage}
