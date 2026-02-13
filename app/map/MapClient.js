@@ -11,13 +11,43 @@ import { NEIGHBORHOODS } from '@/lib/taxonomy';
 
 function escapeHtml(s) {
   return String(s || '')
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#039;');
+    .replaceAll('&', 'amp;')
+    .replaceAll('<', 'lt;')
+    .replaceAll('>', 'gt;')
+    .replaceAll('"', 'quot;')
+    .replaceAll("'", '#039;');
 }
 
+/**
+ * تنسيق السعر ليظهر بشكل مختصر (مثلاً 1.2M للمليون)
+ */
+function formatPrice(price) {
+  if (price == null) return '?';
+  const num = Number(price);
+  if (isNaN(num)) return '?';
+  if (num >= 1_000_000) {
+    return (num / 1_000_000).toFixed(1) + 'M';
+  } else if (num >= 1_000) {
+    return (num / 1_000).toFixed(1) + 'K';
+  } else {
+    return num.toString();
+  }
+}
+
+/**
+ * لون العلامة حسب نوع الصفقة
+ */
+function getMarkerColor(dealType) {
+  switch (dealType) {
+    case 'sale': return '#f97316'; // برتقالي
+    case 'rent': return '#3b82f6'; // أزرق
+    default: return '#6b7280'; // رمادي
+  }
+}
+
+/**
+ * ✅ تحميل Google Maps مع مكتبة marker
+ */
 let __gmapsPromise = null;
 
 function loadGoogleMaps(apiKey) {
@@ -54,7 +84,8 @@ function loadGoogleMaps(apiKey) {
     script.id = SCRIPT_ID;
     script.async = true;
     script.defer = true;
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&v=weekly&loading=async`;
+    // إضافة مكتبة marker لاستخدام AdvancedMarkerElement
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&v=weekly&loading=async&libraries=marker`;
 
     script.onload = () => { clearTimeout(t); resolve(window.google.maps); };
     script.onerror = () => { clearTimeout(t); reject(new Error('maps-script-error')); };
@@ -90,33 +121,11 @@ export default function MapClient() {
 
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
 
-  // دالة لإنشاء أيقونة مخصصة حسب نوع الصفقة
-  const getMarkerIcon = (type) => {
-    const colors = {
-      sale: '#f97316', // برتقالي
-      rent: '#3b82f6', // أزرق
-      default: '#6b7280', // رمادي
-    };
-    const color = colors[type] || colors.default;
-    const svg = `
-      <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 40 40">
-        <circle cx="20" cy="20" r="16" fill="${color}" stroke="#ffffff" stroke-width="2"/>
-        <text x="20" y="24" font-size="14" font-weight="bold" text-anchor="middle" fill="#ffffff" dy=".3em">
-          ${type === 'sale' ? '$' : type === 'rent' ? '€' : ''}
-        </text>
-      </svg>
-    `;
-    return {
-      url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg),
-      scaledSize: new window.google.maps.Size(40, 40),
-      anchor: new window.google.maps.Point(20, 20),
-    };
-  };
-
+  // الفلاتر
   const filters = useMemo(() => {
     const f = {};
     if (neighborhood) f.neighborhood = neighborhood;
-    if (dealType) f.dealType = dealType; // تمرير نوع الصفقة للـ API
+    if (dealType) f.dealType = dealType;
     return f;
   }, [neighborhood, dealType]);
 
@@ -218,36 +227,67 @@ export default function MapClient() {
     }
   }, [isFullscreen]);
 
-  // تحديث العلامات
+  // إنشاء العلامات (AdvancedMarkerElement) مع عرض السعر
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !window.google?.maps) return;
 
     // إزالة العلامات القديمة
-    markersRef.current.forEach((m) => { try { m.setMap(null); } catch {} });
+    markersRef.current.forEach((m) => {
+      try {
+        if (typeof m.setMap === 'function') {
+          m.setMap(null);
+        } else {
+          m.map = null;
+        }
+      } catch {}
+    });
     markersRef.current = [];
     markerByIdRef.current = {};
 
     const list = filteredItemsWithCoords;
     if (!list || list.length === 0) return;
 
+    // التحقق من توفر AdvancedMarkerElement
+    const AdvancedMarker = window.google.maps.marker?.AdvancedMarkerElement;
+    if (!AdvancedMarker) {
+      console.error('AdvancedMarkerElement غير متوفر، تأكد من تحميل مكتبة marker.');
+      return;
+    }
+
     const bounds = new window.google.maps.LatLngBounds();
 
     list.forEach((it) => {
       const pos = { lat: Number(it.lat), lng: Number(it.lng) };
-      const type = it.dealType || ''; // نفترض أن الحقل موجود في البيانات
+      const priceText = formatPrice(it.price);
+      const bgColor = getMarkerColor(it.dealType);
 
-      const marker = new window.google.maps.Marker({
+      // إنشاء عنصر HTML مخصص للعلامة
+      const contentDiv = document.createElement('div');
+      contentDiv.textContent = priceText;
+      contentDiv.style.backgroundColor = bgColor;
+      contentDiv.style.color = 'white';
+      contentDiv.style.padding = '6px 12px';
+      contentDiv.style.borderRadius = '20px';
+      contentDiv.style.fontWeight = 'bold';
+      contentDiv.style.fontSize = '14px';
+      contentDiv.style.boxShadow = '0 2px 6px rgba(0,0,0,0.3)';
+      contentDiv.style.border = '2px solid white';
+      contentDiv.style.whiteSpace = 'nowrap';
+      contentDiv.style.cursor = 'pointer';
+
+      const marker = new AdvancedMarker({
         position: pos,
         map,
-        title: String(it.title || 'عرض'),
-        icon: getMarkerIcon(type), // أيقونة مخصصة حسب النوع
+        content: contentDiv,
+        title: it.title,
       });
 
       markerByIdRef.current[it.id] = marker;
       markersRef.current.push(marker);
       bounds.extend(pos);
 
+      // فتح نافذة المعلومات عند النقر
       marker.addListener('click', () => {
         const html = `
           <div style="direction:rtl; font-family: Arial, sans-serif; max-width: 240px;">
@@ -256,7 +296,8 @@ export default function MapClient() {
               ${escapeHtml(it.neighborhood || '')} ${escapeHtml(it.plan || '')} ${escapeHtml(it.part || '')}
             </div>
             <div style="font-size: 13px; margin-bottom: 8px;">
-              النوع: ${it.dealType === 'sale' ? 'بيع' : it.dealType === 'rent' ? 'إيجار' : 'غير محدد'}
+              النوع: ${it.dealType === 'sale' ? 'بيع' : it.dealType === 'rent' ? 'إيجار' : 'غير محدد'} 
+              | السعر: ${priceText}
             </div>
             <a href="/listing/${encodeURIComponent(it.id)}" style="color:#0b57d0; text-decoration:none; font-weight:900;">فتح التفاصيل</a>
           </div>
@@ -278,7 +319,7 @@ export default function MapClient() {
     const marker = markerByIdRef.current[id];
     if (!map || !marker || !window.google?.maps) return;
     map.setZoom(Math.max(map.getZoom(), 15));
-    map.panTo(marker.getPosition());
+    map.panTo(marker.position);
     window.google.maps.event.trigger(marker, 'click');
   }
 
