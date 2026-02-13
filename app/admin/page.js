@@ -8,6 +8,7 @@
  * - موقع افتراضي للخريطة: أبحر الشمالية (21.7628, 39.0994)
  * - رفع تلقائي للملفات فور اختيارها
  * - زر إضافة الإعلان بشكل أجمل
+ * - تقييد الدبوس داخل حدود مدينة جدة فقط
  */
 
 // ===================== الواردات =====================
@@ -41,6 +42,14 @@ const IMAGE_TIMEOUT_MS = 180000;
 const VIDEO_TIMEOUT_MS = 600000;
 const STALL_MS = 20000;
 const WATCH_INTERVAL_MS = 1200;
+
+// حدود مدينة جدة التقريبية
+const JEDDAH_BOUNDS = {
+  north: 22.0,
+  south: 21.0,
+  east: 39.5,
+  west: 39.0,
+};
 
 // ===================== دوال المساعدة العامة =====================
 const uniq = (arr) => Array.from(new Set((arr || []).map(String).filter(Boolean)));
@@ -162,7 +171,7 @@ const loadGoogleMaps = (apiKey) => {
   return gmapsPromise;
 };
 
-// ===================== مكون منتقي الخريطة (الموقع الافتراضي: أبحر الشمالية) =====================
+// ===================== مكون منتقي الخريطة (مقيد داخل جدة) =====================
 const MapPicker = ({ value, onChange }) => {
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
   const mapElRef = useRef(null);
@@ -171,17 +180,51 @@ const MapPicker = ({ value, onChange }) => {
   const listenersRef = useRef([]);
   const resizeObserverRef = useRef(null);
   const winResizeRef = useRef(null);
+  const lastValidPositionRef = useRef(null);
 
   const [mapErr, setMapErr] = useState('');
   const [geoErr, setGeoErr] = useState('');
   const [mapReady, setMapReady] = useState(false);
+  const [boundsMsg, setBoundsMsg] = useState('');
 
-  // تحديد الموقع الافتراضي: أبحر الشمالية، جدة
   const defaultCenter = useMemo(() => ({ lat: 21.7628, lng: 39.0994 }), []);
+
+  const isWithinJeddah = useCallback((lat, lng) => {
+    return (
+      lat >= JEDDAH_BOUNDS.south &&
+      lat <= JEDDAH_BOUNDS.north &&
+      lng >= JEDDAH_BOUNDS.west &&
+      lng <= JEDDAH_BOUNDS.east
+    );
+  }, []);
+
   const current = useMemo(
     () => (value && isFiniteNumber(value.lat) && isFiniteNumber(value.lng) ? value : null),
     [value]
   );
+
+  useEffect(() => {
+    if (current && isWithinJeddah(current.lat, current.lng)) {
+      lastValidPositionRef.current = { lat: current.lat, lng: current.lng };
+    }
+  }, [current, isWithinJeddah]);
+
+  const emitPosition = useCallback((lat, lng) => {
+    if (!isWithinJeddah(lat, lng)) {
+      setBoundsMsg('⚠️ الموقع خارج حدود مدينة جدة. الرجاء اختيار موقع داخل جدة.');
+      if (lastValidPositionRef.current) {
+        markerRef.current?.setPosition(lastValidPositionRef.current);
+        mapRef.current?.panTo(lastValidPositionRef.current);
+      } else {
+        markerRef.current?.setPosition(defaultCenter);
+        mapRef.current?.panTo(defaultCenter);
+      }
+      return;
+    }
+    setBoundsMsg('');
+    lastValidPositionRef.current = { lat, lng };
+    onChange?.({ lat: round6(lat), lng: round6(lng) });
+  }, [isWithinJeddah, onChange, defaultCenter]);
 
   useEffect(() => {
     let cancelled = false;
@@ -192,7 +235,7 @@ const MapPicker = ({ value, onChange }) => {
         const gmaps = await loadGoogleMaps(apiKey);
         if (cancelled || !mapElRef.current || mapRef.current) return;
 
-        const center = current
+        const center = current && isWithinJeddah(current.lat, current.lng)
           ? { lat: current.lat, lng: current.lng }
           : { lat: defaultCenter.lat, lng: defaultCenter.lng };
 
@@ -215,9 +258,7 @@ const MapPicker = ({ value, onChange }) => {
           animation: gmaps.Animation?.DROP,
         });
 
-        const emitPosition = (lat, lng) => {
-          onChange?.({ lat: round6(lat), lng: round6(lng) });
-        };
+        lastValidPositionRef.current = { lat: center.lat, lng: center.lng };
 
         listenersRef.current.push(
           map.addListener('click', (e) => {
@@ -226,10 +267,16 @@ const MapPicker = ({ value, onChange }) => {
             const lng = e.latLng.lng();
             marker.setPosition({ lat, lng });
             emitPosition(lat, lng);
-          }),
+          })
+        );
+
+        listenersRef.current.push(
           marker.addListener('dragend', () => {
             const pos = marker.getPosition();
-            if (pos) emitPosition(pos.lat(), pos.lng());
+            if (!pos) return;
+            const lat = pos.lat();
+            const lng = pos.lng();
+            emitPosition(lat, lng);
           })
         );
 
@@ -286,11 +333,16 @@ const MapPicker = ({ value, onChange }) => {
     if (!mapRef.current || !markerRef.current || !current) return;
     const pos = markerRef.current.getPosition();
     if (pos && approxSame(pos.lat(), current.lat) && approxSame(pos.lng(), current.lng)) return;
-    markerRef.current.setPosition({ lat: current.lat, lng: current.lng });
-    mapRef.current.panTo({ lat: current.lat, lng: current.lng });
-    if ((mapRef.current.getZoom?.() || 0) < 16) mapRef.current.setZoom(16);
+    if (isWithinJeddah(current.lat, current.lng)) {
+      markerRef.current.setPosition({ lat: current.lat, lng: current.lng });
+      mapRef.current.panTo({ lat: current.lat, lng: current.lng });
+      if ((mapRef.current.getZoom?.() || 0) < 16) mapRef.current.setZoom(16);
+      lastValidPositionRef.current = { lat: current.lat, lng: current.lng };
+    } else {
+      setBoundsMsg('⚠️ الموقع المحدد خارج مدينة جدة. سيتم تجاهله.');
+    }
     window.google?.maps?.event?.trigger?.(mapRef.current, 'resize');
-  }, [current]);
+  }, [current, isWithinJeddah]);
 
   const useMyLocation = useCallback(() => {
     setGeoErr('');
@@ -299,16 +351,24 @@ const MapPicker = ({ value, onChange }) => {
       return;
     }
     navigator.geolocation.getCurrentPosition(
-      (pos) => onChange?.({ lat: round6(pos.coords.latitude), lng: round6(pos.coords.longitude) }),
+      (pos) => {
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        if (isWithinJeddah(lat, lng)) {
+          emitPosition(lat, lng);
+        } else {
+          setGeoErr('موقعك الحالي خارج مدينة جدة. لا يمكن استخدامه.');
+        }
+      },
       () => setGeoErr('تعذر تحديد الموقع.'),
       { enableHighAccuracy: true, timeout: 12000 }
     );
-  }, [onChange]);
+  }, [emitPosition, isWithinJeddah]);
 
   return (
     <div style={{ width: '100%' }}>
       <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-        <span className="muted" style={{ fontSize: 12 }}>اختر الموقع بالنقر على الخريطة أو اسحب العلامة.</span>
+        <span className="muted" style={{ fontSize: 12 }}>اختر الموقع بالنقر على الخريطة أو اسحب العلامة. (يُسمح فقط بمواقع داخل مدينة جدة)</span>
         <button className="btn" type="button" onClick={useMyLocation} style={{ fontSize: 12, padding: '6px 10px' }}>
           📍 موقعي الحالي
         </button>
@@ -320,7 +380,16 @@ const MapPicker = ({ value, onChange }) => {
         {mapErr && <div className="mapOverlay" style={{ color: '#b42318' }}>{mapErr}</div>}
       </div>
 
-      {geoErr && <div className="muted" style={{ marginTop: 8, color: '#b42318', fontSize: 12 }}>{geoErr}</div>}
+      {boundsMsg && (
+        <div className="muted" style={{ marginTop: 8, color: '#b45f06', fontSize: 12, fontWeight: 'bold' }}>
+          {boundsMsg}
+        </div>
+      )}
+      {geoErr && (
+        <div className="muted" style={{ marginTop: 8, color: '#b42318', fontSize: 12 }}>
+          {geoErr}
+        </div>
+      )}
 
       <style jsx>{`
         .mapWrap {
@@ -420,7 +489,6 @@ const useFileUpload = (user, storage, onUploaded) => {
       return [...prev, ...newItems];
     });
 
-    // رفع تلقائي بعد إضافة الملفات (مع تأخير بسيط لتجميع الدفعات)
     if (uploadTimeoutRef.current) clearTimeout(uploadTimeoutRef.current);
     uploadTimeoutRef.current = setTimeout(() => {
       uploadSelected();
@@ -547,7 +615,7 @@ const useFileUpload = (user, storage, onUploaded) => {
     }
 
     const selected = queue.filter((q) => q.selected && q.status !== 'done' && q.status !== 'uploading');
-    if (!selected.length) return; // لا يوجد ملفات محددة، نتجاهل
+    if (!selected.length) return;
 
     setUploading(true);
     const uid = user.uid || 'anon';
@@ -619,7 +687,6 @@ const useListings = () => {
 
       setActionBusyId(item.id);
       try {
-        // حذف الوسائط
         const media = Array.isArray(item.images) ? item.images : [];
         for (const url of media) {
           const path = extractStoragePathFromDownloadURL(url);
@@ -632,7 +699,6 @@ const useListings = () => {
           }
         }
 
-        // حذف من Firestore
         if (db && typeof db.collection === 'function') {
           await db.collection(LISTINGS_COLLECTION).doc(item.id).delete();
         } else if (db) {
@@ -647,7 +713,6 @@ const useListings = () => {
         await loadList();
       } catch (e) {
         console.error(e);
-        // محاولة إخفاء الإعلان بدلاً من الحذف
         try {
           await adminUpdateListing(item.id, { status: 'canceled', archived: true });
           alert('تعذر الحذف النهائي — تم إخفاء الإعلان بدلاً من ذلك ✅');
@@ -698,7 +763,7 @@ const EMPTY_FORM = {
   yard: false,
 };
 
-// ===================== مكون النموذج الرئيسي (مع إعادة ترتيب الحقول) =====================
+// ===================== مكون النموذج الرئيسي =====================
 const CreateEditForm = ({
   editingId,
   form,
@@ -782,7 +847,6 @@ const CreateEditForm = ({
   const isVilla = form.propertyType === 'فيلا';
   const isLand = form.propertyType === 'أرض';
 
-  // أنماط زر الحفظ المحسّن
   const saveButtonStyle = {
     background: 'linear-gradient(135deg, var(--primary) 0%, #b68b40 100%)',
     border: 'none',
@@ -815,7 +879,7 @@ const CreateEditForm = ({
       )}
 
       <div className="grid" style={{ marginTop: 10 }}>
-        {/* ===== أولاً: نوع العقار ===== */}
+        {/* نوع العقار أولاً */}
         <div className="col-3">
           <Field label="نوع العقار">
             <select
@@ -980,7 +1044,7 @@ const CreateEditForm = ({
           </Field>
         </div>
 
-        {/* ===== الحقول الديناميكية حسب نوع العقار (تظهر فوراً بعد اختيار النوع) ===== */}
+        {/* الحقول الديناميكية حسب نوع العقار */}
         {isVilla && (
           <div className="col-12">
             <div className="card" style={{ padding: 14, marginBottom: 10 }}>
@@ -1167,11 +1231,11 @@ const CreateEditForm = ({
           </div>
         )}
 
-        {/* ===== حقل الموقع + الخريطة (يأتي بعد التفاصيل) ===== */}
+        {/* حقل الموقع + الخريطة */}
         <div className="col-12">
           <Field
             label="موقع العقار على الخريطة"
-            hint="حدد الموقع من الخريطة (الأفضل). يمكنك أيضاً لصق رابط Google Maps."
+            hint="حدد الموقع من الخريطة (يُسمح فقط بمواقع داخل مدينة جدة). يمكنك أيضاً لصق رابط Google Maps."
           >
             <div style={{ display: 'grid', gap: 10 }}>
               <input
@@ -1262,7 +1326,6 @@ const CreateEditForm = ({
               </div>
             )}
 
-            {/* عرض قائمة الانتظار */}
             {queue.length > 0 && (
               <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 10 }}>
                 {queue.map((q) => (
@@ -1456,7 +1519,6 @@ export default function AdminPage() {
   const storage = fb?.storage;
   const db = fb?.db || fb?.firestore;
 
-  // hooks
   const { user, email, setEmail, pass, setPass, authErr, busy, login, logout, isAdmin } = useAuth();
   const { list, loadingList, actionBusyId, loadList, deleteListing } = useListings();
   const [tab, setTab] = useState('create');
@@ -1464,12 +1526,10 @@ export default function AdminPage() {
   const [editingId, setEditingId] = useState('');
   const [createdId, setCreatedId] = useState('');
 
-  // رفع الملفات
   const uploader = useFileUpload(user, storage, (newUrls) => {
     setForm((p) => ({ ...p, images: uniq([...(p.images || []), ...newUrls]) }));
   });
 
-  // تحميل القائمة عند التبديل لإدارة العروض
   useEffect(() => {
     if (isAdmin && tab === 'manage') loadList();
   }, [isAdmin, tab, loadList]);
@@ -1602,7 +1662,6 @@ export default function AdminPage() {
     }
   }, [form, editingId, normalizePayload, loadList, resetForm]);
 
-  // عرض شاشة الدخول إذا لم يكن هناك مستخدم
   if (!user) {
     return (
       <div className="container" style={{ paddingTop: 16, maxWidth: 520, margin: '0 auto' }}>
@@ -1641,7 +1700,6 @@ export default function AdminPage() {
     );
   }
 
-  // إذا لم يكن أدمن
   if (!isAdmin) {
     return (
       <div className="container" style={{ paddingTop: 16 }}>
@@ -1663,7 +1721,6 @@ export default function AdminPage() {
     );
   }
 
-  // الصفحة الرئيسية للأدمن
   return (
     <div className="container" style={{ paddingTop: 16, paddingBottom: 40 }}>
       <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
