@@ -26,7 +26,6 @@ function formatPrice(price) {
   
   if (num >= 1_000_000) {
     const millions = (num / 1_000_000).toFixed(1);
-    // إزالة .0 إذا كانت زائدة
     return millions.replace(/\.0$/, '') + ' مليون';
   }
   if (num >= 1_000) {
@@ -38,17 +37,11 @@ function formatPrice(price) {
 
 /** ألوان العلامة حسب نوع الصفقة (النص أبيض دائماً) */
 function getMarkerColors(dealType) {
-  // للبيع: أخضر غامق مع نص أبيض
   if (dealType === 'sale') return { bg: '#10b981', text: '#ffffff' };
-  // للإيجار: أزرق مع نص أبيض
   if (dealType === 'rent') return { bg: '#3b82f6', text: '#ffffff' };
-  // افتراضي: رمادي مع نص أبيض
   return { bg: '#6b7280', text: '#ffffff' };
 }
 
-/**
- * ✅ تحميل Google Maps بشكل ثابت (Singleton) + Timeout
- */
 let __gmapsPromise = null;
 
 function loadGoogleMaps(apiKey) {
@@ -59,7 +52,6 @@ function loadGoogleMaps(apiKey) {
 
   __gmapsPromise = new Promise((resolve, reject) => {
     const SCRIPT_ID = 'google-maps-js';
-
     const finishResolve = () => {
       try {
         if (window.google && window.google.maps) resolve(window.google.maps);
@@ -68,9 +60,7 @@ function loadGoogleMaps(apiKey) {
         reject(e);
       }
     };
-
     const finishReject = (err) => reject(err || new Error('maps-load-failed'));
-
     const t = setTimeout(() => finishReject(new Error('maps-timeout')), 12000);
 
     const existing = document.getElementById(SCRIPT_ID);
@@ -79,26 +69,16 @@ function loadGoogleMaps(apiKey) {
         clearTimeout(t);
         return resolve(window.google.maps);
       }
-
-      const onLoad = () => {
-        clearTimeout(t);
-        finishResolve();
-      };
-      const onError = () => {
-        clearTimeout(t);
-        finishReject(new Error('maps-script-error'));
-      };
-
+      const onLoad = () => { clearTimeout(t); finishResolve(); };
+      const onError = () => { clearTimeout(t); finishReject(new Error('maps-script-error')); };
       existing.addEventListener('load', onLoad, { once: true });
       existing.addEventListener('error', onError, { once: true });
-
       setTimeout(() => {
         if (window.google && window.google.maps) {
           clearTimeout(t);
           resolve(window.google.maps);
         }
       }, 300);
-
       return;
     }
 
@@ -108,15 +88,8 @@ function loadGoogleMaps(apiKey) {
     script.defer = true;
     script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&v=weekly&loading=async`;
 
-    script.onload = () => {
-      clearTimeout(t);
-      finishResolve();
-    };
-    script.onerror = () => {
-      clearTimeout(t);
-      finishReject(new Error('maps-script-error'));
-    };
-
+    script.onload = () => { clearTimeout(t); finishResolve(); };
+    script.onerror = () => { clearTimeout(t); finishReject(new Error('maps-script-error')); };
     document.head.appendChild(script);
   });
 
@@ -136,14 +109,12 @@ export default function MapClient() {
 
   const [mapReady, setMapReady] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [mapType, setMapType] = useState('satellite'); // 'roadmap' أو 'satellite'
 
   const mapDivRef = useRef(null);
   const mapRef = useRef(null);
   const infoRef = useRef(null);
   const markersRef = useRef([]);
   const markerByIdRef = useRef({});
-  const mapTypeControlRef = useRef(null); // مرجع لعنصر التحكم
 
   const prevBodyOverflowRef = useRef('');
   const prevHtmlOverflowRef = useRef('');
@@ -188,7 +159,7 @@ export default function MapClient() {
     load();
   }, [filters]);
 
-  // init map
+  // تهيئة الخريطة مع إزالة جميع عناصر التحكم الافتراضية
   useEffect(() => {
     let cancelled = false;
 
@@ -198,7 +169,6 @@ export default function MapClient() {
         return;
       }
       if (!mapDivRef.current) return;
-
       if (mapRef.current && window.google?.maps) {
         setMapReady(true);
         return;
@@ -210,35 +180,48 @@ export default function MapClient() {
         await loadGoogleMaps(apiKey);
         if (cancelled) return;
 
-        // إنشاء الخريطة مع الخيارات المطلوبة
+        // إنشاء الخريطة مع تعطيل جميع عناصر التحكم الافتراضية
         mapRef.current = new window.google.maps.Map(mapDivRef.current, {
           center: { lat: 21.77, lng: 39.08 },
           zoom: 12,
-          mapTypeControl: false,        // إخفاء عناصر التحكم الافتراضية
-          streetViewControl: false,
-          fullscreenControl: false,
-          zoomControl: false,            // إخفاء أزرار التكبير والتصغير
-          mapTypeId: 'satellite',        // جعل القمر الصناعي افتراضي
+          mapTypeControl: false,        // إخفاء عناصر التحكم بنوع الخريطة الافتراضية
+          streetViewControl: false,     // إخفاء عنصر التحكم بعرض الشارع
+          fullscreenControl: false,     // إخفاء زر ملء الشاشة الافتراضي
+          zoomControl: false,           // إخفاء أزرار التكبير والتصغير
+          mapTypeId: 'satellite',       // تعيين القمر الصناعي كوضع افتراضي
         });
+
         infoRef.current = new window.google.maps.InfoWindow();
 
-        // إنشاء عنصر التحكم المخصص لتبديل نوع الخريطة
+        // إنشاء زر مخصص لتبديل نوع الخريطة (إطار أنيق)
         const controlDiv = document.createElement('div');
         controlDiv.className = 'custom-map-type-control';
-        controlDiv.style.backgroundColor = 'white';
-        controlDiv.style.border = '1px solid #ccc';
-        controlDiv.style.borderRadius = '8px';
-        controlDiv.style.boxShadow = '0 2px 6px rgba(0,0,0,0.3)';
-        controlDiv.style.padding = '8px 12px';
-        controlDiv.style.margin = '10px';
+        controlDiv.style.backgroundColor = '#ffffff';
+        controlDiv.style.border = '1px solid #e2e8f0';
+        controlDiv.style.borderRadius = '12px';
+        controlDiv.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.15)';
+        controlDiv.style.padding = '8px 16px';
+        controlDiv.style.margin = '16px';
         controlDiv.style.cursor = 'pointer';
         controlDiv.style.fontSize = '14px';
-        controlDiv.style.fontWeight = 'bold';
+        controlDiv.style.fontWeight = '700';
         controlDiv.style.direction = 'rtl';
         controlDiv.style.textAlign = 'center';
-        controlDiv.innerText = 'خريطة'; // النص الابتدائي (لأن البداية قمر صناعي فعند الضغط يتحول لخريطة)
+        controlDiv.style.transition = 'all 0.2s ease';
+        controlDiv.style.userSelect = 'none';
+        controlDiv.innerText = 'خريطة'; // لأن البداية قمر صناعي، فالزر يعرض "خريطة" للتحويل إليها
 
-        // حدث النقر لتبديل النوع
+        // تأثير hover
+        controlDiv.addEventListener('mouseenter', () => {
+          controlDiv.style.backgroundColor = '#f8fafc';
+          controlDiv.style.borderColor = '#94a3b8';
+        });
+        controlDiv.addEventListener('mouseleave', () => {
+          controlDiv.style.backgroundColor = '#ffffff';
+          controlDiv.style.borderColor = '#e2e8f0';
+        });
+
+        // حدث النقر لتبديل نوع الخريطة
         controlDiv.addEventListener('click', () => {
           if (!mapRef.current) return;
           const newType = mapRef.current.getMapTypeId() === 'roadmap' ? 'satellite' : 'roadmap';
@@ -246,9 +229,8 @@ export default function MapClient() {
           controlDiv.innerText = newType === 'roadmap' ? 'قمر صناعي' : 'خريطة';
         });
 
-        // إضافة التحكم إلى الخريطة في الزاوية اليمنى السفلية
+        // إضافة الزر إلى الزاوية اليمنى السفلية
         mapRef.current.controls[window.google.maps.ControlPosition.RIGHT_BOTTOM].push(controlDiv);
-        mapTypeControlRef.current = controlDiv;
 
         setMapReady(true);
 
@@ -276,15 +258,16 @@ export default function MapClient() {
     };
   }, [apiKey]);
 
-  // تحديث نص التحكم إذا تغير نوع الخريطة من مكان آخر
+  // تحديث نص الزر إذا تغير نوع الخريطة من مكان آخر
   useEffect(() => {
-    if (!mapRef.current || !mapTypeControlRef.current) return;
+    if (!mapRef.current || !window.google?.maps) return;
+    const controlDiv = document.querySelector('.custom-map-type-control');
+    if (!controlDiv) return;
     const updateText = () => {
       if (!mapRef.current) return;
       const currentType = mapRef.current.getMapTypeId();
-      mapTypeControlRef.current.innerText = currentType === 'roadmap' ? 'قمر صناعي' : 'خريطة';
+      controlDiv.innerText = currentType === 'roadmap' ? 'قمر صناعي' : 'خريطة';
     };
-    // الاستماع لتغير نوع الخريطة (قد يحدث برمجياً)
     const listener = window.google.maps.event.addListener(mapRef.current, 'maptypeid_changed', updateText);
     return () => {
       window.google.maps.event.removeListener(listener);
@@ -324,12 +307,11 @@ export default function MapClient() {
     }
   }, [isFullscreen]);
 
-  // markers (Marker عادي مع أيقونة مستطيلة ونص)
+  // رسم العلامات (markers) للعقارات
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !window.google?.maps) return;
 
-    // إزالة العلامات القديمة
     markersRef.current.forEach((m) => {
       try { m.setMap(null); } catch {}
     });
@@ -346,7 +328,6 @@ export default function MapClient() {
       const priceText = formatPrice(it.price);
       const colors = getMarkerColors(it.dealType);
 
-      // إنشاء أيقونة مستطيلة بحجم مناسب (عرض 120، ارتفاع 40)
       const markerIcon = {
         path: 'M -60,-20 L 60,-20 L 60,20 L -60,20 Z',
         fillColor: colors.bg,
