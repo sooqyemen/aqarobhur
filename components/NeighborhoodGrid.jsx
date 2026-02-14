@@ -2,17 +2,23 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { NEIGHBORHOODS } from '@/lib/taxonomy';
 
-// استيراد جميع الأحياء بدلاً من المميزة
-import { NEIGHBORHOODS } from '@/lib/taxonomy';   // <-- غيّر هذا السطر
+// دالة لتوليد لون فريد لكل حي بناءً على الاسم
+function getColorFromString(str) {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = str.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const hue = Math.abs(hash % 360); // 0 to 359
+  return `hsl(${hue}, 70%, 85%)`; // خلفية فاتحة مع تشبع معتدل
+}
 
 export default function NeighborhoodGrid({
   title = 'الأحياء',
   showViewAll = true,
 }) {
   const router = useRouter();
-
-  // استخدم المصفوفة الكاملة
   const items = NEIGHBORHOODS || [];
 
   function go(label) {
@@ -23,26 +29,31 @@ export default function NeighborhoodGrid({
     <section className="strip">
       <div className="head">
         <h3 className="title">{title}</h3>
-        {showViewAll ? (
-          <Link className="all" href="/neighborhoods">عرض الكل</Link>
-        ) : null}
+        {showViewAll && (
+          <Link className="all" href="/neighborhoods">
+            عرض الكل
+          </Link>
+        )}
       </div>
 
       <div className="scrollableRow" role="list" aria-label="شريط الأحياء">
-        {items.map((n) => (
-          <button
-            key={n.key}
-            type="button"
-            className="chip"
-            onClick={() => go(n.label)}
-            role="listitem"
-          >
-            {n.label}
-          </button>
-        ))}
+        {items.map((n) => {
+          const bgColor = getColorFromString(n.label);
+          return (
+            <button
+              key={n.key}
+              type="button"
+              className="chip"
+              onClick={() => go(n.label)}
+              role="listitem"
+              style={{ backgroundColor: bgColor }}
+            >
+              {n.label}
+            </button>
+          );
+        })}
       </div>
 
-      {/* الأنماط كما هي دون تغيير */}
       <style jsx>{`
         .strip {
           margin: 14px 0 10px;
@@ -56,26 +67,31 @@ export default function NeighborhoodGrid({
         }
         .title {
           margin: 0;
-          font-size: 16px;
+          font-size: 18px; /* تكبير قليلاً */
           font-weight: 950;
           letter-spacing: 0.2px;
+          color: #1e293b; /* لون غامق */
         }
         .all {
-          color: var(--primary);
+          color: var(--primary, #d6b35b);
           font-weight: 900;
-          font-size: 13px;
-          padding: 6px 10px;
+          font-size: 14px;
+          padding: 8px 14px; /* تكبير الرابط */
           border-radius: 999px;
           border: 1px solid rgba(214, 179, 91, 0.25);
           background: rgba(214, 179, 91, 0.08);
           text-decoration: none;
+          transition: background 0.2s;
+        }
+        .all:hover {
+          background: rgba(214, 179, 91, 0.15);
         }
 
         .scrollableRow {
           display: flex;
           flex-direction: row;
           flex-wrap: nowrap;
-          gap: 10px;
+          gap: 12px; /* زيادة المسافة قليلاً */
           overflow-x: auto;
           -webkit-overflow-scrolling: touch;
           padding-bottom: 8px;
@@ -84,10 +100,10 @@ export default function NeighborhoodGrid({
         }
 
         .scrollableRow::-webkit-scrollbar {
-          height: 4px;
+          height: 6px; /* زيادة سمك الشريط */
         }
         .scrollableRow::-webkit-scrollbar-thumb {
-          background: var(--primary);
+          background: var(--primary, #d6b35b);
           border-radius: 999px;
         }
         .scrollableRow::-webkit-scrollbar-track {
@@ -96,20 +112,20 @@ export default function NeighborhoodGrid({
 
         .chip {
           flex: 0 0 auto;
-          border: 1px solid var(--border);
-          background: #ffffff;
-          color: var(--text);
-          padding: 10px 14px;
+          border: none; /* إزالة الحدود لتظهر الألوان بشكل أفضل */
+          color: #1e293b; /* لون نص غامق */
+          padding: 14px 20px; /* تكبير الحشو */
           border-radius: 999px;
-          font-weight: 950;
-          font-size: 14px;
+          font-weight: 700; /* تقليل قليلاً من 950 إلى 700 ليكون متوازن */
+          font-size: 16px; /* تكبير الخط */
           cursor: pointer;
-          transition: transform 120ms ease, background 120ms ease, border-color 120ms ease;
+          transition: transform 120ms ease, filter 120ms ease, box-shadow 0.2s;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.05);
         }
         .chip:hover {
-          transform: translateY(-1px);
-          background: #f1f5f9;
-          border-color: var(--border2);
+          transform: translateY(-2px);
+          filter: brightness(95%); /* تغميق الخلفية قليلاً عند التمرير */
+          box-shadow: 0 4px 8px rgba(0,0,0,0.1);
         }
       `}</style>
     </section>
