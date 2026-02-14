@@ -24,17 +24,7 @@ export default function Header() {
     []
   );
 
-  const mobileLinks = useMemo(
-    () => [
-      { href: '/', label: 'الرئيسية' },
-      { href: '/listings', label: 'كل العروض' },
-      { href: '/map', label: 'الخريطة' },
-      { href: '/neighborhoods', label: 'الأحياء' },
-      { href: '/request', label: 'أرسل طلبك' },
-      { href: '/account', label: 'الحساب' },
-    ],
-    []
-  );
+  const mobileLinks = navLinks; // same links for mobile
 
   useEffect(() => {
     const handleScroll = () => setIsScrolled(window.scrollY > 10);
@@ -83,8 +73,9 @@ export default function Header() {
           </button>
 
           <Link href="/" className="brand" aria-label="الانتقال للرئيسية">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo.png" alt="عقار أبحر" className="logo" />
+            {/* Replace with your actual logo or use a fallback inline SVG */}
+            <div className="logoFallback">عقار</div>
+            {/* <img src="/logo.png" alt="عقار أبحر" className="logo" /> */}
             <div className="brandText">
               <div className="title">عقار أبحر</div>
               <div className="sub">شمال جدة</div>
@@ -114,15 +105,13 @@ export default function Header() {
         </div>
       </header>
 
-      {/* ✅ المهم: الـDrawer ما ينرسم إلا وقت فتحه (يمنع تكرار/لخبطة بالجوال) */}
-      {menuOpen ? (
+      {menuOpen && (
         <div className="drawerRoot" dir="rtl">
           <div className="overlay" onClick={() => setMenuOpen(false)} />
           <aside className="drawer" aria-label="قائمة الجوال">
             <div className="drawerTop">
               <div className="drawerBrand">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src="/logo.png" alt="عقار أبحر" className="logoSm" />
+                <div className="logoFallback small">عقار</div>
                 <div>
                   <div className="drawerTitle">عقار أبحر</div>
                   <div className="drawerSub">القائمة</div>
@@ -145,7 +134,7 @@ export default function Header() {
             <div className="drawerHint">استخدم البحث للوصول السريع للعروض.</div>
           </aside>
         </div>
-      ) : null}
+      )}
 
       <style jsx>{`
         .hdr {
@@ -192,6 +181,25 @@ export default function Header() {
           background: #fff;
           object-fit: contain;
         }
+        /* Fallback if logo.png is missing */
+        .logoFallback {
+          width: 42px;
+          height: 42px;
+          border-radius: 14px;
+          background: linear-gradient(135deg, #667eea, #764ba2);
+          color: white;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-weight: bold;
+          font-size: 14px;
+          border: 1px solid var(--border);
+        }
+        .logoFallback.small {
+          width: 40px;
+          height: 40px;
+          font-size: 12px;
+        }
         .brandText .title {
           font-weight: 950;
           line-height: 1.1;
@@ -210,27 +218,33 @@ export default function Header() {
         }
         .navDesktop {
           display: flex;
-          gap: 10px;
+          gap: 8px;
           align-items: center;
           flex: 0 0 auto;
         }
+        /* === Chips styling for navigation links === */
         .navLink {
           text-decoration: none;
-          padding: 10px 12px;
-          border-radius: 12px;
-          border: 1px solid transparent;
-          color: var(--text);
-          font-weight: 850;
+          padding: 8px 16px;
+          border-radius: 999px; /* fully rounded edges */
+          background-color: #ffffff;
+          color: #000000;
+          font-weight: 600;
           white-space: nowrap;
+          border: 1px solid #e2e8f0;
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+          transition: all 0.2s ease;
         }
         .navLink:hover {
-          border-color: var(--border);
-          background: #fff;
+          background-color: #f8fafc;
+          border-color: #cbd5e1;
+          box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
         }
         .navLink.active {
-          background: linear-gradient(135deg, var(--primary), var(--primary2));
-          border-color: rgba(214, 179, 91, 0.35);
-          color: #1e293b;
+          background-color: #f1f5f9;
+          border-color: #94a3b8;
+          font-weight: 700;
+          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         }
 
         /* Drawer */
@@ -293,15 +307,19 @@ export default function Header() {
         }
         .drawerLink {
           text-decoration: none;
-          padding: 12px 12px;
-          border-radius: 14px;
-          border: 1px solid var(--border);
-          background: #fff;
-          font-weight: 900;
+          padding: 12px 16px;
+          border-radius: 999px; /* matching chip style */
+          background-color: #ffffff;
+          color: #000000;
+          font-weight: 600;
+          border: 1px solid #e2e8f0;
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+          transition: all 0.2s ease;
         }
         .drawerLink:hover {
-          border-color: var(--border2);
-          background: #f8fafc;
+          background-color: #f8fafc;
+          border-color: #cbd5e1;
+          box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
         }
         .drawerHint {
           margin-top: auto;
