@@ -3,8 +3,8 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
-// استيراد جميع الأحياء (عدل الاسم حسب ما هو موجود في taxonomy)
-import { ALL_NEIGHBORHOODS } from '@/lib/taxonomy';
+// استيراد جميع الأحياء (نصوص) من ملف taxonomy
+import { NEIGHBORHOODS } from '@/lib/taxonomy';
 
 export default function NeighborhoodGrid({
   title = 'الأحياء',
@@ -12,10 +12,13 @@ export default function NeighborhoodGrid({
 }) {
   const router = useRouter();
 
-  // تأمين ضد undefined (إذا لم تكن المصفوفة موجودة نستخدم مصفوفة فارغة)
-  const items = ALL_NEIGHBORHOODS || [];
+  // تحويل مصفوفة النصوص إلى مصفوفة كائنات { key, label }
+  const items = (NEIGHBORHOODS || []).map(name => ({
+    key: name,        // نستخدم الاسم نفسه كمفتاح (فريد)
+    label: name,
+  }));
 
-  // مصفوفة ألوان خلفية للأزرار (يمكنك تغييرها كما تحب)
+  // مصفوفة ألوان خلفية للأزرار
   const colors = [
     '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7',
     '#D4A5A5', '#9B59B6', '#3498DB', '#E67E22', '#2ECC71',
@@ -46,7 +49,7 @@ export default function NeighborhoodGrid({
             style={{
               backgroundColor: colors[index % colors.length],
               borderColor: 'transparent',
-              color: '#fff', // نص أبيض على خلفية ملونة
+              color: '#fff',
               textShadow: '0 1px 2px rgba(0,0,0,0.2)',
             }}
           >
@@ -68,15 +71,15 @@ export default function NeighborhoodGrid({
         }
         .title {
           margin: 0;
-          font-size: 18px; /* حجم أكبر قليلاً */
+          font-size: 18px;
           font-weight: 950;
           letter-spacing: 0.2px;
         }
         .all {
           color: var(--primary);
           font-weight: 900;
-          font-size: 14px; /* أكبر قليلاً */
-          padding: 8px 14px; /* مساحة أكبر */
+          font-size: 14px;
+          padding: 8px 14px;
           border-radius: 999px;
           border: 1px solid rgba(214, 179, 91, 0.25);
           background: rgba(214, 179, 91, 0.08);
@@ -92,7 +95,7 @@ export default function NeighborhoodGrid({
           display: flex;
           flex-direction: row;
           flex-wrap: nowrap;
-          gap: 12px; /* مسافة أكبر بين الأزرار */
+          gap: 12px;
           overflow-x: auto;
           -webkit-overflow-scrolling: touch;
           padding-bottom: 10px;
@@ -102,7 +105,7 @@ export default function NeighborhoodGrid({
 
         /* تخصيص شريط التمرير */
         .scrollableRow::-webkit-scrollbar {
-          height: 6px; /* أعرض قليلاً */
+          height: 6px;
         }
         .scrollableRow::-webkit-scrollbar-thumb {
           background: var(--primary);
@@ -114,11 +117,11 @@ export default function NeighborhoodGrid({
 
         .chip {
           flex: 0 0 auto;
-          border: none; /* أزلنا الحدود لأن الخلفية ملونة */
-          padding: 12px 20px; /* حجم أكبر */
+          border: none;
+          padding: 12px 20px;
           border-radius: 999px;
           font-weight: 950;
-          font-size: 16px; /* خط أكبر */
+          font-size: 16px;
           cursor: pointer;
           transition: transform 120ms ease, opacity 120ms ease;
           box-shadow: 0 2px 4px rgba(0,0,0,0.1);
