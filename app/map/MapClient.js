@@ -136,12 +136,14 @@ export default function MapClient() {
 
   const [mapReady, setMapReady] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [mapType, setMapType] = useState('satellite'); // 'roadmap' أو 'satellite'
 
   const mapDivRef = useRef(null);
   const mapRef = useRef(null);
   const infoRef = useRef(null);
   const markersRef = useRef([]);
   const markerByIdRef = useRef({});
+  const mapTypeControlRef = useRef(null); // مرجع لعنصر التحكم
 
   const prevBodyOverflowRef = useRef('');
   const prevHtmlOverflowRef = useRef('');
@@ -186,7 +188,7 @@ export default function MapClient() {
     load();
   }, [filters]);
 
-  // init map (مع إزالة zoom control وإضافة map type control)
+  // init map
   useEffect(() => {
     let cancelled = false;
 
@@ -208,19 +210,45 @@ export default function MapClient() {
         await loadGoogleMaps(apiKey);
         if (cancelled) return;
 
+        // إنشاء الخريطة مع الخيارات المطلوبة
         mapRef.current = new window.google.maps.Map(mapDivRef.current, {
           center: { lat: 21.77, lng: 39.08 },
           zoom: 12,
-          mapTypeControl: true, // تمكين زر تغيير نوع الخريطة
-          mapTypeControlOptions: {
-            style: window.google.maps.MapTypeControlStyle.HORIZONTAL_BAR,
-            position: window.google.maps.ControlPosition.TOP_RIGHT,
-          },
+          mapTypeControl: false,        // إخفاء عناصر التحكم الافتراضية
           streetViewControl: false,
           fullscreenControl: false,
-          zoomControl: false, // إزالة أزرار التكبير/التصغير
+          zoomControl: false,            // إخفاء أزرار التكبير والتصغير
+          mapTypeId: 'satellite',        // جعل القمر الصناعي افتراضي
         });
         infoRef.current = new window.google.maps.InfoWindow();
+
+        // إنشاء عنصر التحكم المخصص لتبديل نوع الخريطة
+        const controlDiv = document.createElement('div');
+        controlDiv.className = 'custom-map-type-control';
+        controlDiv.style.backgroundColor = 'white';
+        controlDiv.style.border = '1px solid #ccc';
+        controlDiv.style.borderRadius = '8px';
+        controlDiv.style.boxShadow = '0 2px 6px rgba(0,0,0,0.3)';
+        controlDiv.style.padding = '8px 12px';
+        controlDiv.style.margin = '10px';
+        controlDiv.style.cursor = 'pointer';
+        controlDiv.style.fontSize = '14px';
+        controlDiv.style.fontWeight = 'bold';
+        controlDiv.style.direction = 'rtl';
+        controlDiv.style.textAlign = 'center';
+        controlDiv.innerText = 'خريطة'; // النص الابتدائي (لأن البداية قمر صناعي فعند الضغط يتحول لخريطة)
+
+        // حدث النقر لتبديل النوع
+        controlDiv.addEventListener('click', () => {
+          if (!mapRef.current) return;
+          const newType = mapRef.current.getMapTypeId() === 'roadmap' ? 'satellite' : 'roadmap';
+          mapRef.current.setMapTypeId(newType);
+          controlDiv.innerText = newType === 'roadmap' ? 'قمر صناعي' : 'خريطة';
+        });
+
+        // إضافة التحكم إلى الخريطة في الزاوية اليمنى السفلية
+        mapRef.current.controls[window.google.maps.ControlPosition.RIGHT_BOTTOM].push(controlDiv);
+        mapTypeControlRef.current = controlDiv;
 
         setMapReady(true);
 
@@ -247,6 +275,21 @@ export default function MapClient() {
       cancelled = true;
     };
   }, [apiKey]);
+
+  // تحديث نص التحكم إذا تغير نوع الخريطة من مكان آخر
+  useEffect(() => {
+    if (!mapRef.current || !mapTypeControlRef.current) return;
+    const updateText = () => {
+      if (!mapRef.current) return;
+      const currentType = mapRef.current.getMapTypeId();
+      mapTypeControlRef.current.innerText = currentType === 'roadmap' ? 'قمر صناعي' : 'خريطة';
+    };
+    // الاستماع لتغير نوع الخريطة (قد يحدث برمجياً)
+    const listener = window.google.maps.event.addListener(mapRef.current, 'maptypeid_changed', updateText);
+    return () => {
+      window.google.maps.event.removeListener(listener);
+    };
+  }, [mapReady]);
 
   // Fullscreen scroll lock
   useEffect(() => {
@@ -303,13 +346,13 @@ export default function MapClient() {
       const priceText = formatPrice(it.price);
       const colors = getMarkerColors(it.dealType);
 
-      // إنشاء أيقونة مستطيلة بحجم صغير (عرض 70، ارتفاع 24)
+      // إنشاء أيقونة مستطيلة بحجم مناسب (عرض 120، ارتفاع 40)
       const markerIcon = {
-        path: 'M -35,-12 L 35,-12 L 35,12 L -35,12 Z',
+        path: 'M -60,-20 L 60,-20 L 60,20 L -60,20 Z',
         fillColor: colors.bg,
         fillOpacity: 1,
         strokeColor: '#1e293b',
-        strokeWeight: 1.5,
+        strokeWeight: 2,
         scale: 1,
         labelOrigin: new window.google.maps.Point(0, 0),
         anchor: new window.google.maps.Point(0, 0),
@@ -324,7 +367,7 @@ export default function MapClient() {
           text: priceText,
           color: colors.text,
           fontWeight: '900',
-          fontSize: '10px', // خط أصغر
+          fontSize: '14px',
         },
       });
 
@@ -467,12 +510,12 @@ export default function MapClient() {
           ) : (
             <div style={{ marginTop: 10, display: 'grid', gap: 10 }}>
               {filteredItemsWithCoords.slice(0, 25).map((it) => (
-                <div key={it.id} className="card" style={{ padding: '8px', fontSize: '12px' }}>
+                <div key={it.id} className="card">
                   <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ fontWeight: 950, fontSize: '13px' }}>{it.title || 'عرض'}</div>
-                    <button className="btn" style={{ fontSize: '12px', padding: '4px 8px' }} onClick={() => focusOn(it.id)}>عرض</button>
+                    <div style={{ fontWeight: 950 }}>{it.title || 'عرض'}</div>
+                    <button className="btn" onClick={() => focusOn(it.id)}>عرض</button>
                   </div>
-                  <div style={{ marginTop: 6 }}>
+                  <div style={{ marginTop: 8 }}>
                     <ListingCard item={it} compact />
                   </div>
                 </div>
