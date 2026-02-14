@@ -3,7 +3,8 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
-import { FEATURED_NEIGHBORHOODS } from '@/lib/taxonomy';
+// استيراد جميع الأحياء بدلاً من المميزة
+import { NEIGHBORHOODS } from '@/lib/taxonomy';   // <-- غيّر هذا السطر
 
 export default function NeighborhoodGrid({
   title = 'الأحياء',
@@ -11,7 +12,8 @@ export default function NeighborhoodGrid({
 }) {
   const router = useRouter();
 
-  const items = FEATURED_NEIGHBORHOODS || [];
+  // استخدم المصفوفة الكاملة
+  const items = NEIGHBORHOODS || [];
 
   function go(label) {
     router.push(`/listings?neighborhood=${encodeURIComponent(label)}`);
@@ -40,6 +42,7 @@ export default function NeighborhoodGrid({
         ))}
       </div>
 
+      {/* الأنماط كما هي دون تغيير */}
       <style jsx>{`
         .strip {
           margin: 14px 0 10px;
@@ -68,7 +71,6 @@ export default function NeighborhoodGrid({
           text-decoration: none;
         }
 
-        /* حاوية التمرير الأفقي */
         .scrollableRow {
           display: flex;
           flex-direction: row;
@@ -81,7 +83,6 @@ export default function NeighborhoodGrid({
           scrollbar-width: thin;
         }
 
-        /* تخصيص شريط التمرير (WebKit) */
         .scrollableRow::-webkit-scrollbar {
           height: 4px;
         }
