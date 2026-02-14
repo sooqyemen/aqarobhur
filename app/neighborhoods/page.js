@@ -2,19 +2,16 @@
 
 import Link from 'next/link';
 import { NEIGHBORHOODS } from '@/lib/taxonomy';
-import { HiOutlineLocationMarker } from 'react-icons/hi'; // أيقونة موقع أنيقة
 
 export default function NeighborhoodsPage() {
   return (
     <div className="container">
-      {/* رأس الصفحة */}
       <div className="head">
         <h1 className="h1">الأحياء</h1>
-        <p className="muted">اختر الحي الذي تريد استكشاف عروضه</p>
+        <p className="muted">اختر حيًا لتصفح العروض</p>
       </div>
 
-      {/* شبكة البطاقات */}
-      <div className="chipsGrid" role="list" aria-label="قائمة الأحياء">
+      <div className="chips" role="list" aria-label="قائمة الأحياء">
         {NEIGHBORHOODS.map((label) => (
           <Link
             key={label}
@@ -22,8 +19,7 @@ export default function NeighborhoodsPage() {
             className="chip"
             role="listitem"
           >
-            <HiOutlineLocationMarker className="chipIcon" />
-            <span className="chipLabel">{label}</span>
+            {label}
           </Link>
         ))}
       </div>
@@ -35,11 +31,11 @@ export default function NeighborhoodsPage() {
           padding: 20px 16px;
         }
         .head {
-          margin-bottom: 24px;
+          margin: 0 0 20px 0;
         }
         .h1 {
           margin: 0 0 6px 0;
-          font-size: 26px;
+          font-size: 24px;
           font-weight: 800;
           color: #0f172a;
         }
@@ -48,47 +44,29 @@ export default function NeighborhoodsPage() {
           color: #64748b;
           font-size: 16px;
         }
-
-        /* شبكة الشيبس */
-        .chipsGrid {
+        .chips {
           display: flex;
           flex-wrap: wrap;
           gap: 12px;
+          margin-bottom: 18px;
         }
-
-        /* تصميم الشريحة (chip) */
         .chip {
-          display: inline-flex;
-          align-items: center;
-          gap: 8px;
-          padding: 12px 20px;
-          background-color: #ffffff;
-          border: 1px solid #e2e8f0;
-          border-radius: 999px; /* حواف مستديرة كاملة */
-          box-shadow: 0 2px 4px rgba(0,0,0,0.02);
           text-decoration: none;
-          transition: all 0.2s ease;
-          font-size: 16px;
+          color: #1e293b;               /* لون نص ثابت غامق */
+          background-color: #ffffff;      /* خلفية بيضاء */
+          border: 1px solid #e2e8f0;      /* حدود رمادية فاتحة */
+          padding: 12px 20px;             /* حجم متوسط */
+          border-radius: 999px;            /* حواف مستديرة */
           font-weight: 600;
-          color: #1e293b; /* لون نص داكن موحد */
+          font-size: 16px;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+          transition: all 0.2s ease;
           cursor: pointer;
         }
-
-        /* الأيقونة */
-        .chipIcon {
-          font-size: 20px;
-          color: #d6b35b; /* اللون المميز (ذهبي) */
-          transition: transform 0.2s ease;
-        }
-
-        /* تأثير hover */
         .chip:hover {
-          transform: translateY(-3px);
-          border-color: #d6b35b;
+          transform: translateY(-2px);
+          border-color: #d6b35b;           /* اللون المميز */
           box-shadow: 0 8px 16px rgba(0,0,0,0.05);
-        }
-        .chip:hover .chipIcon {
-          transform: scale(1.1);
         }
       `}</style>
     </div>
