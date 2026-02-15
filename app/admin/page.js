@@ -2,36 +2,24 @@
 
 /**
  * لوحة تحكم الأدمن - إدارة عقارات أبحر
- * refactored: أكثر احترافية وتنظيماً مع فصل المسؤوليات واستخدام hooks مخصصة
- * التعديلات الأخيرة:
- * - نوع العقار أولاً في النموذج
- * - موقع افتراضي للخريطة: أبحر الشمالية (21.7628, 39.0994)
- * - رفع تلقائي للملفات فور اختيارها
- * - زر إضافة الإعلان بشكل أجمل
- * - تقييد الدبوس داخل حدود مدينة جدة فقط
+ * إصلاحات وتحسينات:
+ * - إصلاح مشكلة رفع الصور (stale queue / auto upload)
+ * - تشغيل رفع تلقائي موثوق عبر useEffect (بدون تعليق)
+ * - تعطيل زر الحفظ أثناء الرفع/الحفظ
+ * - زر إعادة محاولة للملفات الفاشلة
+ * - عدم مسح createdId مباشرة بعد الإنشاء (يعرضه بشكل صحيح)
  */
 
 // ===================== الواردات =====================
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { getFirebase } from '@/lib/firebaseClient';
 import { signInWithEmailAndPassword, onAuthStateChanged, signOut } from 'firebase/auth';
-import {
-  ref as storageRef,
-  uploadBytesResumable,
-  getDownloadURL,
-  deleteObject,
-} from 'firebase/storage';
+import { ref as storageRef, uploadBytesResumable, getDownloadURL, deleteObject } from 'firebase/storage';
 import { doc, deleteDoc, getFirestore } from 'firebase/firestore';
 
 import { isAdminUser } from '@/lib/admin';
 import { adminCreateListing, adminUpdateListing, fetchListings } from '@/lib/listings';
-import {
-  DEAL_TYPES,
-  NEIGHBORHOODS,
-  PROPERTY_TYPES,
-  STATUS_OPTIONS,
-  PROPERTY_CLASSES,
-} from '@/lib/taxonomy';
+import { DEAL_TYPES, NEIGHBORHOODS, PROPERTY_TYPES, STATUS_OPTIONS, PROPERTY_CLASSES } from '@/lib/taxonomy';
 import { formatPriceSAR, statusBadge } from '@/lib/format';
 
 // ===================== الثوابت =====================
@@ -102,15 +90,13 @@ const isVideoUrl = (url) => /\.(mp4|mov|webm|mkv|avi|wmv|flv|3gp|m4v)(\?|$)/i.te
 const formatStorageError = (e) => {
   const code = String(e?.code || '');
   const msg = String(e?.message || '');
+
   if (msg.toLowerCase().includes('appcheck')) return 'رفع الملفات مرفوض بسبب App Check.';
   if (code === 'upload-stalled') return 'الرفع توقف بدون تقدم.';
   if (code === 'upload-timeout') return 'انتهت مهلة الرفع.';
-  if (code === 'storage/unauthorized' || code === 'permission-denied')
-    return 'لا توجد صلاحيات لرفع الملفات.';
-  if (code === 'storage/bucket-not-found')
-    return 'Storage Bucket غير صحيح.';
-  if (code === 'storage/retry-limit-exceeded')
-    return 'تعذر إكمال الرفع بسبب انقطاع في الشبكة.';
+  if (code === 'storage/unauthorized' || code === 'permission-denied') return 'لا توجد صلاحيات لرفع الملفات.';
+  if (code === 'storage/bucket-not-found') return 'Storage Bucket غير صحيح.';
+  if (code === 'storage/retry-limit-exceeded') return 'تعذر إكمال الرفع بسبب انقطاع في الشبكة.';
   if (code === 'storage/canceled') return 'تم إلغاء الرفع.';
   if (code === 'storage/quota-exceeded') return 'تم تجاوز سعة التخزين.';
   return msg || 'فشل رفع الملفات.';
@@ -123,7 +109,11 @@ const Field = ({ label, children, hint }) => (
       {label}
     </div>
     {children}
-    {hint && <div className="muted" style={{ fontSize: 12, marginTop: 6, opacity: 0.9 }}>{hint}</div>}
+    {hint && (
+      <div className="muted" style={{ fontSize: 12, marginTop: 6, opacity: 0.9 }}>
+        {hint}
+      </div>
+    )}
   </div>
 );
 
@@ -154,7 +144,9 @@ const loadGoogleMaps = (apiKey) => {
       script.id = scriptId;
       script.async = true;
       script.defer = true;
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&v=weekly&language=ar&region=SA`;
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(
+        apiKey
+      )}&v=weekly&language=ar&region=SA`;
 
       script.onload = () => {
         if (window.google?.maps) resolve(window.google.maps);
@@ -209,22 +201,25 @@ const MapPicker = ({ value, onChange }) => {
     }
   }, [current, isWithinJeddah]);
 
-  const emitPosition = useCallback((lat, lng) => {
-    if (!isWithinJeddah(lat, lng)) {
-      setBoundsMsg('⚠️ الموقع خارج حدود مدينة جدة. الرجاء اختيار موقع داخل جدة.');
-      if (lastValidPositionRef.current) {
-        markerRef.current?.setPosition(lastValidPositionRef.current);
-        mapRef.current?.panTo(lastValidPositionRef.current);
-      } else {
-        markerRef.current?.setPosition(defaultCenter);
-        mapRef.current?.panTo(defaultCenter);
+  const emitPosition = useCallback(
+    (lat, lng) => {
+      if (!isWithinJeddah(lat, lng)) {
+        setBoundsMsg('تنبيه: الموقع خارج حدود مدينة جدة. الرجاء اختيار موقع داخل جدة.');
+        if (lastValidPositionRef.current) {
+          markerRef.current?.setPosition(lastValidPositionRef.current);
+          mapRef.current?.panTo(lastValidPositionRef.current);
+        } else {
+          markerRef.current?.setPosition(defaultCenter);
+          mapRef.current?.panTo(defaultCenter);
+        }
+        return;
       }
-      return;
-    }
-    setBoundsMsg('');
-    lastValidPositionRef.current = { lat, lng };
-    onChange?.({ lat: round6(lat), lng: round6(lng) });
-  }, [isWithinJeddah, onChange, defaultCenter]);
+      setBoundsMsg('');
+      lastValidPositionRef.current = { lat, lng };
+      onChange?.({ lat: round6(lat), lng: round6(lng) });
+    },
+    [isWithinJeddah, onChange, defaultCenter]
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -235,9 +230,10 @@ const MapPicker = ({ value, onChange }) => {
         const gmaps = await loadGoogleMaps(apiKey);
         if (cancelled || !mapElRef.current || mapRef.current) return;
 
-        const center = current && isWithinJeddah(current.lat, current.lng)
-          ? { lat: current.lat, lng: current.lng }
-          : { lat: defaultCenter.lat, lng: defaultCenter.lng };
+        const center =
+          current && isWithinJeddah(current.lat, current.lng)
+            ? { lat: current.lat, lng: current.lng }
+            : { lat: defaultCenter.lat, lng: defaultCenter.lng };
 
         const map = new gmaps.Map(mapElRef.current, {
           center,
@@ -333,14 +329,16 @@ const MapPicker = ({ value, onChange }) => {
     if (!mapRef.current || !markerRef.current || !current) return;
     const pos = markerRef.current.getPosition();
     if (pos && approxSame(pos.lat(), current.lat) && approxSame(pos.lng(), current.lng)) return;
+
     if (isWithinJeddah(current.lat, current.lng)) {
       markerRef.current.setPosition({ lat: current.lat, lng: current.lng });
       mapRef.current.panTo({ lat: current.lat, lng: current.lng });
       if ((mapRef.current.getZoom?.() || 0) < 16) mapRef.current.setZoom(16);
       lastValidPositionRef.current = { lat: current.lat, lng: current.lng };
     } else {
-      setBoundsMsg('⚠️ الموقع المحدد خارج مدينة جدة. سيتم تجاهله.');
+      setBoundsMsg('تنبيه: الموقع المحدد خارج مدينة جدة. سيتم تجاهله.');
     }
+
     window.google?.maps?.event?.trigger?.(mapRef.current, 'resize');
   }, [current, isWithinJeddah]);
 
@@ -368,9 +366,11 @@ const MapPicker = ({ value, onChange }) => {
   return (
     <div style={{ width: '100%' }}>
       <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-        <span className="muted" style={{ fontSize: 12 }}>اختر الموقع بالنقر على الخريطة أو اسحب العلامة. (يُسمح فقط بمواقع داخل مدينة جدة)</span>
+        <span className="muted" style={{ fontSize: 12 }}>
+          اختر الموقع بالنقر على الخريطة أو اسحب العلامة. (يُسمح فقط بمواقع داخل مدينة جدة)
+        </span>
         <button className="btn" type="button" onClick={useMyLocation} style={{ fontSize: 12, padding: '6px 10px' }}>
-          📍 موقعي الحالي
+          موقعي الحالي
         </button>
       </div>
 
@@ -397,14 +397,16 @@ const MapPicker = ({ value, onChange }) => {
           border-radius: 16px;
           overflow: hidden;
           border: 1px solid rgba(214, 179, 91, 0.28);
-          background: rgba(255,255,255,0.03);
+          background: rgba(255, 255, 255, 0.03);
         }
         .mapEl {
           width: 100%;
           height: 420px;
         }
         @media (max-width: 768px) {
-          .mapEl { height: 320px; }
+          .mapEl {
+            height: 320px;
+          }
         }
         .mapOverlay {
           position: absolute;
@@ -414,7 +416,7 @@ const MapPicker = ({ value, onChange }) => {
           justify-content: center;
           padding: 14px;
           text-align: center;
-          background: rgba(0,0,0,0.18);
+          background: rgba(0, 0, 0, 0.18);
           backdrop-filter: blur(6px);
           font-weight: 800;
         }
@@ -460,13 +462,56 @@ const useAuth = () => {
   return { user, email, setEmail, pass, setPass, authErr, busy, login, logout, isAdmin };
 };
 
-// ===================== Hook مخصص لرفع الملفات (رفع تلقائي) =====================
+// ===================== Hook مخصص لرفع الملفات (إصلاح الرفع التلقائي) =====================
 const useFileUpload = (user, storage, onUploaded) => {
   const [queue, setQueue] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [uploadErr, setUploadErr] = useState('');
   const fileInputRef = useRef(null);
-  const uploadTimeoutRef = useRef(null);
+
+  // refs لحل stale closure
+  const queueRef = useRef([]);
+  const uploadingRef = useRef(false);
+  const autoKickRef = useRef(null);
+
+  useEffect(() => {
+    queueRef.current = queue;
+  }, [queue]);
+
+  useEffect(() => {
+    uploadingRef.current = uploading;
+  }, [uploading]);
+
+  // تنظيف عند الخروج
+  useEffect(() => {
+    return () => {
+      if (autoKickRef.current) clearTimeout(autoKickRef.current);
+      try {
+        (queueRef.current || []).forEach((it) => it?.preview && URL.revokeObjectURL(it.preview));
+      } catch {}
+    };
+  }, []);
+
+  const isVideoFile = useCallback((file) => {
+    const name = String(file?.name || '').toLowerCase();
+    return (
+      String(file?.type || '').startsWith('video/') ||
+      /\.(mp4|mov|webm|mkv|avi|wmv|flv|3gp|m4v)(\?|$)/i.test(name)
+    );
+  }, []);
+
+  const makeSafeName = useCallback((file) => {
+    const raw = String(file?.name || 'file');
+    let safe = raw
+      .replace(/\s+/g, '_')
+      .replace(/[^a-zA-Z0-9_\.-]/g, '')
+      .slice(0, 100);
+
+    if (!safe || safe.replace(/[_.-]/g, '') === '') {
+      safe = `file_${Date.now()}_${Math.random().toString(16).slice(2)}.bin`;
+    }
+    return safe;
+  }, []);
 
   const addFiles = useCallback((files) => {
     setUploadErr('');
@@ -474,8 +519,9 @@ const useFileUpload = (user, storage, onUploaded) => {
     if (!incoming.length) return;
 
     setQueue((prev) => {
-      const remaining = MAX_FILES - prev.length;
+      const remaining = Math.max(0, MAX_FILES - prev.length);
       const slice = incoming.slice(0, remaining);
+
       const newItems = slice.map((file) => ({
         id: nowId(),
         file,
@@ -486,14 +532,9 @@ const useFileUpload = (user, storage, onUploaded) => {
         status: 'ready',
         error: '',
       }));
+
       return [...prev, ...newItems];
     });
-
-    if (uploadTimeoutRef.current) clearTimeout(uploadTimeoutRef.current);
-    uploadTimeoutRef.current = setTimeout(() => {
-      uploadSelected();
-    }, 300);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const removeQueued = useCallback((id) => {
@@ -508,24 +549,31 @@ const useFileUpload = (user, storage, onUploaded) => {
     setQueue((prev) => prev.map((x) => (x.id === id ? { ...x, selected: !x.selected } : x)));
   }, []);
 
+  const retryQueued = useCallback((id) => {
+    setQueue((prev) =>
+      prev.map((x) =>
+        x.id === id ? { ...x, status: 'ready', selected: true, progress: 0, error: '' } : x
+      )
+    );
+    setUploadErr('');
+  }, []);
+
   const clearQueue = useCallback(() => {
     setQueue((prev) => {
       prev.forEach((it) => it.preview && URL.revokeObjectURL(it.preview));
       return [];
     });
+    setUploadErr('');
   }, []);
 
   const uploadOne = useCallback(
     async (item, idx, uid) => {
       const file = item.file;
-      const isVideo = file?.type?.startsWith('video/') || false;
+      const isVideo = isVideoFile(file);
       const folder = isVideo ? 'abhur_videos' : 'abhur_images';
       const timeoutMs = isVideo ? VIDEO_TIMEOUT_MS : IMAGE_TIMEOUT_MS;
 
-      const safeName = String(file?.name || 'file')
-        .replace(/\s+/g, '_')
-        .replace(/[^a-zA-Z0-9_\.-]/g, '')
-        .slice(0, 100);
+      const safeName = makeSafeName(file);
       const path = `${folder}/${uid}/${Date.now()}_${idx}_${safeName}`;
       const fileRef = storageRef(storage, path);
 
@@ -533,7 +581,11 @@ const useFileUpload = (user, storage, onUploaded) => {
         prev.map((x) => (x.id === item.id ? { ...x, status: 'uploading', progress: 0, error: '' } : x))
       );
 
-      const metadata = { contentType: file.type || (isVideo ? 'video/mp4' : 'image/jpeg') };
+      const metadata = {
+        contentType: file.type || (isVideo ? 'video/mp4' : 'image/jpeg'),
+        cacheControl: 'public,max-age=31536000',
+      };
+
       const task = uploadBytesResumable(fileRef, file, metadata);
 
       let lastBytes = 0;
@@ -543,13 +595,17 @@ const useFileUpload = (user, storage, onUploaded) => {
       return new Promise((resolve, reject) => {
         const watcher = setInterval(() => {
           const now = Date.now();
+
           if (now - startedAt > timeoutMs) {
             task.cancel();
             const err = new Error('upload-timeout');
             err.code = 'upload-timeout';
             clearInterval(watcher);
             reject(err);
-          } else if (now - lastTick > STALL_MS) {
+            return;
+          }
+
+          if (now - lastTick > STALL_MS) {
             task.cancel();
             const err = new Error('upload-stalled');
             err.code = 'upload-stalled';
@@ -587,24 +643,27 @@ const useFileUpload = (user, storage, onUploaded) => {
           return url;
         });
     },
-    [storage]
+    [storage, isVideoFile, makeSafeName]
   );
 
   const runPool = async (items, concurrency, worker) => {
     const results = [];
     let i = 0;
-    const workers = Array(concurrency).fill(0).map(async () => {
-      while (i < items.length) {
-        const idx = i++;
-        results[idx] = await worker(items[idx], idx);
-      }
-    });
+    const workers = Array(concurrency)
+      .fill(0)
+      .map(async () => {
+        while (i < items.length) {
+          const idx = i++;
+          results[idx] = await worker(items[idx], idx);
+        }
+      });
     await Promise.all(workers);
     return results;
   };
 
   const uploadSelected = useCallback(async () => {
     setUploadErr('');
+
     if (!user) {
       setUploadErr('يجب تسجيل الدخول أولاً.');
       return;
@@ -613,8 +672,10 @@ const useFileUpload = (user, storage, onUploaded) => {
       setUploadErr('خدمة التخزين غير متوفرة.');
       return;
     }
+    if (uploadingRef.current) return;
 
-    const selected = queue.filter((q) => q.selected && q.status !== 'done' && q.status !== 'uploading');
+    const currentQueue = queueRef.current || [];
+    const selected = currentQueue.filter((q) => q.selected && q.status !== 'done' && q.status !== 'uploading');
     if (!selected.length) return;
 
     setUploading(true);
@@ -634,21 +695,36 @@ const useFileUpload = (user, storage, onUploaded) => {
       });
 
       const okUrls = uniq(urls.filter(Boolean));
-      if (okUrls.length) {
-        onUploaded?.(okUrls);
-      }
+      if (okUrls.length) onUploaded?.(okUrls);
 
-      setQueue((prev) =>
-        prev.map((x) => (selected.some((s) => s.id === x.id) ? { ...x, selected: false } : x))
-      );
+      // بعد الرفع: أزل التحديد فقط
+      setQueue((prev) => prev.map((x) => (selected.some((s) => s.id === x.id) ? { ...x, selected: false } : x)));
 
       if (errors.length) {
-        setUploadErr(`تم رفع ${okUrls.length} من ${selected.length}. بعض الملفات فشلت.`);
+        setUploadErr(`تم رفع ${okUrls.length} من ${selected.length}. يوجد ملفات فشلت.`);
       }
     } finally {
       setUploading(false);
     }
-  }, [queue, user, storage, uploadOne, onUploaded]);
+  }, [user, storage, uploadOne, onUploaded]);
+
+  // تشغيل تلقائي موثوق عند وجود ملفات جاهزة
+  useEffect(() => {
+    if (!user || !storage) return;
+    if (uploading) return;
+
+    const hasPending = queue.some((q) => q.selected && q.status === 'ready');
+    if (!hasPending) return;
+
+    if (autoKickRef.current) clearTimeout(autoKickRef.current);
+    autoKickRef.current = setTimeout(() => {
+      uploadSelected();
+    }, 200);
+
+    return () => {
+      if (autoKickRef.current) clearTimeout(autoKickRef.current);
+    };
+  }, [queue, user, storage, uploading, uploadSelected]);
 
   return {
     queue,
@@ -658,6 +734,7 @@ const useFileUpload = (user, storage, onUploaded) => {
     addFiles,
     removeQueued,
     toggleSelected,
+    retryQueued,
     clearQueue,
     uploadSelected,
     setUploadErr,
@@ -709,13 +786,13 @@ const useListings = () => {
           await deleteDoc(doc(firestore, LISTINGS_COLLECTION, item.id));
         }
 
-        alert('تم الحذف ✅');
+        alert('تم الحذف');
         await loadList();
       } catch (e) {
         console.error(e);
         try {
           await adminUpdateListing(item.id, { status: 'canceled', archived: true });
-          alert('تعذر الحذف النهائي — تم إخفاء الإعلان بدلاً من ذلك ✅');
+          alert('تعذر الحذف النهائي — تم إخفاء الإعلان بدلاً من ذلك');
           await loadList();
         } catch {
           alert('فشل حذف/إخفاء الإعلان.');
@@ -764,20 +841,18 @@ const EMPTY_FORM = {
 };
 
 // ===================== مكون النموذج الرئيسي =====================
-const CreateEditForm = ({
-  editingId,
-  form,
-  setForm,
-  onSave,
-  onReset,
-  busy,
-  createdId,
-  uploader,
-  storage,
-  db,
-}) => {
-  const { queue, uploading, uploadErr, fileInputRef, addFiles, removeQueued, toggleSelected, clearQueue, uploadSelected, setUploadErr } =
-    uploader;
+const CreateEditForm = ({ editingId, form, setForm, onSave, onReset, busy, createdId, uploader }) => {
+  const {
+    queue,
+    uploading,
+    uploadErr,
+    fileInputRef,
+    addFiles,
+    removeQueued,
+    toggleSelected,
+    retryQueued,
+    uploadSelected,
+  } = uploader;
 
   const latNum = toNumberOrNull(form.lat);
   const lngNum = toNumberOrNull(form.lng);
@@ -866,15 +941,24 @@ const CreateEditForm = ({
       <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ fontWeight: 900 }}>{editingId ? 'تعديل الإعلان' : 'إضافة إعلان'}</div>
         {editingId && (
-          <button className="btn" onClick={onReset}>
+          <button className="btn" onClick={onReset} type="button">
             إلغاء التعديل
           </button>
         )}
       </div>
 
       {createdId && (
-        <div className="card" style={{ marginTop: 10, borderColor: 'rgba(21,128,61,.25)', background: 'rgba(21,128,61,.06)' }}>
+        <div
+          className="card"
+          style={{ marginTop: 10, borderColor: 'rgba(21,128,61,.25)', background: 'rgba(21,128,61,.06)' }}
+        >
           تم إنشاء العرض بنجاح. ID: <b>{createdId}</b>
+        </div>
+      )}
+
+      {(uploading || busy) && (
+        <div className="muted" style={{ marginTop: 10, fontSize: 12 }}>
+          {busy ? 'جاري حفظ الإعلان…' : 'جاري رفع الملفات…'}
         </div>
       )}
 
@@ -882,11 +966,7 @@ const CreateEditForm = ({
         {/* نوع العقار أولاً */}
         <div className="col-3">
           <Field label="نوع العقار">
-            <select
-              className="select"
-              value={form.propertyType}
-              onChange={(e) => setForm({ ...form, propertyType: e.target.value })}
-            >
+            <select className="select" value={form.propertyType} onChange={(e) => setForm({ ...form, propertyType: e.target.value })}>
               {PROPERTY_TYPES.map((p) => (
                 <option key={p} value={p}>
                   {p}
@@ -896,25 +976,15 @@ const CreateEditForm = ({
           </Field>
         </div>
 
-        {/* باقي الحقول الأساسية */}
         <div className="col-6">
           <Field label="عنوان العرض">
-            <input
-              className="input"
-              value={form.title}
-              onChange={(e) => setForm({ ...form, title: e.target.value })}
-              placeholder="مثال: فيلا للبيع في حي الزمرد"
-            />
+            <input className="input" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="مثال: فيلا للبيع في حي الزمرد" />
           </Field>
         </div>
 
         <div className="col-3">
           <Field label="الحي">
-            <select
-              className="select"
-              value={form.neighborhood}
-              onChange={(e) => setForm({ ...form, neighborhood: e.target.value })}
-            >
+            <select className="select" value={form.neighborhood} onChange={(e) => setForm({ ...form, neighborhood: e.target.value })}>
               <option value="">اختر</option>
               {NEIGHBORHOODS.map((n) => (
                 <option key={n} value={n}>
@@ -927,11 +997,7 @@ const CreateEditForm = ({
 
         <div className="col-3">
           <Field label="مباشر">
-            <select
-              className="select"
-              value={form.direct ? 'yes' : 'no'}
-              onChange={(e) => setForm({ ...form, direct: e.target.value === 'yes' })}
-            >
+            <select className="select" value={form.direct ? 'yes' : 'no'} onChange={(e) => setForm({ ...form, direct: e.target.value === 'yes' })}>
               <option value="yes">نعم</option>
               <option value="no">وسيط/وكيل</option>
             </select>
@@ -940,44 +1006,25 @@ const CreateEditForm = ({
 
         <div className="col-3">
           <Field label="المخطط">
-            <input
-              className="input"
-              value={form.plan}
-              onChange={(e) => setForm({ ...form, plan: e.target.value })}
-              placeholder="مثال: مخطط الخالدية السياحي"
-            />
+            <input className="input" value={form.plan} onChange={(e) => setForm({ ...form, plan: e.target.value })} placeholder="مثال: مخطط الخالدية السياحي" />
           </Field>
         </div>
 
         <div className="col-3">
           <Field label="الجزء">
-            <input
-              className="input"
-              value={form.part}
-              onChange={(e) => setForm({ ...form, part: e.target.value })}
-              placeholder="مثال: الجزء ج"
-            />
+            <input className="input" value={form.part} onChange={(e) => setForm({ ...form, part: e.target.value })} placeholder="مثال: الجزء ج" />
           </Field>
         </div>
 
         <div className="col-3">
           <Field label="رقم القطعة" hint="مهم للأراضي">
-            <input
-              className="input"
-              value={form.lotNumber}
-              onChange={(e) => setForm({ ...form, lotNumber: e.target.value })}
-              placeholder="مثال: 250"
-            />
+            <input className="input" value={form.lotNumber} onChange={(e) => setForm({ ...form, lotNumber: e.target.value })} placeholder="مثال: 250" />
           </Field>
         </div>
 
         <div className="col-3">
           <Field label="بيع/إيجار">
-            <select
-              className="select"
-              value={form.dealType}
-              onChange={(e) => setForm({ ...form, dealType: e.target.value })}
-            >
+            <select className="select" value={form.dealType} onChange={(e) => setForm({ ...form, dealType: e.target.value })}>
               {DEAL_TYPES.map((d) => (
                 <option key={d.key} value={d.key}>
                   {d.label}
@@ -989,11 +1036,7 @@ const CreateEditForm = ({
 
         <div className="col-3">
           <Field label="سكني/تجاري" hint="اختياري">
-            <select
-              className="select"
-              value={form.propertyClass}
-              onChange={(e) => setForm({ ...form, propertyClass: e.target.value })}
-            >
+            <select className="select" value={form.propertyClass} onChange={(e) => setForm({ ...form, propertyClass: e.target.value })}>
               <option value="">تلقائي</option>
               {PROPERTY_CLASSES.map((c) => (
                 <option key={c.key} value={c.key}>
@@ -1006,35 +1049,19 @@ const CreateEditForm = ({
 
         <div className="col-3">
           <Field label="المساحة (م²)">
-            <input
-              className="input"
-              inputMode="numeric"
-              value={form.area}
-              onChange={(e) => setForm({ ...form, area: e.target.value })}
-              placeholder="مثال: 312"
-            />
+            <input className="input" inputMode="numeric" value={form.area} onChange={(e) => setForm({ ...form, area: e.target.value })} placeholder="مثال: 312" />
           </Field>
         </div>
 
         <div className="col-3">
           <Field label="السعر">
-            <input
-              className="input"
-              inputMode="numeric"
-              value={form.price}
-              onChange={(e) => setForm({ ...form, price: e.target.value })}
-              placeholder="مثال: 1350000"
-            />
+            <input className="input" inputMode="numeric" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} placeholder="مثال: 1350000" />
           </Field>
         </div>
 
         <div className="col-3">
           <Field label="الحالة">
-            <select
-              className="select"
-              value={form.status}
-              onChange={(e) => setForm({ ...form, status: e.target.value })}
-            >
+            <select className="select" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
               {STATUS_OPTIONS.map((s) => (
                 <option key={s.key} value={s.key}>
                   {s.label}
@@ -1052,67 +1079,32 @@ const CreateEditForm = ({
               <div className="grid">
                 <div className="col-3">
                   <Field label="عمر العقار (سنة)">
-                    <input
-                      className="input"
-                      inputMode="numeric"
-                      value={form.age}
-                      onChange={(e) => setForm({ ...form, age: e.target.value })}
-                      placeholder="مثال: 5"
-                    />
+                    <input className="input" inputMode="numeric" value={form.age} onChange={(e) => setForm({ ...form, age: e.target.value })} placeholder="مثال: 5" />
                   </Field>
                 </div>
                 <div className="col-3">
                   <Field label="عرض الشارع (م)">
-                    <input
-                      className="input"
-                      inputMode="numeric"
-                      value={form.streetWidth}
-                      onChange={(e) => setForm({ ...form, streetWidth: e.target.value })}
-                      placeholder="مثال: 20"
-                    />
+                    <input className="input" inputMode="numeric" value={form.streetWidth} onChange={(e) => setForm({ ...form, streetWidth: e.target.value })} placeholder="مثال: 20" />
                   </Field>
                 </div>
                 <div className="col-3">
                   <Field label="الواجهة">
-                    <input
-                      className="input"
-                      value={form.facade}
-                      onChange={(e) => setForm({ ...form, facade: e.target.value })}
-                      placeholder="شمال / جنوب / شرق / غرب"
-                    />
+                    <input className="input" value={form.facade} onChange={(e) => setForm({ ...form, facade: e.target.value })} placeholder="شمال / جنوب / شرق / غرب" />
                   </Field>
                 </div>
                 <div className="col-3">
                   <Field label="عدد الغرف">
-                    <input
-                      className="input"
-                      inputMode="numeric"
-                      value={form.bedrooms}
-                      onChange={(e) => setForm({ ...form, bedrooms: e.target.value })}
-                      placeholder="مثال: 6"
-                    />
+                    <input className="input" inputMode="numeric" value={form.bedrooms} onChange={(e) => setForm({ ...form, bedrooms: e.target.value })} placeholder="مثال: 6" />
                   </Field>
                 </div>
                 <div className="col-3">
                   <Field label="عدد الصالات">
-                    <input
-                      className="input"
-                      inputMode="numeric"
-                      value={form.lounges}
-                      onChange={(e) => setForm({ ...form, lounges: e.target.value })}
-                      placeholder="مثال: 2"
-                    />
+                    <input className="input" inputMode="numeric" value={form.lounges} onChange={(e) => setForm({ ...form, lounges: e.target.value })} placeholder="مثال: 2" />
                   </Field>
                 </div>
                 <div className="col-3">
                   <Field label="عدد دورات المياه">
-                    <input
-                      className="input"
-                      inputMode="numeric"
-                      value={form.bathrooms}
-                      onChange={(e) => setForm({ ...form, bathrooms: e.target.value })}
-                      placeholder="مثال: 5"
-                    />
+                    <input className="input" inputMode="numeric" value={form.bathrooms} onChange={(e) => setForm({ ...form, bathrooms: e.target.value })} placeholder="مثال: 5" />
                   </Field>
                 </div>
                 <div className="col-3">
@@ -1136,57 +1128,27 @@ const CreateEditForm = ({
               <div className="grid">
                 <div className="col-3">
                   <Field label="الدور">
-                    <input
-                      className="input"
-                      inputMode="numeric"
-                      value={form.floor}
-                      onChange={(e) => setForm({ ...form, floor: e.target.value })}
-                      placeholder="مثال: 3"
-                    />
+                    <input className="input" inputMode="numeric" value={form.floor} onChange={(e) => setForm({ ...form, floor: e.target.value })} placeholder="مثال: 3" />
                   </Field>
                 </div>
                 <div className="col-3">
                   <Field label="عدد الغرف">
-                    <input
-                      className="input"
-                      inputMode="numeric"
-                      value={form.bedrooms}
-                      onChange={(e) => setForm({ ...form, bedrooms: e.target.value })}
-                      placeholder="مثال: 4"
-                    />
+                    <input className="input" inputMode="numeric" value={form.bedrooms} onChange={(e) => setForm({ ...form, bedrooms: e.target.value })} placeholder="مثال: 4" />
                   </Field>
                 </div>
                 <div className="col-3">
                   <Field label="عدد الصالات">
-                    <input
-                      className="input"
-                      inputMode="numeric"
-                      value={form.lounges}
-                      onChange={(e) => setForm({ ...form, lounges: e.target.value })}
-                      placeholder="مثال: 1"
-                    />
+                    <input className="input" inputMode="numeric" value={form.lounges} onChange={(e) => setForm({ ...form, lounges: e.target.value })} placeholder="مثال: 1" />
                   </Field>
                 </div>
                 <div className="col-3">
                   <Field label="عدد المجالس">
-                    <input
-                      className="input"
-                      inputMode="numeric"
-                      value={form.majlis}
-                      onChange={(e) => setForm({ ...form, majlis: e.target.value })}
-                      placeholder="مثال: 1"
-                    />
+                    <input className="input" inputMode="numeric" value={form.majlis} onChange={(e) => setForm({ ...form, majlis: e.target.value })} placeholder="مثال: 1" />
                   </Field>
                 </div>
                 <div className="col-3">
                   <Field label="عدد دورات المياه">
-                    <input
-                      className="input"
-                      inputMode="numeric"
-                      value={form.bathrooms}
-                      onChange={(e) => setForm({ ...form, bathrooms: e.target.value })}
-                      placeholder="مثال: 3"
-                    />
+                    <input className="input" inputMode="numeric" value={form.bathrooms} onChange={(e) => setForm({ ...form, bathrooms: e.target.value })} placeholder="مثال: 3" />
                   </Field>
                 </div>
                 <div className="col-3">
@@ -1207,23 +1169,12 @@ const CreateEditForm = ({
               <div className="grid">
                 <div className="col-3">
                   <Field label="عرض الشارع (م)">
-                    <input
-                      className="input"
-                      inputMode="numeric"
-                      value={form.streetWidth}
-                      onChange={(e) => setForm({ ...form, streetWidth: e.target.value })}
-                      placeholder="مثال: 20"
-                    />
+                    <input className="input" inputMode="numeric" value={form.streetWidth} onChange={(e) => setForm({ ...form, streetWidth: e.target.value })} placeholder="مثال: 20" />
                   </Field>
                 </div>
                 <div className="col-3">
                   <Field label="الواجهة">
-                    <input
-                      className="input"
-                      value={form.facade}
-                      onChange={(e) => setForm({ ...form, facade: e.target.value })}
-                      placeholder="شمال / جنوب / شرق / غرب"
-                    />
+                    <input className="input" value={form.facade} onChange={(e) => setForm({ ...form, facade: e.target.value })} placeholder="شمال / جنوب / شرق / غرب" />
                   </Field>
                 </div>
               </div>
@@ -1231,19 +1182,11 @@ const CreateEditForm = ({
           </div>
         )}
 
-        {/* حقل الموقع + الخريطة */}
+        {/* الموقع + الخريطة */}
         <div className="col-12">
-          <Field
-            label="موقع العقار على الخريطة"
-            hint="حدد الموقع من الخريطة (يُسمح فقط بمواقع داخل مدينة جدة). يمكنك أيضاً لصق رابط Google Maps."
-          >
+          <Field label="موقع العقار على الخريطة" hint="حدد الموقع من الخريطة (يُسمح فقط بمواقع داخل مدينة جدة). يمكنك أيضاً لصق رابط Google Maps.">
             <div style={{ display: 'grid', gap: 10 }}>
-              <input
-                className="input"
-                value={form.websiteUrl}
-                onChange={handleWebsiteUrlChange}
-                placeholder="https://maps.google.com/..."
-              />
+              <input className="input" value={form.websiteUrl} onChange={handleWebsiteUrlChange} placeholder="https://maps.google.com/..." />
               <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 <span className="muted" style={{ fontSize: 12 }}>
                   {hasCoords ? (
@@ -1256,12 +1199,7 @@ const CreateEditForm = ({
                 </span>
                 {hasCoords && (
                   <div className="row" style={{ gap: 8 }}>
-                    <a
-                      className="btn"
-                      href={buildGoogleMapsUrl(latNum, lngNum)}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
+                    <a className="btn" href={buildGoogleMapsUrl(latNum, lngNum)} target="_blank" rel="noreferrer">
                       فتح في خرائط Google
                     </a>
                     <button className="btnDanger" type="button" onClick={clearCoords}>
@@ -1278,13 +1216,7 @@ const CreateEditForm = ({
         {/* الوصف */}
         <div className="col-12">
           <Field label="وصف (اختياري)">
-            <textarea
-              className="input"
-              rows={4}
-              value={form.description}
-              onChange={(e) => setForm({ ...form, description: e.target.value })}
-              placeholder="تفاصيل إضافية: شارع/واجهة/مميزات…"
-            />
+            <textarea className="input" rows={4} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="تفاصيل إضافية: شارع/واجهة/مميزات…" />
           </Field>
         </div>
 
@@ -1316,10 +1248,6 @@ const CreateEditForm = ({
               }}
             />
 
-            {uploading && (
-              <div className="muted" style={{ marginTop: 8, fontSize: 12 }}>جاري رفع الملفات…</div>
-            )}
-
             {uploadErr && (
               <div className="card" style={{ marginTop: 10, borderColor: 'rgba(180,35,24,.25)', background: 'rgba(180,35,24,.05)' }}>
                 {uploadErr}
@@ -1332,25 +1260,14 @@ const CreateEditForm = ({
                   <div key={q.id} className="card" style={{ padding: 10 }}>
                     <div style={{ position: 'relative' }}>
                       {q.type?.startsWith('video/') ? (
-                        <video
-                          src={q.preview}
-                          style={{ width: '100%', height: 96, objectFit: 'cover', borderRadius: 12, background: '#000' }}
-                          muted
-                          playsInline
-                        />
+                        <video src={q.preview} style={{ width: '100%', height: 96, objectFit: 'cover', borderRadius: 12, background: '#000' }} muted playsInline />
                       ) : (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img src={q.preview} alt="" style={{ width: '100%', height: 96, objectFit: 'cover', borderRadius: 12 }} />
                       )}
 
                       <div className="chip">
-                        <input
-                          type="checkbox"
-                          checked={!!q.selected}
-                          onChange={() => toggleSelected(q.id)}
-                          aria-label="تحديد الملف"
-                          disabled={q.status === 'uploading'}
-                        />
+                        <input type="checkbox" checked={!!q.selected} onChange={() => toggleSelected(q.id)} aria-label="تحديد الملف" disabled={q.status === 'uploading'} />
                         <span style={{ fontSize: 12, fontWeight: 800 }}>تحديد</span>
                       </div>
                     </div>
@@ -1358,11 +1275,19 @@ const CreateEditForm = ({
                     <div style={{ marginTop: 8 }}>
                       <div className="row" style={{ justifyContent: 'space-between', gap: 8 }}>
                         <span className="muted" style={{ fontSize: 12 }}>
-                          {q.status === 'done' ? 'تم ✅' : q.status === 'uploading' ? 'يرفع…' : q.status === 'error' ? 'فشل ❌' : 'جاهز'}
+                          {q.status === 'done' ? 'تم' : q.status === 'uploading' ? 'يرفع…' : q.status === 'error' ? 'فشل' : 'جاهز'}
                         </span>
-                        <button className="btnDanger" type="button" onClick={() => removeQueued(q.id)} style={{ padding: '6px 10px', borderRadius: 10, fontSize: 12 }}>
-                          حذف
-                        </button>
+
+                        <div className="row" style={{ gap: 8 }}>
+                          {q.status === 'error' && (
+                            <button className="btn" type="button" onClick={() => retryQueued(q.id)} style={{ padding: '6px 10px', borderRadius: 10, fontSize: 12 }}>
+                              إعادة المحاولة
+                            </button>
+                          )}
+                          <button className="btnDanger" type="button" onClick={() => removeQueued(q.id)} style={{ padding: '6px 10px', borderRadius: 10, fontSize: 12 }}>
+                            حذف
+                          </button>
+                        </div>
                       </div>
 
                       <div className="progress" style={{ marginTop: 8 }}>
@@ -1375,10 +1300,19 @@ const CreateEditForm = ({
                 ))}
               </div>
             )}
+
+            {/* زر يدوي اختياري */}
+            {queue.some((x) => x.selected && x.status === 'ready') && (
+              <div className="row" style={{ justifyContent: 'flex-end', marginTop: 12 }}>
+                <button className="btn" type="button" onClick={uploadSelected} disabled={uploading}>
+                  رفع المحدد
+                </button>
+              </div>
+            )}
           </Field>
         </div>
 
-        {/* عرض الوسائط المرفوعة في النموذج */}
+        {/* عرض الوسائط المرفوعة */}
         {Array.isArray(form.images) && form.images.length > 0 && (
           <div className="col-12">
             <Field label="صور/فيديو الإعلان" hint="هذه الملفات ستظهر للزوار. يمكنك حذف أي ملف من الإعلان.">
@@ -1386,12 +1320,7 @@ const CreateEditForm = ({
                 {form.images.map((url) => (
                   <div key={url} className="card" style={{ padding: 10 }}>
                     {isVideoUrl(url) ? (
-                      <video
-                        src={url}
-                        style={{ width: '100%', height: 110, objectFit: 'cover', borderRadius: 12, background: '#000' }}
-                        controls
-                        playsInline
-                      />
+                      <video src={url} style={{ width: '100%', height: 110, objectFit: 'cover', borderRadius: 12, background: '#000' }} controls playsInline />
                     ) : (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={url} alt="" style={{ width: '100%', height: 110, objectFit: 'cover', borderRadius: 12 }} />
@@ -1406,10 +1335,10 @@ const CreateEditForm = ({
           </div>
         )}
 
-        {/* زر الحفظ المحسّن */}
+        {/* زر الحفظ */}
         <div className="col-12 row" style={{ justifyContent: 'flex-end', marginTop: 20 }}>
-          <button type="button" style={saveButtonStyle} disabled={busy} onClick={onSave}>
-            {busy ? 'جاري الحفظ…' : editingId ? 'تحديث الإعلان' : 'إضافة الإعلان'}
+          <button type="button" style={saveButtonStyle} disabled={busy || uploading} onClick={onSave}>
+            {busy ? 'جاري الحفظ…' : uploading ? 'انتظر اكتمال رفع الملفات…' : editingId ? 'تحديث الإعلان' : 'إضافة الإعلان'}
           </button>
         </div>
       </div>
@@ -1473,7 +1402,7 @@ const ManageListings = ({ list, loadingList, actionBusyId, onLoad, onDelete, onE
     <section className="card" style={{ marginTop: 12 }}>
       <div className="row" style={{ justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
         <div style={{ fontWeight: 800 }}>إدارة العروض</div>
-        <button className="btn" onClick={onLoad}>
+        <button className="btn" onClick={onLoad} type="button">
           تحديث
         </button>
       </div>
@@ -1497,10 +1426,10 @@ const ManageListings = ({ list, loadingList, actionBusyId, onLoad, onDelete, onE
               <div style={{ marginTop: 8, fontWeight: 900 }}>{formatPriceSAR(item.price)}</div>
 
               <div className="row" style={{ marginTop: 10, justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
-                <button className="btn" onClick={() => onEdit(item)}>
+                <button className="btn" onClick={() => onEdit(item)} type="button">
                   تعديل
                 </button>
-                <button className="btnDanger" disabled={actionBusyId === item.id} onClick={() => onDelete(item, storage, db)}>
+                <button className="btnDanger" disabled={actionBusyId === item.id} onClick={() => onDelete(item, storage, db)} type="button">
                   {actionBusyId === item.id ? 'جاري الحذف…' : 'حذف'}
                 </button>
               </div>
@@ -1515,16 +1444,17 @@ const ManageListings = ({ list, loadingList, actionBusyId, onLoad, onDelete, onE
 // ===================== الصفحة الرئيسية =====================
 export default function AdminPage() {
   const fb = getFirebase();
-  const auth = fb?.auth;
   const storage = fb?.storage;
   const db = fb?.db || fb?.firestore;
 
-  const { user, email, setEmail, pass, setPass, authErr, busy, login, logout, isAdmin } = useAuth();
+  const { user, email, setEmail, pass, setPass, authErr, busy: authBusy, login, logout, isAdmin } = useAuth();
   const { list, loadingList, actionBusyId, loadList, deleteListing } = useListings();
+
   const [tab, setTab] = useState('create');
   const [form, setForm] = useState(EMPTY_FORM);
   const [editingId, setEditingId] = useState('');
   const [createdId, setCreatedId] = useState('');
+  const [saving, setSaving] = useState(false);
 
   const uploader = useFileUpload(user, storage, (newUrls) => {
     setForm((p) => ({ ...p, images: uniq([...(p.images || []), ...newUrls]) }));
@@ -1534,13 +1464,16 @@ export default function AdminPage() {
     if (isAdmin && tab === 'manage') loadList();
   }, [isAdmin, tab, loadList]);
 
-  const resetForm = useCallback(() => {
-    setEditingId('');
-    setCreatedId('');
-    setForm(EMPTY_FORM);
-    uploader.clearQueue();
-    uploader.setUploadErr('');
-  }, [uploader]);
+  const resetForm = useCallback(
+    ({ keepCreatedId = false } = {}) => {
+      setEditingId('');
+      if (!keepCreatedId) setCreatedId('');
+      setForm(EMPTY_FORM);
+      uploader.clearQueue();
+      uploader.setUploadErr('');
+    },
+    [uploader]
+  );
 
   const startEdit = useCallback(
     (item) => {
@@ -1589,6 +1522,7 @@ export default function AdminPage() {
       });
 
       uploader.clearQueue();
+      uploader.setUploadErr('');
       setTab('create');
       window.scrollTo({ top: 0, behavior: 'smooth' });
     },
@@ -1616,6 +1550,13 @@ export default function AdminPage() {
   }, []);
 
   const saveListing = useCallback(async () => {
+    if (saving) return;
+    if (uploader.uploading) {
+      alert('انتظر اكتمال رفع الملفات ثم احفظ الإعلان.');
+      return;
+    }
+
+    setSaving(true);
     try {
       const images = uniq(form.images || []);
       const websiteUrl = String(form.websiteUrl || '').trim();
@@ -1647,20 +1588,24 @@ export default function AdminPage() {
 
       if (editingId) {
         await adminUpdateListing(editingId, payload);
-        alert('تم تحديث الإعلان ✅');
+        alert('تم تحديث الإعلان');
+        setCreatedId('');
         await loadList();
+        resetForm();
       } else {
         const id = await adminCreateListing(payload);
         setCreatedId(id);
-        alert('تمت إضافة الإعلان ✅');
+        alert('تمت إضافة الإعلان');
+        // لا نمسح createdId لكي يظهر للمستخدم
+        resetForm({ keepCreatedId: true });
       }
-
-      resetForm();
     } catch (err) {
       alert('حصل خطأ أثناء حفظ الإعلان. راجع إعدادات Firebase.');
       console.error(err);
+    } finally {
+      setSaving(false);
     }
-  }, [form, editingId, normalizePayload, loadList, resetForm]);
+  }, [saving, uploader.uploading, form, editingId, normalizePayload, loadList, resetForm]);
 
   if (!user) {
     return (
@@ -1682,8 +1627,8 @@ export default function AdminPage() {
             </div>
 
             <div className="col-12 row" style={{ justifyContent: 'flex-end' }}>
-              <button className="btnPrimary" disabled={busy}>
-                {busy ? 'جاري الدخول…' : 'دخول'}
+              <button className="btnPrimary" disabled={authBusy}>
+                {authBusy ? 'جاري الدخول…' : 'دخول'}
               </button>
             </div>
 
@@ -1712,7 +1657,7 @@ export default function AdminPage() {
           </div>
 
           <div className="row" style={{ justifyContent: 'flex-end', marginTop: 12 }}>
-            <button className="btn" onClick={logout}>
+            <button className="btn" onClick={logout} type="button">
               تسجيل خروج
             </button>
           </div>
@@ -1730,17 +1675,17 @@ export default function AdminPage() {
             {user.email}
           </div>
         </div>
-        <button className="btn" onClick={logout}>
+        <button className="btn" onClick={logout} type="button">
           تسجيل خروج
         </button>
       </div>
 
       <section className="card" style={{ marginTop: 12 }}>
         <div className="row">
-          <button className={tab === 'create' ? 'btnPrimary' : 'btn'} onClick={() => setTab('create')}>
+          <button className={tab === 'create' ? 'btnPrimary' : 'btn'} onClick={() => setTab('create')} type="button">
             إضافة/تعديل عرض
           </button>
-          <button className={tab === 'manage' ? 'btnPrimary' : 'btn'} onClick={() => setTab('manage')}>
+          <button className={tab === 'manage' ? 'btnPrimary' : 'btn'} onClick={() => setTab('manage')} type="button">
             إدارة العروض
           </button>
         </div>
@@ -1752,12 +1697,10 @@ export default function AdminPage() {
           form={form}
           setForm={setForm}
           onSave={saveListing}
-          onReset={resetForm}
-          busy={busy}
+          onReset={() => resetForm()}
+          busy={saving}
           createdId={createdId}
           uploader={uploader}
-          storage={storage}
-          db={db}
         />
       ) : (
         <ManageListings
