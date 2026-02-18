@@ -1,14 +1,10 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 
-const LOGO_SOURCES = [
-  '/logo-mark.svg?v=1',
-  '/logo-icon-256.png?v=1',
-  '/logo.svg?v=1',
-];
+const LOGO_SOURCES = ['/logo-mark.svg?v=1', '/logo-icon-256.png?v=1', '/logo.svg?v=1'];
 
 export default function Header() {
   const pathname = usePathname();
@@ -21,19 +17,10 @@ export default function Header() {
   const [logoIndex, setLogoIndex] = useState(0);
   const [logoDead, setLogoDead] = useState(false);
 
-  const navLinks = useMemo(
-    () => [
-      { href: '/', label: 'الرئيسية' },
-      { href: '/listings', label: 'كل العروض' },
-      { href: '/map', label: 'الخريطة' },
-      { href: '/neighborhoods', label: 'الأحياء' },
-      { href: '/request', label: 'أرسل طلبك' },
-      { href: '/account', label: 'الحساب' },
-    ],
-    []
-  );
+  const prevBodyOverflowRef = useRef('');
+  const prevHtmlOverflowRef = useRef('');
 
-  const mobileLinks = useMemo(
+  const links = useMemo(
     () => [
       { href: '/', label: 'الرئيسية' },
       { href: '/listings', label: 'كل العروض' },
@@ -46,21 +33,49 @@ export default function Header() {
   );
 
   useEffect(() => {
-    const handleScroll = () => setIsScrolled(window.scrollY > 10);
+    if (typeof window === 'undefined') return;
+
+    let raf = 0;
+    const handleScroll = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        setIsScrolled(window.scrollY > 10);
+      });
+    };
+
     window.addEventListener('scroll', handleScroll, { passive: true });
     handleScroll();
-    return () => window.removeEventListener('scroll', handleScroll);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener('scroll', handleScroll);
+    };
   }, []);
 
   useEffect(() => {
     if (typeof document === 'undefined') return;
-    document.body.style.overflow = menuOpen ? 'hidden' : '';
+
+    const html = document.documentElement;
+    const body = document.body;
+
+    if (menuOpen) {
+      prevHtmlOverflowRef.current = html.style.overflow || '';
+      prevBodyOverflowRef.current = body.style.overflow || '';
+      html.style.overflow = 'hidden';
+      body.style.overflow = 'hidden';
+    } else {
+      html.style.overflow = prevHtmlOverflowRef.current;
+      body.style.overflow = prevBodyOverflowRef.current;
+    }
+
     return () => {
-      document.body.style.overflow = '';
+      html.style.overflow = prevHtmlOverflowRef.current;
+      body.style.overflow = prevBodyOverflowRef.current;
     };
   }, [menuOpen]);
 
   useEffect(() => {
+    if (typeof window === 'undefined') return;
     const onKey = (e) => {
       if (e.key === 'Escape') setMenuOpen(false);
     };
@@ -84,11 +99,8 @@ export default function Header() {
   }
 
   function handleLogoError() {
-    if (logoIndex < LOGO_SOURCES.length - 1) {
-      setLogoIndex((v) => v + 1);
-    } else {
-      setLogoDead(true);
-    }
+    if (logoIndex < LOGO_SOURCES.length - 1) setLogoIndex((v) => v + 1);
+    else setLogoDead(true);
   }
 
   function Logo({ variant = 'lg' }) {
@@ -144,15 +156,11 @@ export default function Header() {
             </button>
           </form>
 
-          {/* ✅ روابط رئيسية بشكل مرتب (Tabs داخل كبسولة) */}
+          {/* ✅ روابط زجاجية أنيقة (تلتف لسطر ثاني عند الحاجة) */}
           <nav className="navDesktop" aria-label="روابط الموقع">
-            {navLinks.map((link) => (
-              <Link
-                key={link.href}
-                href={link.href}
-                className={`navLink ${isActive(link.href) ? 'active' : ''}`}
-              >
-                {link.label}
+            {links.map((link) => (
+              <Link key={link.href} href={link.href} className={`navGlass ${isActive(link.href) ? 'active' : ''}`}>
+                <span className="navText">{link.label}</span>
               </Link>
             ))}
           </nav>
@@ -178,7 +186,7 @@ export default function Header() {
             </div>
 
             <div className="drawerLinks">
-              {mobileLinks.map((l) => (
+              {links.map((l) => (
                 <Link key={l.href} href={l.href} className="drawerLink" onClick={() => setMenuOpen(false)}>
                   {l.label}
                 </Link>
@@ -195,13 +203,15 @@ export default function Header() {
           position: sticky;
           top: 0;
           z-index: 50;
-          background: rgba(248, 250, 252, 0.85);
+          background: rgba(248, 250, 252, 0.82);
           backdrop-filter: blur(10px);
           border-bottom: 1px solid var(--border);
         }
         .hdr.scrolled {
           background: rgba(248, 250, 252, 0.95);
         }
+
+        /* ✅ يسمح بالالتفاف تلقائيًا بدل تزاحم البحث */
         .hdrInner {
           width: min(1100px, calc(100% - 28px));
           margin: 0 auto;
@@ -209,14 +219,15 @@ export default function Header() {
           align-items: center;
           gap: 12px;
           padding: 12px 0;
-          flex-wrap: nowrap;
+          flex-wrap: wrap;
         }
 
         .menuBtn {
           display: none;
-          border: 1px solid var(--border);
-          background: #fff;
-          color: var(--text);
+          border: 1px solid rgba(15, 23, 42, 0.12);
+          background: rgba(255, 255, 255, 0.65);
+          backdrop-filter: blur(10px);
+          color: #0f172a;
           padding: 10px 14px;
           border-radius: 14px;
           font-weight: 900;
@@ -237,8 +248,9 @@ export default function Header() {
           display: block;
           flex: 0 0 auto;
           border-radius: 14px;
-          border: 1px solid var(--border);
-          background: #fff;
+          border: 1px solid rgba(15, 23, 42, 0.12);
+          background: rgba(255, 255, 255, 0.7);
+          backdrop-filter: blur(10px);
           object-fit: contain;
           object-position: center;
         }
@@ -257,9 +269,10 @@ export default function Header() {
           align-items: center;
           justify-content: center;
           border-radius: 14px;
-          border: 1px solid var(--border);
-          background: #fff;
-          color: var(--text);
+          border: 1px solid rgba(15, 23, 42, 0.12);
+          background: rgba(255, 255, 255, 0.7);
+          backdrop-filter: blur(10px);
+          color: #0f172a;
           font-weight: 950;
           line-height: 1;
           flex: 0 0 auto;
@@ -283,6 +296,7 @@ export default function Header() {
           font-weight: 950;
           line-height: 1.1;
           white-space: nowrap;
+          color: #0f172a;
         }
         .brandText .sub {
           color: var(--muted);
@@ -292,27 +306,22 @@ export default function Header() {
         }
 
         .search {
-          flex: 1;
+          flex: 1 1 360px;
           display: flex;
           gap: 10px;
           align-items: center;
           min-width: 240px;
         }
 
-        /* ✅ تحسين شكل الروابط الرئيسية */
+        /* ✅ شريط الروابط: سطر مستقل عند ضيق الشاشة */
         .navDesktop {
+          flex: 1 1 100%;
           display: flex;
           align-items: center;
-          gap: 6px;
-          flex: 0 0 auto;
-
-          background: #fff;
-          border: 1px solid var(--border);
-          border-radius: 16px;
-          padding: 6px;
+          gap: 8px;
+          padding-top: 4px;
 
           overflow-x: auto;
-          max-width: 520px;
           white-space: nowrap;
           -webkit-overflow-scrolling: touch;
           scrollbar-width: none;
@@ -321,25 +330,42 @@ export default function Header() {
           display: none;
         }
 
-        .navLink {
+        /* ✅ الروابط “أيقونات زجاجية” */
+        .navGlass {
           text-decoration: none !important;
-          color: var(--text);
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          height: 38px;
+          padding: 0 14px;
+          border-radius: 999px;
+
+          color: #0f172a; /* النص أسود */
           font-weight: 900;
           font-size: 14px;
-          padding: 8px 10px;
-          border-radius: 12px;
-          border: 1px solid transparent;
-          background: transparent;
-          transition: background 120ms ease, border-color 120ms ease;
+
+          background: rgba(255, 255, 255, 0.62);
+          border: 1px solid rgba(15, 23, 42, 0.12);
+          box-shadow: 0 6px 18px rgba(15, 23, 42, 0.08);
+          backdrop-filter: blur(12px);
+
+          transition: transform 120ms ease, background 120ms ease, border-color 120ms ease;
         }
-        .navLink:hover {
-          background: #f1f5f9;
-          border-color: rgba(15, 23, 42, 0.06);
+
+        .navGlass:hover {
+          background: rgba(255, 255, 255, 0.78);
+          border-color: rgba(15, 23, 42, 0.16);
+          transform: translateY(-1px);
         }
-        .navLink.active {
-          background: rgba(214, 179, 91, 0.22);
-          border-color: rgba(214, 179, 91, 0.35);
-          color: #1e293b;
+
+        .navGlass.active {
+          background: rgba(255, 255, 255, 0.9);
+          border-color: rgba(214, 179, 91, 0.55);
+          box-shadow: 0 10px 26px rgba(214, 179, 91, 0.14), 0 6px 18px rgba(15, 23, 42, 0.08);
+        }
+
+        .navText {
+          line-height: 1;
         }
 
         /* Drawer */
@@ -382,6 +408,7 @@ export default function Header() {
         .drawerTitle {
           font-weight: 950;
           line-height: 1.1;
+          color: #0f172a;
         }
         .drawerSub {
           color: var(--muted);
@@ -400,7 +427,7 @@ export default function Header() {
           border: 1px solid var(--border);
           background: #fff;
           font-weight: 900;
-          color: var(--text);
+          color: #0f172a;
         }
         .drawerLink:hover {
           border-color: var(--border2);
@@ -421,7 +448,11 @@ export default function Header() {
           .menuBtn {
             display: inline-flex;
           }
+          .hdrInner {
+            flex-wrap: nowrap;
+          }
         }
+
         @media (max-width: 768px) {
           .hdrInner {
             gap: 10px;
