@@ -38,23 +38,20 @@ export default function Header() {
     let raf = 0;
     const handleScroll = () => {
       cancelAnimationFrame(raf);
-      raf = requestAnimationFrame(() => {
-        setIsScrolled(window.scrollY > 10);
-      });
+      raf = requestAnimationFrame(() => setIsScrolled(window.scrollY > 10));
     };
 
     window.addEventListener('scroll', handleScroll, { passive: true });
     handleScroll();
-
     return () => {
       cancelAnimationFrame(raf);
       window.removeEventListener('scroll', handleScroll);
     };
   }, []);
 
+  // ✅ لا نخرب overflow القديم
   useEffect(() => {
     if (typeof document === 'undefined') return;
-
     const html = document.documentElement;
     const body = document.body;
 
@@ -156,11 +153,11 @@ export default function Header() {
             </button>
           </form>
 
-          {/* ✅ روابط زجاجية أنيقة (تلتف لسطر ثاني عند الحاجة) */}
+          {/* ✅ روابط زجاجية: سطر ثاني عند ضيق المساحة بدل ما تزاحم البحث */}
           <nav className="navDesktop" aria-label="روابط الموقع">
             {links.map((link) => (
-              <Link key={link.href} href={link.href} className={`navGlass ${isActive(link.href) ? 'active' : ''}`}>
-                <span className="navText">{link.label}</span>
+              <Link key={link.href} href={link.href} className={`navLink ${isActive(link.href) ? 'active' : ''}`}>
+                {link.label}
               </Link>
             ))}
           </nav>
@@ -203,7 +200,7 @@ export default function Header() {
           position: sticky;
           top: 0;
           z-index: 50;
-          background: rgba(248, 250, 252, 0.82);
+          background: rgba(248, 250, 252, 0.85);
           backdrop-filter: blur(10px);
           border-bottom: 1px solid var(--border);
         }
@@ -211,7 +208,7 @@ export default function Header() {
           background: rgba(248, 250, 252, 0.95);
         }
 
-        /* ✅ يسمح بالالتفاف تلقائيًا بدل تزاحم البحث */
+        /* ✅ أهم نقطة: خلي الهيدر يلف سطور بدل تزاحم العناصر */
         .hdrInner {
           width: min(1100px, calc(100% - 28px));
           margin: 0 auto;
@@ -313,12 +310,12 @@ export default function Header() {
           min-width: 240px;
         }
 
-        /* ✅ شريط الروابط: سطر مستقل عند ضيق الشاشة */
+        /* ✅ nav سطر كامل تحت البحث عند الحاجة */
         .navDesktop {
           flex: 1 1 100%;
           display: flex;
           align-items: center;
-          gap: 8px;
+          gap: 10px;
           padding-top: 4px;
 
           overflow-x: auto;
@@ -330,19 +327,19 @@ export default function Header() {
           display: none;
         }
 
-        /* ✅ الروابط “أيقونات زجاجية” */
-        .navGlass {
+        /* ✅ الروابط: كبسولات زجاجية + نص أسود */
+        .navLink {
           text-decoration: none !important;
+          color: #0f172a;
+          font-weight: 900;
+          font-size: 14px;
+
           display: inline-flex;
           align-items: center;
           justify-content: center;
           height: 38px;
           padding: 0 14px;
           border-radius: 999px;
-
-          color: #0f172a; /* النص أسود */
-          font-weight: 900;
-          font-size: 14px;
 
           background: rgba(255, 255, 255, 0.62);
           border: 1px solid rgba(15, 23, 42, 0.12);
@@ -351,21 +348,15 @@ export default function Header() {
 
           transition: transform 120ms ease, background 120ms ease, border-color 120ms ease;
         }
-
-        .navGlass:hover {
+        .navLink:hover {
           background: rgba(255, 255, 255, 0.78);
           border-color: rgba(15, 23, 42, 0.16);
           transform: translateY(-1px);
         }
-
-        .navGlass.active {
-          background: rgba(255, 255, 255, 0.9);
+        .navLink.active {
+          background: rgba(255, 255, 255, 0.92);
           border-color: rgba(214, 179, 91, 0.55);
           box-shadow: 0 10px 26px rgba(214, 179, 91, 0.14), 0 6px 18px rgba(15, 23, 42, 0.08);
-        }
-
-        .navText {
-          line-height: 1;
         }
 
         /* Drawer */
@@ -452,7 +443,6 @@ export default function Header() {
             flex-wrap: nowrap;
           }
         }
-
         @media (max-width: 768px) {
           .hdrInner {
             gap: 10px;
