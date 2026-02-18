@@ -49,7 +49,7 @@ export default function Header() {
     };
   }, []);
 
-  // ✅ لا نخرب overflow القديم
+  // لا نخرب overflow القديم
   useEffect(() => {
     if (typeof document === 'undefined') return;
     const html = document.documentElement;
@@ -128,7 +128,13 @@ export default function Header() {
     <>
       <header className={`hdr ${isScrolled ? 'scrolled' : ''}`} dir="rtl">
         <div className="hdrInner">
-          <button className="menuBtn" type="button" onClick={() => setMenuOpen(true)} aria-label="فتح القائمة">
+          <button
+            className="menuBtn"
+            type="button"
+            onClick={() => setMenuOpen(true)}
+            aria-label="فتح القائمة"
+            aria-expanded={menuOpen ? 'true' : 'false'}
+          >
             القائمة
           </button>
 
@@ -153,7 +159,7 @@ export default function Header() {
             </button>
           </form>
 
-          {/* ✅ روابط زجاجية: سطر ثاني عند ضيق المساحة بدل ما تزاحم البحث */}
+          {/* روابط سطح المكتب */}
           <nav className="navDesktop" aria-label="روابط الموقع">
             {links.map((link) => (
               <Link key={link.href} href={link.href} className={`navLink ${isActive(link.href) ? 'active' : ''}`}>
@@ -195,7 +201,8 @@ export default function Header() {
         </div>
       ) : null}
 
-      <style jsx>{`
+      {/* ✅ المهم: global حتى ما تتعطل مع Link */}
+      <style jsx global>{`
         .hdr {
           position: sticky;
           top: 0;
@@ -208,7 +215,6 @@ export default function Header() {
           background: rgba(248, 250, 252, 0.95);
         }
 
-        /* ✅ أهم نقطة: خلي الهيدر يلف سطور بدل تزاحم العناصر */
         .hdrInner {
           width: min(1100px, calc(100% - 28px));
           margin: 0 auto;
@@ -310,7 +316,6 @@ export default function Header() {
           min-width: 240px;
         }
 
-        /* ✅ nav سطر كامل تحت البحث عند الحاجة */
         .navDesktop {
           flex: 1 1 100%;
           display: flex;
@@ -327,7 +332,6 @@ export default function Header() {
           display: none;
         }
 
-        /* ✅ الروابط: كبسولات زجاجية + نص أسود */
         .navLink {
           text-decoration: none !important;
           color: #0f172a;
@@ -359,7 +363,6 @@ export default function Header() {
           box-shadow: 0 10px 26px rgba(214, 179, 91, 0.14), 0 6px 18px rgba(15, 23, 42, 0.08);
         }
 
-        /* Drawer */
         .drawerRoot {
           position: fixed;
           inset: 0;
@@ -431,7 +434,6 @@ export default function Header() {
           font-size: 13px;
         }
 
-        /* Mobile */
         @media (max-width: 900px) {
           .navDesktop {
             display: none;
@@ -439,16 +441,14 @@ export default function Header() {
           .menuBtn {
             display: inline-flex;
           }
-          .hdrInner {
-            flex-wrap: nowrap;
+          .search {
+            flex: 1 1 100%;
+            min-width: 0;
           }
         }
         @media (max-width: 768px) {
           .hdrInner {
             gap: 10px;
-          }
-          .search {
-            min-width: 0;
           }
           .brandText .sub {
             display: none;
