@@ -23,7 +23,7 @@ function formatPrice(price) {
   if (price == null) return '?';
   const num = Number(price);
   if (Number.isNaN(num)) return '?';
-  
+
   if (num >= 1_000_000) {
     const millions = (num / 1_000_000).toFixed(1);
     return millions.replace(/\.0$/, '') + ' مليون';
@@ -42,58 +42,129 @@ function getMarkerColors(dealType) {
   return { bg: '#6b7280', text: '#ffffff' };
 }
 
-let __gmapsPromise = null;
-
+/**
+ * ✅ Loader ثابت + صحيح مع loading=async باستخدام callback
+ * - يمنع race condition (onload قبل جاهزية google.maps)
+ * - يعالج حالة وجود سكربت قديم/فاشل بنفس id
+ * - يلتقط gm_authFailure لمشاكل المفتاح/القيود
+ */
 function loadGoogleMaps(apiKey) {
   if (typeof window === 'undefined') return Promise.reject(new Error('no-window'));
-  if (window.google && window.google.maps) return Promise.resolve(window.google.maps);
+  if (!apiKey) return Promise.reject(new Error('missing-api-key'));
 
-  if (__gmapsPromise) return __gmapsPromise;
+  const w = window;
 
-  __gmapsPromise = new Promise((resolve, reject) => {
+  if (w.google && w.google.maps) return Promise.resolve(w.google.maps);
+
+  // نخزنها على window عشان تبقى ثابتة حتى مع تنقلات Next
+  if (!w.__AQA_GMAPS_LOADER__) w.__AQA_GMAPS_LOADER__ = {};
+  const state = w.__AQA_GMAPS_LOADER__;
+
+  // لو نفس المفتاح ونفس الوعد موجود
+  if (state.promise && state.key === apiKey) return state.promise;
+
+  state.key = apiKey;
+
+  state.promise = new Promise((resolve, reject) => {
     const SCRIPT_ID = 'google-maps-js';
-    const finishResolve = () => {
+    const CALLBACK = '__aqarobhurGmapsInit';
+    const TIMEOUT_MS = 25000;
+
+    let finished = false;
+    const timer = setTimeout(() => finish(new Error('maps-timeout')), TIMEOUT_MS);
+
+    const prevAuthFailure = w.gm_authFailure;
+
+    function cleanup() {
       try {
-        if (window.google && window.google.maps) resolve(window.google.maps);
-        else reject(new Error('maps-loaded-but-not-available'));
-      } catch (e) {
-        reject(e);
-      }
+        // تنظيف callback
+        if (w[CALLBACK]) delete w[CALLBACK];
+      } catch {}
+
+      // رجّع gm_authFailure لو كان موجود قبل
+      try {
+        if (prevAuthFailure) w.gm_authFailure = prevAuthFailure;
+        else delete w.gm_authFailure;
+      } catch {}
+    }
+
+    function finish(err) {
+      if (finished) return;
+      finished = true;
+      clearTimeout(timer);
+      cleanup();
+
+      if (err) reject(err);
+      else if (w.google && w.google.maps) resolve(w.google.maps);
+      else reject(new Error('maps-loaded-but-not-available'));
+    }
+
+    // Google يستدعيها عند فشل التوثيق/القيود
+    w.gm_authFailure = function gmAuthFailureHook() {
+      try {
+        if (typeof prevAuthFailure === 'function') prevAuthFailure();
+      } catch {}
+      finish(new Error('gm-auth-failure'));
     };
-    const finishReject = (err) => reject(err || new Error('maps-load-failed'));
-    const t = setTimeout(() => finishReject(new Error('maps-timeout')), 12000);
+
+    // callback الرسمي عند جاهزية Maps JS API
+    w[CALLBACK] = function mapsReadyCallback() {
+      finish(null);
+    };
+
+    const url =
+      'https://maps.googleapis.com/maps/api/js' +
+      `?key=${encodeURIComponent(apiKey)}` +
+      '&v=weekly' +
+      '&loading=async' +
+      `&callback=${encodeURIComponent(CALLBACK)}` +
+      '&language=ar' +
+      '&region=SA';
 
     const existing = document.getElementById(SCRIPT_ID);
+
+    const inject = () => {
+      const script = document.createElement('script');
+      script.id = SCRIPT_ID;
+      script.async = true;
+      script.defer = true;
+      script.src = url;
+      script.onerror = () => finish(new Error('maps-script-error'));
+      document.head.appendChild(script);
+    };
+
     if (existing) {
-      if (window.google && window.google.maps) {
-        clearTimeout(t);
-        return resolve(window.google.maps);
+      const existingSrc = existing.getAttribute('src') || '';
+
+      // لو سكربت قديم/مختلف (غالبًا محمّل بدون callback) — نستبدله
+      const needsReplace =
+        !existingSrc.includes('maps.googleapis.com/maps/api/js') ||
+        !existingSrc.includes('callback=') ||
+        !existingSrc.includes(encodeURIComponent(apiKey));
+
+      if (needsReplace) {
+        try {
+          existing.remove();
+        } catch {}
+        inject();
+        return;
       }
-      const onLoad = () => { clearTimeout(t); finishResolve(); };
-      const onError = () => { clearTimeout(t); finishReject(new Error('maps-script-error')); };
-      existing.addEventListener('load', onLoad, { once: true });
-      existing.addEventListener('error', onError, { once: true });
-      setTimeout(() => {
-        if (window.google && window.google.maps) {
-          clearTimeout(t);
-          resolve(window.google.maps);
-        }
-      }, 300);
+
+      // لو هو نفسه لكن callback ربما تم استدعاؤه قبل ما نسجل هنا
+      const start = Date.now();
+      const poll = () => {
+        if (w.google && w.google.maps) return finish(null);
+        if (Date.now() - start > 5000) return finish(new Error('maps-loaded-but-not-available'));
+        setTimeout(poll, 80);
+      };
+      poll();
       return;
     }
 
-    const script = document.createElement('script');
-    script.id = SCRIPT_ID;
-    script.async = true;
-    script.defer = true;
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&v=weekly&loading=async`;
-
-    script.onload = () => { clearTimeout(t); finishResolve(); };
-    script.onerror = () => { clearTimeout(t); finishReject(new Error('maps-script-error')); };
-    document.head.appendChild(script);
+    inject();
   });
 
-  return __gmapsPromise;
+  return state.promise;
 }
 
 export default function MapClient() {
@@ -157,6 +228,7 @@ export default function MapClient() {
 
   useEffect(() => {
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters]);
 
   // تهيئة الخريطة مع إزالة جميع عناصر التحكم الافتراضية
@@ -180,20 +252,19 @@ export default function MapClient() {
         await loadGoogleMaps(apiKey);
         if (cancelled) return;
 
-        // إنشاء الخريطة مع تعطيل جميع عناصر التحكم الافتراضية
         mapRef.current = new window.google.maps.Map(mapDivRef.current, {
           center: { lat: 21.77, lng: 39.08 },
           zoom: 12,
-          mapTypeControl: false,        // إخفاء عناصر التحكم بنوع الخريطة الافتراضية
-          streetViewControl: false,     // إخفاء عنصر التحكم بعرض الشارع
-          fullscreenControl: false,     // إخفاء زر ملء الشاشة الافتراضي
-          zoomControl: false,           // إخفاء أزرار التكبير والتصغير
-          mapTypeId: 'satellite',       // تعيين القمر الصناعي كوضع افتراضي
+          mapTypeControl: false,
+          streetViewControl: false,
+          fullscreenControl: false,
+          zoomControl: false,
+          mapTypeId: 'satellite',
         });
 
         infoRef.current = new window.google.maps.InfoWindow();
 
-        // إنشاء زر مخصص لتبديل نوع الخريطة (إطار أنيق)
+        // زر مخصص لتبديل نوع الخريطة
         const controlDiv = document.createElement('div');
         controlDiv.className = 'custom-map-type-control';
         controlDiv.style.backgroundColor = '#ffffff';
@@ -209,9 +280,8 @@ export default function MapClient() {
         controlDiv.style.textAlign = 'center';
         controlDiv.style.transition = 'all 0.2s ease';
         controlDiv.style.userSelect = 'none';
-        controlDiv.innerText = 'خريطة'; // لأن البداية قمر صناعي، فالزر يعرض "خريطة" للتحويل إليها
+        controlDiv.innerText = 'خريطة';
 
-        // تأثير hover
         controlDiv.addEventListener('mouseenter', () => {
           controlDiv.style.backgroundColor = '#f8fafc';
           controlDiv.style.borderColor = '#94a3b8';
@@ -221,7 +291,6 @@ export default function MapClient() {
           controlDiv.style.borderColor = '#e2e8f0';
         });
 
-        // حدث النقر لتبديل نوع الخريطة
         controlDiv.addEventListener('click', () => {
           if (!mapRef.current) return;
           const newType = mapRef.current.getMapTypeId() === 'roadmap' ? 'satellite' : 'roadmap';
@@ -229,7 +298,6 @@ export default function MapClient() {
           controlDiv.innerText = newType === 'roadmap' ? 'قمر صناعي' : 'خريطة';
         });
 
-        // إضافة الزر إلى الزاوية اليمنى السفلية
         mapRef.current.controls[window.google.maps.ControlPosition.RIGHT_BOTTOM].push(controlDiv);
 
         setMapReady(true);
@@ -240,15 +308,21 @@ export default function MapClient() {
           } catch {}
         }, 120);
       } catch (e) {
-        if (!cancelled) {
-          const msg = String(e?.message || '');
-          if (msg.includes('timeout')) {
-            setErr('تعذر تحميل خرائط Google (انتهت المهلة). تحقق من المفتاح/القيود أو وجود مانع إعلانات.');
-          } else {
-            setErr('تعذر تحميل خريطة Google. تأكد من المفتاح وتفعيل Google Maps JavaScript API.');
-          }
-          setMapReady(false);
+        if (cancelled) return;
+
+        const msg = String(e?.message || '');
+
+        if (msg.includes('gm-auth-failure')) {
+          setErr(
+            'فشل التحقق من مفتاح خرائط Google. هذا غالبًا من القيود (HTTP referrer) أو الفوترة/تفعيل Maps JavaScript API.'
+          );
+        } else if (msg.includes('timeout')) {
+          setErr('تعذر تحميل خرائط Google (انتهت المهلة). تحقق من المفتاح/القيود أو وجود مانع إعلانات.');
+        } else {
+          setErr('تعذر تحميل خريطة Google. تأكد من المفتاح وتفعيل Google Maps JavaScript API.');
         }
+
+        setMapReady(false);
       }
     }
 
@@ -263,11 +337,13 @@ export default function MapClient() {
     if (!mapRef.current || !window.google?.maps) return;
     const controlDiv = document.querySelector('.custom-map-type-control');
     if (!controlDiv) return;
+
     const updateText = () => {
       if (!mapRef.current) return;
       const currentType = mapRef.current.getMapTypeId();
       controlDiv.innerText = currentType === 'roadmap' ? 'قمر صناعي' : 'خريطة';
     };
+
     const listener = window.google.maps.event.addListener(mapRef.current, 'maptypeid_changed', updateText);
     return () => {
       window.google.maps.event.removeListener(listener);
@@ -313,7 +389,9 @@ export default function MapClient() {
     if (!map || !window.google?.maps) return;
 
     markersRef.current.forEach((m) => {
-      try { m.setMap(null); } catch {}
+      try {
+        m.setMap(null);
+      } catch {}
     });
     markersRef.current = [];
     markerByIdRef.current = {};
@@ -394,9 +472,7 @@ export default function MapClient() {
   }
 
   const neighborhoodOptions = useMemo(() => {
-    return [{ value: '', label: 'كل الأحياء' }].concat(
-      (NEIGHBORHOODS || []).map((n) => ({ value: n, label: n }))
-    );
+    return [{ value: '', label: 'كل الأحياء' }].concat((NEIGHBORHOODS || []).map((n) => ({ value: n, label: n })));
   }, []);
 
   const dealTypeOptions = [
@@ -409,7 +485,9 @@ export default function MapClient() {
     <div className="container" style={{ paddingTop: 16 }}>
       <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-end' }}>
         <div>
-          <h1 className="h1" style={{ margin: 0 }}>الخريطة</h1>
+          <h1 className="h1" style={{ margin: 0 }}>
+            الخريطة
+          </h1>
           <div className="muted" style={{ fontSize: 13 }}>
             تظهر فقط العروض التي تمت اضافة مواقعها على الخريطة
           </div>
@@ -421,15 +499,21 @@ export default function MapClient() {
         </div>
 
         <div className="row">
-          <Link className="btn" href="/listings">رجوع</Link>
-          <button className="btn" onClick={load} disabled={loading}>تحديث</button>
+          <Link className="btn" href="/listings">
+            رجوع
+          </Link>
+          <button className="btn" onClick={load} disabled={loading}>
+            تحديث
+          </button>
         </div>
       </div>
 
       {!apiKey ? (
         <section className="card" style={{ marginTop: 12, padding: 14 }}>
           <div style={{ fontWeight: 950, marginBottom: 6 }}>مفتاح Google Maps غير موجود</div>
-          <div className="muted">أضف <b>NEXT_PUBLIC_GOOGLE_MAPS_API_KEY</b> في Vercel/المحلي.</div>
+          <div className="muted">
+            أضف <b>NEXT_PUBLIC_GOOGLE_MAPS_API_KEY</b> في Vercel/المحلي.
+          </div>
         </section>
       ) : null}
 
@@ -477,11 +561,7 @@ export default function MapClient() {
         <section style={{ marginTop: 12 }}>
           <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
             <div style={{ fontWeight: 950 }}>العروض</div>
-            {loading ? (
-              <div className="muted">تحميل…</div>
-            ) : (
-              <div className="muted">عدد العلامات: {filteredItemsWithCoords.length}</div>
-            )}
+            {loading ? <div className="muted">تحميل…</div> : <div className="muted">عدد العلامات: {filteredItemsWithCoords.length}</div>}
           </div>
 
           {loading ? null : filteredItemsWithCoords.length === 0 ? (
@@ -494,7 +574,9 @@ export default function MapClient() {
                 <div key={it.id} className="card">
                   <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
                     <div style={{ fontWeight: 950 }}>{it.title || 'عرض'}</div>
-                    <button className="btn" onClick={() => focusOn(it.id)}>عرض</button>
+                    <button className="btn" onClick={() => focusOn(it.id)}>
+                      عرض
+                    </button>
                   </div>
                   <div style={{ marginTop: 8 }}>
                     <ListingCard item={it} compact />
@@ -534,7 +616,7 @@ export default function MapClient() {
           color: #000000 !important;
           border: 1px solid #d1d5db !important;
           font-weight: 700 !important;
-          box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
         }
 
         .topBar :global(.chip.active) {
@@ -589,10 +671,16 @@ export default function MapClient() {
         }
 
         @supports not (height: 100dvh) {
-          .mapHostFs { height: 100vh; min-height: 100vh; }
+          .mapHostFs {
+            height: 100vh;
+            min-height: 100vh;
+          }
         }
 
-        .mapBox { width: 100%; height: 100%; }
+        .mapBox {
+          width: 100%;
+          height: 100%;
+        }
 
         .mapLoading {
           position: absolute;
@@ -602,7 +690,7 @@ export default function MapClient() {
           justify-content: center;
           font-weight: 950;
           color: var(--text);
-          background: rgba(255,255,255,0.8);
+          background: rgba(255, 255, 255, 0.8);
           z-index: 5;
           backdrop-filter: blur(4px);
         }
@@ -619,7 +707,9 @@ export default function MapClient() {
         }
 
         @media (hover: hover) {
-          .mapTapFs:hover { background: rgba(255, 255, 255, 0.05); }
+          .mapTapFs:hover {
+            background: rgba(255, 255, 255, 0.05);
+          }
         }
       `}</style>
     </div>
