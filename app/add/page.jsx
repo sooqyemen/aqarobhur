@@ -20,10 +20,6 @@ import { adminCreateListing, adminUpdateListing } from '@/lib/listings';
 import { DEAL_TYPES, NEIGHBORHOODS, PROPERTY_TYPES, STATUS_OPTIONS, PROPERTY_CLASSES } from '@/lib/taxonomy';
 import { formatPriceSAR } from '@/lib/format';
 
-// ميزة إضافية: ضغط الصور والفيديو
-import imageCompression from 'browser-image-compression'; // تحتاج تثبيت: npm install browser-image-compression
-import { createFFmpeg, fetchFile } from '@ffmpeg/ffmpeg'; // تحتاج تثبيت: npm install @ffmpeg/ffmpeg @ffmpeg/core
-
 // ===================== الثوابت =====================
 const MAX_FILES = 30;
 const UPLOAD_CONCURRENCY = 2;
@@ -95,31 +91,64 @@ const formatStorageError = (e) => {
   return msg || 'فشل رفع الملفات.';
 };
 
-// دوال ضغط الصور والفيديو
-const compressImage = async (file) => {
-  const options = {
-    maxSizeMB: 1, // الحجم الأقصى بعد الضغط 1MB
-    maxWidthOrHeight: 1920,
-    useWebWorker: true,
-    fileType: 'image/jpeg',
-    initialQuality: 0.8,
-  };
-  try {
-    return await imageCompression(file, options);
-  } catch (error) {
-    console.error('فشل ضغط الصورة:', error);
-    return file; // إرجاع الملف الأصلي في حال الفشل
-  }
+// دوال ضغط الصور باستخدام Canvas (بدون مكتبات خارجية)
+const compressImage = (file, maxWidth = 1920, maxHeight = 1920, quality = 0.8) => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (event) => {
+      const img = new Image();
+      img.src = event.target.result;
+      img.onload = () => {
+        // حساب الأبعاد الجديدة مع الحفاظ على نسبة الطول إلى العرض
+        let width = img.width;
+        let height = img.height;
+        if (width > height) {
+          if (width > maxWidth) {
+            height *= maxWidth / width;
+            width = maxWidth;
+          }
+        } else {
+          if (height > maxHeight) {
+            width *= maxHeight / height;
+            height = maxHeight;
+          }
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+
+        canvas.toBlob(
+          (blob) => {
+            if (!blob) {
+              reject(new Error('فشل تحويل الصورة'));
+              return;
+            }
+            // إنشاء ملف جديد من blob
+            const compressedFile = new File([blob], file.name, {
+              type: 'image/jpeg',
+              lastModified: Date.now(),
+            });
+            resolve(compressedFile);
+          },
+          'image/jpeg',
+          quality
+        );
+      };
+      img.onerror = reject;
+    };
+    reader.onerror = reject;
+  });
 };
 
+// دالة ضغط الفيديو - معطلة حالياً لحين استخدام مكتبة خارجية
+// يمكن تركها تُرجع الملف كما هو مع تحذير أو تجاهلها
 const compressVideo = async (file) => {
-  const ffmpeg = createFFmpeg({ log: true });
-  await ffmpeg.load();
-  ffmpeg.FS('writeFile', 'input.mp4', await fetchFile(file));
-  await ffmpeg.run('-i', 'input.mp4', '-vf', 'scale=1280:720', '-b:v', '1M', 'output.mp4');
-  const data = ffmpeg.FS('readFile', 'output.mp4');
-  const compressedFile = new File([data.buffer], file.name, { type: 'video/mp4' });
-  return compressedFile;
+  console.warn('ضغط الفيديو غير مدعوم حالياً، يتم رفع الملف الأصلي.');
+  return file; // إرجاع الملف الأصلي
 };
 
 // ===================== دوال مساعدة للأمثلة الذكية بناءً على السوق =====================
@@ -207,7 +236,7 @@ const loadGoogleMaps = (apiKey) => {
       script.defer = true;
       script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(
         apiKey
-      )}&v=weekly&language=ar&region=SA&libraries=places`; // أضفنا places للبحث
+      )}&v=weekly&language=ar&region=SA&libraries=places`;
 
       script.onload = () => {
         if (window.google?.maps) resolve(window.google.maps);
@@ -607,16 +636,15 @@ const useFileUpload = (user, storage, onUploaded) => {
     const incoming = Array.from(files || []).filter(Boolean);
     if (!incoming.length) return;
 
-    // معالجة كل ملف: ضغط ثم إضافة للقائمة
     const processed = await Promise.all(
       incoming.map(async (file) => {
         try {
           validateFileSize(file); // التحقق من الحجم
           let compressedFile = file;
           if (isVideoFile(file)) {
-            compressedFile = await compressVideo(file); // ضغط الفيديو
+            compressedFile = await compressVideo(file); // حالياً تُرجع الملف كما هو
           } else {
-            compressedFile = await compressImage(file); // ضغط الصورة
+            compressedFile = await compressImage(file); // ضغط باستخدام Canvas
           }
           return {
             id: nowId(),
@@ -966,9 +994,9 @@ const EMPTY_FORM = {
   propertyClass: '',
   area: '',
   price: '',
-  priceNegotiable: false, // ميزة 8
-  licenseNumber: '', // ميزة 9
-  contactPhone: '', // ميزة 18
+  priceNegotiable: false,
+  licenseNumber: '',
+  contactPhone: '',
   status: 'available',
   direct: true,
   websiteUrl: '',
@@ -976,7 +1004,7 @@ const EMPTY_FORM = {
   lng: '',
   description: '',
   images: [],
-  // حقول مخصصة ديناميكية (ميزة 2)
+  // حقول مخصصة ديناميكية
   customFields: [], // { key: '', value: '' }
   // المشتركة للسكن
   bedrooms: '',
@@ -1131,7 +1159,7 @@ const CreateEditForm = ({ editingId, form, setForm, onSave, onReset, busy, creat
     </select>
   );
 
-  // دوال الحقول المخصصة (ميزة 2)
+  // دوال الحقول المخصصة
   const addCustomField = useCallback(() => {
     setForm((p) => ({
       ...p,
@@ -1196,13 +1224,13 @@ const CreateEditForm = ({ editingId, form, setForm, onSave, onReset, busy, creat
               إلغاء التعديل
             </button>
           )}
-          {/* زر نسخ الإعلان (ميزة 17) */}
+          {/* زر نسخ الإعلان */}
           {onDuplicate && (
             <button className="btn" onClick={onDuplicate} type="button">
               نسخ الإعلان
             </button>
           )}
-          {/* زر معاينة الإعلان (ميزة 3) */}
+          {/* زر معاينة الإعلان */}
           <button className="btn" type="button" onClick={() => setShowPreview(true)}>
             معاينة
           </button>
@@ -1400,7 +1428,7 @@ const CreateEditForm = ({ editingId, form, setForm, onSave, onReset, busy, creat
               </div>
             </div>
 
-            {/* تفاصيل مخصصة: أرض (كما هي مع بعض الإضافات) */}
+            {/* تفاصيل مخصصة: أرض */}
             {form.propertyType === 'أرض' && (
               <div className="col-12">
                 <div className="card" style={{ padding: 14, marginBottom: 10 }}>
@@ -1458,10 +1486,287 @@ const CreateEditForm = ({ editingId, form, setForm, onSave, onReset, busy, creat
               </div>
             )}
 
-            {/* باقي أنواع العقارات (فيلا، شقة، دور، عمارة، محل) مشابهة مع إضافة الحقول الجديدة */}
-            {/* سأختصرها هنا للحفاظ على المساحة، لكن بنفس النمط مع إضافة priceNegotiable, licenseNumber, contactPhone في الأقسام المناسبة */}
+            {/* تفاصيل مخصصة: فيلا */}
+            {form.propertyType === 'فيلا' && (
+              <div className="col-12">
+                <div className="card" style={{ padding: 14, marginBottom: 10 }}>
+                  <div style={{ fontWeight: 900, marginBottom: 10 }}>مواصفات الفيلا</div>
+                  <div className="grid">
+                    <div className="col-2">
+                      <Field label="عدد الغرف">
+                        <input className="input" inputMode="numeric" value={form.bedrooms} onChange={(e) => setForm({ ...form, bedrooms: e.target.value })} placeholder="6" />
+                      </Field>
+                    </div>
+                    <div className="col-2">
+                      <Field label="عدد الصالات">
+                        <input className="input" inputMode="numeric" value={form.lounges} onChange={(e) => setForm({ ...form, lounges: e.target.value })} placeholder="2" />
+                      </Field>
+                    </div>
+                    <div className="col-2">
+                      <Field label="دورات المياه">
+                        <input className="input" inputMode="numeric" value={form.bathrooms} onChange={(e) => setForm({ ...form, bathrooms: e.target.value })} placeholder="5" />
+                      </Field>
+                    </div>
+                    <div className="col-2">
+                      <Field label="عمر العقار (سنة)">
+                        <input className="input" inputMode="numeric" value={form.age} onChange={(e) => setForm({ ...form, age: e.target.value })} placeholder="جديد=0" />
+                      </Field>
+                    </div>
+                    <div className="col-2">
+                      <Field label="عرض الشارع">
+                        <input className="input" inputMode="numeric" value={form.streetWidth} onChange={(e) => setForm({ ...form, streetWidth: e.target.value })} placeholder="متر" />
+                      </Field>
+                    </div>
+                    <div className="col-2">
+                      <Field label="الواجهة">
+                        <input className="input" value={form.facade} onChange={(e) => setForm({ ...form, facade: e.target.value })} placeholder="شمالية..." />
+                      </Field>
+                    </div>
+                    <div className="col-2">
+                      <Field label="غرفة خادمة؟">
+                        {yesNoSelect(form.maidRoom, (v) => setForm({ ...form, maidRoom: v }))}
+                      </Field>
+                    </div>
+                    <div className="col-2">
+                      <Field label="غرفة سائق؟">
+                        {yesNoSelect(form.driverRoom, (v) => setForm({ ...form, driverRoom: v }))}
+                      </Field>
+                    </div>
+                    <div className="col-2">
+                      <Field label="مسبح؟">
+                        {yesNoSelect(form.pool, (v) => setForm({ ...form, pool: v }))}
+                      </Field>
+                    </div>
+                    <div className="col-2">
+                      <Field label="مصعد؟">
+                        {yesNoSelect(form.hasElevator, (v) => setForm({ ...form, hasElevator: v }))}
+                      </Field>
+                    </div>
+                    <div className="col-2">
+                      <Field label="حوش؟">
+                        {yesNoSelect(form.yard, (v) => setForm({ ...form, yard: v }))}
+                      </Field>
+                    </div>
+                    <div className="col-2">
+                      <Field label="مكيفات راكبة؟">
+                        {yesNoSelect(form.acInstalled, (v) => setForm({ ...form, acInstalled: v }))}
+                      </Field>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
-            {/* الخريطة والوصف والصور (كما هي) */}
+            {/* تفاصيل مخصصة: شقة */}
+            {form.propertyType === 'شقة' && (
+              <div className="col-12">
+                <div className="card" style={{ padding: 14, marginBottom: 10 }}>
+                  <div style={{ fontWeight: 900, marginBottom: 10 }}>مواصفات الشقة</div>
+                  <div className="grid">
+                    <div className="col-2">
+                      <Field label="الدور (الطابق)">
+                        <input className="input" inputMode="numeric" value={form.floor} onChange={(e) => setForm({ ...form, floor: e.target.value })} placeholder="3" />
+                      </Field>
+                    </div>
+                    <div className="col-2">
+                      <Field label="عدد الغرف">
+                        <input className="input" inputMode="numeric" value={form.bedrooms} onChange={(e) => setForm({ ...form, bedrooms: e.target.value })} placeholder="4" />
+                      </Field>
+                    </div>
+                    <div className="col-2">
+                      <Field label="عدد الصالات">
+                        <input className="input" inputMode="numeric" value={form.lounges} onChange={(e) => setForm({ ...form, lounges: e.target.value })} placeholder="1" />
+                      </Field>
+                    </div>
+                    <div className="col-2">
+                      <Field label="دورات المياه">
+                        <input className="input" inputMode="numeric" value={form.bathrooms} onChange={(e) => setForm({ ...form, bathrooms: e.target.value })} placeholder="3" />
+                      </Field>
+                    </div>
+                    <div className="col-2">
+                      <Field label="عمر العقار">
+                        <input className="input" inputMode="numeric" value={form.age} onChange={(e) => setForm({ ...form, age: e.target.value })} placeholder="جديد=0" />
+                      </Field>
+                    </div>
+                    <div className="col-2">
+                      <Field label="مطبخ راكب؟">
+                        {yesNoSelect(form.kitchen, (v) => setForm({ ...form, kitchen: v }))}
+                      </Field>
+                    </div>
+                    <div className="col-2">
+                      <Field label="مكيفات راكبة؟">
+                        {yesNoSelect(form.acInstalled, (v) => setForm({ ...form, acInstalled: v }))}
+                      </Field>
+                    </div>
+                    <div className="col-2">
+                      <Field label="غرفة خادمة؟">
+                        {yesNoSelect(form.maidRoom, (v) => setForm({ ...form, maidRoom: v }))}
+                      </Field>
+                    </div>
+                    <div className="col-2">
+                      <Field label="يوجد مصعد؟">
+                        {yesNoSelect(form.hasElevator, (v) => setForm({ ...form, hasElevator: v }))}
+                      </Field>
+                    </div>
+                    <div className="col-3">
+                      <Field label="موقف خاص (مظلة)؟">
+                        {yesNoSelect(form.parkingSpaces, (v) => setForm({ ...form, parkingSpaces: v ? 1 : 0 }))}
+                      </Field>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* تفاصيل مخصصة: دور */}
+            {form.propertyType === 'دور' && (
+              <div className="col-12">
+                <div className="card" style={{ padding: 14, marginBottom: 10 }}>
+                  <div style={{ fontWeight: 900, marginBottom: 10 }}>مواصفات الدور</div>
+                  <div className="grid">
+                    <div className="col-2">
+                      <Field label="موقع الدور">
+                        <input className="input" value={form.floor} onChange={(e) => setForm({ ...form, floor: e.target.value })} placeholder="أرضي / أول" />
+                      </Field>
+                    </div>
+                    <div className="col-2">
+                      <Field label="عدد الغرف">
+                        <input className="input" inputMode="numeric" value={form.bedrooms} onChange={(e) => setForm({ ...form, bedrooms: e.target.value })} placeholder="5" />
+                      </Field>
+                    </div>
+                    <div className="col-2">
+                      <Field label="عدد الصالات">
+                        <input className="input" inputMode="numeric" value={form.lounges} onChange={(e) => setForm({ ...form, lounges: e.target.value })} placeholder="2" />
+                      </Field>
+                    </div>
+                    <div className="col-2">
+                      <Field label="دورات المياه">
+                        <input className="input" inputMode="numeric" value={form.bathrooms} onChange={(e) => setForm({ ...form, bathrooms: e.target.value })} placeholder="4" />
+                      </Field>
+                    </div>
+                    <div className="col-2">
+                      <Field label="عمر العقار">
+                        <input className="input" inputMode="numeric" value={form.age} onChange={(e) => setForm({ ...form, age: e.target.value })} placeholder="جديد=0" />
+                      </Field>
+                    </div>
+                    <div className="col-2">
+                      <Field label="مدخل خاص؟">
+                        {yesNoSelect(form.privateEntrance, (v) => setForm({ ...form, privateEntrance: v }))}
+                      </Field>
+                    </div>
+                    <div className="col-3">
+                      <Field label="حوش؟ (للأرضي)">
+                        {yesNoSelect(form.yard, (v) => setForm({ ...form, yard: v }))}
+                      </Field>
+                    </div>
+                    <div className="col-3">
+                      <Field label="غرفة سائق؟">
+                        {yesNoSelect(form.driverRoom, (v) => setForm({ ...form, driverRoom: v }))}
+                      </Field>
+                    </div>
+                    <div className="col-3">
+                      <Field label="مكيفات راكبة؟">
+                        {yesNoSelect(form.acInstalled, (v) => setForm({ ...form, acInstalled: v }))}
+                      </Field>
+                    </div>
+                    <div className="col-3">
+                      <Field label="مطبخ راكب؟">
+                        {yesNoSelect(form.kitchen, (v) => setForm({ ...form, kitchen: v }))}
+                      </Field>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* تفاصيل مخصصة: عمارة */}
+            {form.propertyType === 'عمارة' && (
+              <div className="col-12">
+                <div className="card" style={{ padding: 14, marginBottom: 10 }}>
+                  <div style={{ fontWeight: 900, marginBottom: 10 }}>مواصفات العمارة</div>
+                  <div className="grid">
+                    <div className="col-3">
+                      <Field label="الدخل السنوي المتوقع">
+                        <input className="input" inputMode="numeric" value={form.expectedIncome} onChange={(e) => setForm({ ...form, expectedIncome: e.target.value })} placeholder="مثال: 350000" />
+                      </Field>
+                    </div>
+                    <div className="col-2">
+                      <Field label="عدد الشقق">
+                        <input className="input" inputMode="numeric" value={form.numApartments} onChange={(e) => setForm({ ...form, numApartments: e.target.value })} placeholder="12" />
+                      </Field>
+                    </div>
+                    <div className="col-2">
+                      <Field label="عدد المحلات">
+                        <input className="input" inputMode="numeric" value={form.numShops} onChange={(e) => setForm({ ...form, numShops: e.target.value })} placeholder="4" />
+                      </Field>
+                    </div>
+                    <div className="col-2">
+                      <Field label="عدد الأدوار">
+                        <input className="input" inputMode="numeric" value={form.numFloors} onChange={(e) => setForm({ ...form, numFloors: e.target.value })} placeholder="5" />
+                      </Field>
+                    </div>
+                    <div className="col-3">
+                      <Field label="عرض الشارع (م)">
+                        <input className="input" inputMode="numeric" value={form.streetWidth} onChange={(e) => setForm({ ...form, streetWidth: e.target.value })} placeholder="30" />
+                      </Field>
+                    </div>
+                    <div className="col-3">
+                      <Field label="الواجهة">
+                        <input className="input" value={form.facade} onChange={(e) => setForm({ ...form, facade: e.target.value })} placeholder="شمالية / تجارية" />
+                      </Field>
+                    </div>
+                    <div className="col-2">
+                      <Field label="عمر العمارة">
+                        <input className="input" inputMode="numeric" value={form.age} onChange={(e) => setForm({ ...form, age: e.target.value })} placeholder="سنوات" />
+                      </Field>
+                    </div>
+                    <div className="col-2">
+                      <Field label="يوجد مصعد؟">
+                        {yesNoSelect(form.hasElevator, (v) => setForm({ ...form, hasElevator: v }))}
+                      </Field>
+                    </div>
+                    <div className="col-2">
+                      <Field label="مواقف بدروم؟">
+                        {yesNoSelect(form.parkingSpaces, (v) => setForm({ ...form, parkingSpaces: v ? 1 : 0 }))}
+                      </Field>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* تفاصيل مخصصة: محل */}
+            {form.propertyType === 'محل' && (
+              <div className="col-12">
+                <div className="card" style={{ padding: 14, marginBottom: 10 }}>
+                  <div style={{ fontWeight: 900, marginBottom: 10 }}>مواصفات المحل التجاري</div>
+                  <div className="grid">
+                    <div className="col-3">
+                      <Field label="عرض الشارع (م)">
+                        <input className="input" inputMode="numeric" value={form.streetWidth} onChange={(e) => setForm({ ...form, streetWidth: e.target.value })} placeholder="مثال: 60" />
+                      </Field>
+                    </div>
+                    <div className="col-3">
+                      <Field label="الواجهة">
+                        <input className="input" value={form.facade} onChange={(e) => setForm({ ...form, facade: e.target.value })} placeholder="مثال: شرقية" />
+                      </Field>
+                    </div>
+                    <div className="col-3">
+                      <Field label="عمر العقار">
+                        <input className="input" inputMode="numeric" value={form.age} onChange={(e) => setForm({ ...form, age: e.target.value })} placeholder="سنوات" />
+                      </Field>
+                    </div>
+                    <div className="col-3">
+                      <Field label="يوجد ميزانين؟">
+                        {yesNoSelect(form.mezzanine, (v) => setForm({ ...form, mezzanine: v }))}
+                      </Field>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* الخريطة والوصف والصور */}
             <div className="col-12">
               <Field label="موقع العقار على الخريطة" hint="حدد الموقع من الخريطة (يُسمح فقط بمواقع داخل مدينة جدة). يمكنك أيضاً لصق رابط Google Maps." error={errors.coords}>
                 <div style={{ display: 'grid', gap: 10 }}>
@@ -1511,7 +1816,7 @@ const CreateEditForm = ({ editingId, form, setForm, onSave, onReset, busy, creat
 
             {/* قسم رفع الصور والفيديو مع ضغط تلقائي */}
             <div className="col-12">
-              <Field label="الصور والفيديو (سيتم ضغطها تلقائياً)" hint="اسحب الملفات هنا أو اضغط لاختيارها. سيتم رفعها تلقائياً بعد الضغط.">
+              <Field label="الصور والفيديو (سيتم ضغط الصور تلقائياً)" hint="اسحب الملفات هنا أو اضغط لاختيارها. سيتم رفعها تلقائياً بعد الضغط.">
                 <div
                   className="dropzone"
                   onClick={openFilePicker}
@@ -1554,8 +1859,8 @@ const CreateEditForm = ({ editingId, form, setForm, onSave, onReset, busy, creat
                               style={{ width: '100%', height: 96, objectFit: 'cover', borderRadius: 12, background: '#000' }}
                               muted
                               playsInline
-                              disablePictureInPicture // منع ملء الشاشة
-                              controlsList="nodownload nofullscreen" // منع عناصر التحكم
+                              disablePictureInPicture
+                              controlsList="nodownload nofullscreen"
                             />
                           ) : (
                             <img src={q.preview} alt="" style={{ width: '100%', height: 96, objectFit: 'cover', borderRadius: 12 }} />
@@ -1634,7 +1939,7 @@ const CreateEditForm = ({ editingId, form, setForm, onSave, onReset, busy, creat
               </div>
             )}
 
-            {/* قسم الحقول المخصصة (ميزة 2) */}
+            {/* قسم الحقول المخصصة */}
             <div className="col-12" style={{ marginTop: 20, borderTop: '1px solid rgba(214, 179, 91, 0.2)', paddingTop: 20 }}>
               <div style={{ fontWeight: 900, marginBottom: 10, color: 'var(--primary)' }}>
                 حقول إضافية (يمكنك إضافة أي تفاصيل أخرى)
@@ -1683,7 +1988,7 @@ const CreateEditForm = ({ editingId, form, setForm, onSave, onReset, busy, creat
         )}
       </div>
 
-      {/* نافذة المعاينة (ميزة 3) */}
+      {/* نافذة المعاينة */}
       {showPreview && <PreviewModal form={form} onClose={() => setShowPreview(false)} />}
 
       <style jsx>{`
@@ -2006,7 +2311,7 @@ export default function AddListingPage() {
 
       {/* إشعارات (ميزة 20) */}
       {toast && (
-        <div className={`toast ${toast.type}`} style={{ position: 'fixed', top: 20, left: '50%', transform: 'translateX(-50%)', zIndex: 2000 }}>
+        <div className={`toast ${toast.type}`} style={{ position: 'fixed', top: 20, left: '50%', transform: 'translateX(-50%)', zIndex: 2000, padding: '10px 20px', borderRadius: 8, background: toast.type === 'success' ? '#4caf50' : toast.type === 'error' ? '#f44336' : '#ff9800', color: 'white' }}>
           {toast.message}
         </div>
       )}
@@ -2020,7 +2325,7 @@ export default function AddListingPage() {
         busy={saving}
         createdId={createdId}
         uploader={uploader}
-        onDuplicate={duplicateListing} // تمرير دالة النسخ
+        onDuplicate={duplicateListing}
       />
     </div>
   );
