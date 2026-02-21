@@ -4,7 +4,7 @@
  * صفحة إضافة إعلان (منفصلة عن لوحة الأدمن)
  * - تسجيل دخول الأدمن
  * - تحقق صلاحية الأدمن
- * - نموذج إضافة/تعديل إعلان + رفع وسائط + خريطة
+ * - نموذج إضافة/تعديل إعلان + رفع وسائط + خريطة ذكية متسلسلة
  * ملاحظة: لا تحتوي على إدارة العروض (قائمة/حذف) — فقط الإضافة.
  */
 
@@ -54,7 +54,7 @@ const nowId = () => `${Date.now()}_${Math.random().toString(16).slice(2)}`;
 
 const approxSame = (a, b, eps = 1e-7) => Math.abs(a - b) <= eps;
 
-const buildGoogleMapsUrl = (lat, lng) => `https://www.google.com/maps?q=${round6(lat)},${round6(lng)}`;
+const buildGoogleMapsUrl = (lat, lng) => `https://www.google.com/maps?q=$${round6(lat)},${round6(lng)}`;
 
 const extractLatLngFromUrl = (url) => {
   try {
@@ -741,7 +741,7 @@ const EMPTY_FORM = {
   lng: '',
   description: '',
   images: [],
-  // فيلا/شقة
+  // فيلا/شقة/دور
   bedrooms: '',
   bathrooms: '',
   floor: '',
@@ -763,7 +763,7 @@ const EMPTY_FORM = {
   parkingSpaces: '',
 };
 
-// ===================== النموذج =====================
+// ===================== النموذج الذكي =====================
 const CreateEditForm = ({ editingId, form, setForm, onSave, onReset, busy, createdId, uploader }) => {
   const {
     queue,
@@ -783,6 +783,7 @@ const CreateEditForm = ({ editingId, form, setForm, onSave, onReset, busy, creat
 
   const handleDealTypeChange = (e) => {
     const dealType = e.target.value;
+    // تصفير نوع العقار عند تغيير نوع الصفقة لضمان التسلسل الذكي
     setForm({ ...form, dealType, propertyType: '' });
   };
 
@@ -891,8 +892,10 @@ const CreateEditForm = ({ editingId, form, setForm, onSave, onReset, busy, creat
       )}
 
       <div className="grid" style={{ marginTop: 10 }}>
+        
+        {/* المرحلة الأولى: نوع العملية */}
         <div className="col-12">
-          <Field label="اختر نوع الصفقة">
+          <Field label="اختر نوع الإعلان (بيع أو إيجار)">
             <div className="row" style={{ gap: 10 }}>
               {DEAL_TYPES.map((deal) => (
                 <label key={deal.key} className="radio-label" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -910,6 +913,7 @@ const CreateEditForm = ({ editingId, form, setForm, onSave, onReset, busy, creat
           </Field>
         </div>
 
+        {/* المرحلة الثانية: نوع العقار (تظهر فقط بعد اختيار العملية) */}
         {dealTypeChosen && (
           <div className="col-12">
             <Field label="اختر نوع العقار">
@@ -931,152 +935,79 @@ const CreateEditForm = ({ editingId, form, setForm, onSave, onReset, busy, creat
           </div>
         )}
 
+        {/* المرحلة الثالثة: الخانات المشتركة والمخصصة (تظهر فقط بعد اختيار نوع العقار) */}
         {propertyTypeChosen && (
           <>
-            <div className="col-6">
-              <Field label="عنوان العرض">
-                <input
-                  className="input"
-                  value={form.title}
-                  onChange={(e) => setForm({ ...form, title: e.target.value })}
-                  placeholder="مثال: فيلا للبيع في حي الزمرد"
-                />
-              </Field>
+            {/* --- الخانات المشتركة لجميع أنواع العقارات --- */}
+            <div className="col-12" style={{ marginBottom: 15, borderBottom: '1px solid rgba(214, 179, 91, 0.2)', paddingBottom: 15 }}>
+              <div style={{ fontWeight: 900, marginBottom: 10, color: 'var(--primary)' }}>البيانات الأساسية</div>
+              <div className="grid">
+                <div className="col-6">
+                  <Field label="عنوان العرض">
+                    <input className="input" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder={`مثال: ${form.propertyType} ${form.dealType === 'sale' ? 'للبيع' : 'للإيجار'} في موقع مميز`} />
+                  </Field>
+                </div>
+                <div className="col-3">
+                  <Field label="الحي">
+                    <select className="select" value={form.neighborhood} onChange={(e) => setForm({ ...form, neighborhood: e.target.value })}>
+                      <option value="">اختر</option>
+                      {NEIGHBORHOODS.map((n) => <option key={n} value={n}>{n}</option>)}
+                    </select>
+                  </Field>
+                </div>
+                <div className="col-3">
+                  <Field label="المساحة (م²)">
+                    <input className="input" inputMode="numeric" value={form.area} onChange={(e) => setForm({ ...form, area: e.target.value })} placeholder="مثال: 312" />
+                  </Field>
+                </div>
+                <div className="col-3">
+                  <Field label="السعر">
+                    <input className="input" inputMode="numeric" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} placeholder="مثال: 1350000" />
+                    {form.price && <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>{formatPriceSAR(toNumberOrNull(form.price))}</div>}
+                  </Field>
+                </div>
+                <div className="col-3">
+                  <Field label="مباشر">
+                    <select className="select" value={form.direct ? 'yes' : 'no'} onChange={(e) => setForm({ ...form, direct: e.target.value === 'yes' })}>
+                      <option value="yes">نعم (مباشر)</option>
+                      <option value="no">وسيط/وكيل</option>
+                    </select>
+                  </Field>
+                </div>
+                <div className="col-3">
+                  <Field label="الحالة">
+                    <select className="select" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
+                      {STATUS_OPTIONS.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+                    </select>
+                  </Field>
+                </div>
+                <div className="col-3">
+                  <Field label="المخطط">
+                    <input className="input" value={form.plan} onChange={(e) => setForm({ ...form, plan: e.target.value })} placeholder="اختياري" />
+                  </Field>
+                </div>
+              </div>
             </div>
 
-            <div className="col-3">
-              <Field label="الحي">
-                <select
-                  className="select"
-                  value={form.neighborhood}
-                  onChange={(e) => setForm({ ...form, neighborhood: e.target.value })}
-                >
-                  <option value="">اختر</option>
-                  {NEIGHBORHOODS.map((n) => (
-                    <option key={n} value={n}>
-                      {n}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-            </div>
-
-            <div className="col-3">
-              <Field label="مباشر">
-                <select
-                  className="select"
-                  value={form.direct ? 'yes' : 'no'}
-                  onChange={(e) => setForm({ ...form, direct: e.target.value === 'yes' })}
-                >
-                  <option value="yes">نعم</option>
-                  <option value="no">وسيط/وكيل</option>
-                </select>
-              </Field>
-            </div>
-
-            <div className="col-3">
-              <Field label="المخطط">
-                <input
-                  className="input"
-                  value={form.plan}
-                  onChange={(e) => setForm({ ...form, plan: e.target.value })}
-                  placeholder="مثال: مخطط الخالدية السياحي"
-                />
-              </Field>
-            </div>
-
-            <div className="col-3">
-              <Field label="الجزء">
-                <input
-                  className="input"
-                  value={form.part}
-                  onChange={(e) => setForm({ ...form, part: e.target.value })}
-                  placeholder="مثال: الجزء ج"
-                />
-              </Field>
-            </div>
-
-            <div className="col-3">
-              <Field label="رقم القطعة" hint="مهم للأراضي">
-                <input
-                  className="input"
-                  value={form.lotNumber}
-                  onChange={(e) => setForm({ ...form, lotNumber: e.target.value })}
-                  placeholder="مثال: 250"
-                />
-              </Field>
-            </div>
-
-            <div className="col-3">
-              <Field label="سكني/تجاري" hint="اختياري">
-                <select
-                  className="select"
-                  value={form.propertyClass}
-                  onChange={(e) => setForm({ ...form, propertyClass: e.target.value })}
-                >
-                  <option value="">تلقائي</option>
-                  {PROPERTY_CLASSES.map((c) => (
-                    <option key={c.key} value={c.key}>
-                      {c.label}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-            </div>
-
-            <div className="col-3">
-              <Field label="المساحة (م²)">
-                <input
-                  className="input"
-                  inputMode="numeric"
-                  value={form.area}
-                  onChange={(e) => setForm({ ...form, area: e.target.value })}
-                  placeholder="مثال: 312"
-                />
-              </Field>
-            </div>
-
-            <div className="col-3">
-              <Field label="السعر">
-                <input
-                  className="input"
-                  inputMode="numeric"
-                  value={form.price}
-                  onChange={(e) => setForm({ ...form, price: e.target.value })}
-                  placeholder="مثال: 1350000"
-                />
-                {form.price ? (
-                  <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-                    {formatPriceSAR(toNumberOrNull(form.price))}
-                  </div>
-                ) : null}
-              </Field>
-            </div>
-
-            <div className="col-3">
-              <Field label="الحالة">
-                <select
-                  className="select"
-                  value={form.status}
-                  onChange={(e) => setForm({ ...form, status: e.target.value })}
-                >
-                  {STATUS_OPTIONS.map((s) => (
-                    <option key={s.key} value={s.key}>
-                      {s.label}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-            </div>
-
-            {form.propertyType === 'فيلا' && (
+            {/* --- الخانات المخصصة حسب نوع العقار --- */}
+            
+            {/* 1. قسم الأرض */}
+            {form.propertyType === 'أرض' && (
               <div className="col-12">
                 <div className="card" style={{ padding: 14, marginBottom: 10 }}>
-                  <div style={{ fontWeight: 900, marginBottom: 10 }}>تفاصيل الفيلا</div>
+                  <div style={{ fontWeight: 900, marginBottom: 10 }}>تفاصيل الأرض</div>
                   <div className="grid">
                     <div className="col-3">
-                      <Field label="عمر العقار (سنة)">
-                        <input className="input" inputMode="numeric" value={form.age} onChange={(e) => setForm({ ...form, age: e.target.value })} placeholder="مثال: 5" />
+                      <Field label="سكني/تجاري">
+                        <select className="select" value={form.propertyClass} onChange={(e) => setForm({ ...form, propertyClass: e.target.value })}>
+                          <option value="">تلقائي</option>
+                          {PROPERTY_CLASSES.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
+                        </select>
+                      </Field>
+                    </div>
+                    <div className="col-3">
+                      <Field label="رقم القطعة">
+                        <input className="input" value={form.lotNumber} onChange={(e) => setForm({ ...form, lotNumber: e.target.value })} placeholder="مثال: 250" />
                       </Field>
                     </div>
                     <div className="col-3">
@@ -1086,9 +1017,20 @@ const CreateEditForm = ({ editingId, form, setForm, onSave, onReset, busy, creat
                     </div>
                     <div className="col-3">
                       <Field label="الواجهة">
-                        <input className="input" value={form.facade} onChange={(e) => setForm({ ...form, facade: e.target.value })} placeholder="شمال / جنوب / شرق / غرب" />
+                        <input className="input" value={form.facade} onChange={(e) => setForm({ ...form, facade: e.target.value })} placeholder="شمال / جنوب..." />
                       </Field>
                     </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 2. قسم الفيلا أو الدور */}
+            {(form.propertyType === 'فيلا' || form.propertyType === 'دور') && (
+              <div className="col-12">
+                <div className="card" style={{ padding: 14, marginBottom: 10 }}>
+                  <div style={{ fontWeight: 900, marginBottom: 10 }}>تفاصيل {form.propertyType}</div>
+                  <div className="grid">
                     <div className="col-3">
                       <Field label="عدد الغرف">
                         <input className="input" inputMode="numeric" value={form.bedrooms} onChange={(e) => setForm({ ...form, bedrooms: e.target.value })} placeholder="مثال: 6" />
@@ -1105,12 +1047,27 @@ const CreateEditForm = ({ editingId, form, setForm, onSave, onReset, busy, creat
                       </Field>
                     </div>
                     <div className="col-3">
+                      <Field label="عمر العقار (سنة)">
+                        <input className="input" inputMode="numeric" value={form.age} onChange={(e) => setForm({ ...form, age: e.target.value })} placeholder="جديد = 0" />
+                      </Field>
+                    </div>
+                    <div className="col-3">
+                      <Field label="عرض الشارع (م)">
+                        <input className="input" inputMode="numeric" value={form.streetWidth} onChange={(e) => setForm({ ...form, streetWidth: e.target.value })} placeholder="مثال: 20" />
+                      </Field>
+                    </div>
+                    <div className="col-3">
+                      <Field label="الواجهة">
+                        <input className="input" value={form.facade} onChange={(e) => setForm({ ...form, facade: e.target.value })} placeholder="شمال / جنوب..." />
+                      </Field>
+                    </div>
+                    <div className="col-2">
                       <Field label="غرفة خادمة؟">{yesNoSelect(form.maidRoom, (v) => setForm({ ...form, maidRoom: v }))}</Field>
                     </div>
-                    <div className="col-3">
+                    <div className="col-2">
                       <Field label="غرفة سائق؟">{yesNoSelect(form.driverRoom, (v) => setForm({ ...form, driverRoom: v }))}</Field>
                     </div>
-                    <div className="col-3">
+                    <div className="col-2">
                       <Field label="حوش؟">{yesNoSelect(form.yard, (v) => setForm({ ...form, yard: v }))}</Field>
                     </div>
                   </div>
@@ -1118,13 +1075,14 @@ const CreateEditForm = ({ editingId, form, setForm, onSave, onReset, busy, creat
               </div>
             )}
 
+            {/* 3. قسم الشقة */}
             {form.propertyType === 'شقة' && (
               <div className="col-12">
                 <div className="card" style={{ padding: 14, marginBottom: 10 }}>
                   <div style={{ fontWeight: 900, marginBottom: 10 }}>تفاصيل الشقة</div>
                   <div className="grid">
                     <div className="col-3">
-                      <Field label="الدور">
+                      <Field label="الدور (رقم الطابق)">
                         <input className="input" inputMode="numeric" value={form.floor} onChange={(e) => setForm({ ...form, floor: e.target.value })} placeholder="مثال: 3" />
                       </Field>
                     </div>
@@ -1149,6 +1107,11 @@ const CreateEditForm = ({ editingId, form, setForm, onSave, onReset, busy, creat
                       </Field>
                     </div>
                     <div className="col-3">
+                      <Field label="عمر العقار (سنة)">
+                        <input className="input" inputMode="numeric" value={form.age} onChange={(e) => setForm({ ...form, age: e.target.value })} placeholder="جديد = 0" />
+                      </Field>
+                    </div>
+                    <div className="col-3">
                       <Field label="مطبخ راكب؟">{yesNoSelect(form.kitchen, (v) => setForm({ ...form, kitchen: v }))}</Field>
                     </div>
                     <div className="col-3">
@@ -1159,26 +1122,7 @@ const CreateEditForm = ({ editingId, form, setForm, onSave, onReset, busy, creat
               </div>
             )}
 
-            {form.propertyType === 'أرض' && (
-              <div className="col-12">
-                <div className="card" style={{ padding: 14, marginBottom: 10 }}>
-                  <div style={{ fontWeight: 900, marginBottom: 10 }}>تفاصيل الأرض</div>
-                  <div className="grid">
-                    <div className="col-3">
-                      <Field label="عرض الشارع (م)">
-                        <input className="input" inputMode="numeric" value={form.streetWidth} onChange={(e) => setForm({ ...form, streetWidth: e.target.value })} placeholder="مثال: 20" />
-                      </Field>
-                    </div>
-                    <div className="col-3">
-                      <Field label="الواجهة">
-                        <input className="input" value={form.facade} onChange={(e) => setForm({ ...form, facade: e.target.value })} placeholder="شمال / جنوب / شرق / غرب" />
-                      </Field>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
+            {/* 4. قسم العمارة */}
             {form.propertyType === 'عمارة' && (
               <div className="col-12">
                 <div className="card" style={{ padding: 14, marginBottom: 10 }}>
@@ -1205,19 +1149,50 @@ const CreateEditForm = ({ editingId, form, setForm, onSave, onReset, busy, creat
                       </Field>
                     </div>
                     <div className="col-3">
-                      <Field label="مصعد؟">{yesNoSelect(form.hasElevator, (v) => setForm({ ...form, hasElevator: v }))}</Field>
+                      <Field label="عرض الشارع (م)">
+                        <input className="input" inputMode="numeric" value={form.streetWidth} onChange={(e) => setForm({ ...form, streetWidth: e.target.value })} placeholder="مثال: 30" />
+                      </Field>
                     </div>
                     <div className="col-3">
-                      <Field label="مولد؟">{yesNoSelect(form.hasGenerator, (v) => setForm({ ...form, hasGenerator: v }))}</Field>
+                      <Field label="الواجهة">
+                        <input className="input" value={form.facade} onChange={(e) => setForm({ ...form, facade: e.target.value })} placeholder="شمال / جنوب..." />
+                      </Field>
                     </div>
                     <div className="col-3">
                       <Field label="عمر العقار (سنة)">
                         <input className="input" inputMode="numeric" value={form.age} onChange={(e) => setForm({ ...form, age: e.target.value })} placeholder="مثال: 10" />
                       </Field>
                     </div>
-                    <div className="col-3">
+                    <div className="col-1">
+                      <Field label="مصعد؟">{yesNoSelect(form.hasElevator, (v) => setForm({ ...form, hasElevator: v }))}</Field>
+                    </div>
+                    <div className="col-2">
+                      <Field label="مولد؟">{yesNoSelect(form.hasGenerator, (v) => setForm({ ...form, hasGenerator: v }))}</Field>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 5. قسم المحل */}
+            {form.propertyType === 'محل' && (
+              <div className="col-12">
+                <div className="card" style={{ padding: 14, marginBottom: 10 }}>
+                  <div style={{ fontWeight: 900, marginBottom: 10 }}>تفاصيل المحل</div>
+                  <div className="grid">
+                    <div className="col-4">
+                      <Field label="عرض الشارع (م)">
+                        <input className="input" inputMode="numeric" value={form.streetWidth} onChange={(e) => setForm({ ...form, streetWidth: e.target.value })} placeholder="مثال: 40" />
+                      </Field>
+                    </div>
+                    <div className="col-4">
                       <Field label="الواجهة">
-                        <input className="input" value={form.facade} onChange={(e) => setForm({ ...form, facade: e.target.value })} placeholder="شمال / جنوب / شرق / غرب" />
+                        <input className="input" value={form.facade} onChange={(e) => setForm({ ...form, facade: e.target.value })} placeholder="شمال / جنوب..." />
+                      </Field>
+                    </div>
+                    <div className="col-4">
+                      <Field label="عمر العقار (سنة)">
+                        <input className="input" inputMode="numeric" value={form.age} onChange={(e) => setForm({ ...form, age: e.target.value })} placeholder="مثال: 5" />
                       </Field>
                     </div>
                   </div>
@@ -1225,6 +1200,7 @@ const CreateEditForm = ({ editingId, form, setForm, onSave, onReset, busy, creat
               </div>
             )}
 
+            {/* --- الخريطة والوصف والصور (تظهر في الأخير للجميع) --- */}
             <div className="col-12">
               <Field label="موقع العقار على الخريطة" hint="حدد الموقع من الخريطة (يُسمح فقط بمواقع داخل مدينة جدة). يمكنك أيضاً لصق رابط Google Maps.">
                 <div style={{ display: 'grid', gap: 10 }}>
@@ -1257,10 +1233,11 @@ const CreateEditForm = ({ editingId, form, setForm, onSave, onReset, busy, creat
 
             <div className="col-12">
               <Field label="وصف (اختياري)">
-                <textarea className="input" rows={4} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="تفاصيل إضافية: شارع/واجهة/مميزات…" />
+                <textarea className="input" rows={4} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="تفاصيل إضافية عن العقار..." />
               </Field>
             </div>
 
+            {/* قسم رفع الصور والفيديو */}
             <div className="col-12">
               <Field label="الصور والفيديو" hint="اسحب الملفات هنا أو اضغط لاختيارها. سيتم رفعها تلقائياً.">
                 <div
@@ -1386,9 +1363,12 @@ const CreateEditForm = ({ editingId, form, setForm, onSave, onReset, busy, creat
         .grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 15px; }
         .col-12 { grid-column: span 12; }
         .col-6 { grid-column: span 6; }
+        .col-4 { grid-column: span 4; }
         .col-3 { grid-column: span 3; }
+        .col-2 { grid-column: span 2; }
+        .col-1 { grid-column: span 1; }
         @media (max-width: 768px) {
-          .col-6, .col-3 { grid-column: span 12; }
+          .col-6, .col-4, .col-3, .col-2, .col-1 { grid-column: span 12; }
         }
         .dropzone {
           border: 1px dashed rgba(214, 179, 91, 0.45);
