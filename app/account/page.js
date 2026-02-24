@@ -27,7 +27,7 @@ export default function AccountPage() {
     try {
       await signInWithEmailAndPassword(auth, email, pass);
       setPass('');
-    } catch (e2) {
+    } catch {
       setErr('بيانات الدخول غير صحيحة أو لا يوجد حساب.');
     } finally {
       setBusy(false);
@@ -50,57 +50,74 @@ export default function AccountPage() {
 
   return (
     <div className="container">
-      <div className="head">
-        <h1 className="h1">الحساب</h1>
-        {/* تم حذف النص: الأدمن لا يظهر للزوار — فقط هنا إذا كنت أدمن */}
+      <div style={{ margin: '16px 0 12px' }}>
+        <h1 style={{ margin: 0, fontSize: 18, fontWeight: 900 }}>الحساب</h1>
       </div>
 
       {user ? (
-        <div className="card box">
-          <div className="row">
-            <div>
-              <div className="name">{user.email}</div>
-              <div className="muted" style={{ fontSize: 12 }}>
+        <div className="card" style={{ padding: 16 }}>
+          <div className="row" style={{ justifyContent: 'space-between' }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontWeight: 900, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {user.email}
+              </div>
+              <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
                 {isAdmin ? 'صلاحية: أدمن' : 'صلاحية: مستخدم'}
               </div>
             </div>
-            <button className="btn" onClick={doLogout} disabled={busy}>تسجيل خروج</button>
+
+            <button className="btn" onClick={doLogout} disabled={busy}>
+              تسجيل خروج
+            </button>
           </div>
 
           {isAdmin ? (
-            <div className="admin">
-              <Link href="/admin" className="btn btnPrimary">الدخول إلى لوحة الأدمن</Link>
+            <div style={{ marginTop: 12 }}>
+              <Link href="/admin" className="btn btnPrimary">
+                الدخول إلى لوحة الأدمن
+              </Link>
             </div>
           ) : null}
         </div>
       ) : (
-        <form className="card box" onSubmit={doLogin}>
-          {/* تم حذف النص: سجّل دخولك لإدارة العروض (للأدمن فقط) */}
+        <form className="card" style={{ padding: 16 }} onSubmit={doLogin}>
+          <label style={{ display: 'block', marginTop: 10, marginBottom: 6, fontWeight: 900 }}>
+            البريد
+          </label>
+          <input
+            className="input"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="email@example.com"
+            autoComplete="email"
+          />
 
-          <label className="lbl">البريد</label>
-          <input className="input" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="email@example.com" />
+          <label style={{ display: 'block', marginTop: 10, marginBottom: 6, fontWeight: 900 }}>
+            كلمة المرور
+          </label>
+          <input
+            className="input"
+            type="password"
+            value={pass}
+            onChange={(e) => setPass(e.target.value)}
+            placeholder="••••••••"
+            autoComplete="current-password"
+          />
 
-          <label className="lbl">كلمة المرور</label>
-          <input className="input" type="password" value={pass} onChange={(e) => setPass(e.target.value)} placeholder="••••••••" />
+          {err ? (
+            <div style={{ marginTop: 10, color: 'var(--danger)', fontWeight: 900 }}>{err}</div>
+          ) : null}
 
-          {err ? <div className="err">{err}</div> : null}
-
-          <button className="btn btnPrimary" type="submit" disabled={busy || !email || !pass}>
+          <button
+            className="btn btnPrimary"
+            style={{ marginTop: 12, width: '100%' }}
+            type="submit"
+            disabled={busy || !email || !pass}
+          >
             {busy ? '...' : 'تسجيل دخول'}
           </button>
         </form>
       )}
-
-      <style jsx>{`
-        .head{margin:16px 0 12px}
-        .h1{margin:0;font-size:18px;font-weight:900}
-        .box{padding:16px}
-        .row{display:flex;align-items:center;justify-content:space-between;gap:12px}
-        .name{font-weight:900}
-        .lbl{display:block;margin-top:10px;margin-bottom:6px;font-weight:900}
-        .err{margin-top:10px;color:var(--danger);font-weight:900}
-        .admin{margin-top:12px}
-      `}</style>
     </div>
   );
 }
