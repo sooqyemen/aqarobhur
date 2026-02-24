@@ -17,12 +17,16 @@
 
   --primary: #d6b35b;
   --primary2: #f0d07a;
+  --primary-light: rgba(214, 179, 91, 0.12);
 
   --border: #e2e8f0;
   --border2: #cbd5e1;
 
   --success: #16a34a;
   --danger: #dc2626;
+
+  --shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+  --shadow-primary: 0 10px 24px rgba(214, 179, 91, 0.16);
 }
 
 /* Base */
@@ -65,7 +69,7 @@ a {
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: 18px;
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+  box-shadow: var(--shadow);
 }
 
 .row {
@@ -142,15 +146,21 @@ textarea:focus {
   height: 8px;
 }
 
-::-webkit-scrollbar-track { background: #f1f5f9; }
-::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 999px; }
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 999px;
+}
+
 ::-webkit-scrollbar-thumb:hover {
   background: var(--primary);
 }
 
 /* =========================================
    شيبس الاختصارات في الرئيسية (كل العروض/بيع/إيجار/الخريطة)
-   الهدف: تكون ستايلات جاهزة من أول تحميل (بدون فلاش نصوص بدون ترتيب)
 ========================================= */
 .quickBarHome {
   margin: 18px 0 22px;
@@ -174,7 +184,11 @@ textarea:focus {
   line-height: 1.2;
   white-space: nowrap;
   box-shadow: 0 2px 10px rgba(15, 23, 42, 0.04);
-  transition: transform 120ms ease, background 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+  transition:
+    transform 120ms ease,
+    background 120ms ease,
+    border-color 120ms ease,
+    box-shadow 120ms ease;
 }
 
 .quickBarHome .pill:hover {
@@ -201,13 +215,15 @@ textarea:focus {
     gap: 10px;
     margin: 16px 0 18px;
   }
+
   .quickBarHome .pill {
     padding: 10px 14px;
     font-size: 14px;
   }
 }
+
 /* =========================
-   Neighborhoods Page (no FOUC)
+   صفحة الأحياء
 ========================= */
 .nbPage {
   padding: 20px 0;
@@ -246,7 +262,11 @@ textarea:focus {
   font-weight: 850;
   font-size: 16px;
   box-shadow: 0 2px 10px rgba(15, 23, 42, 0.04);
-  transition: transform 120ms ease, border-color 120ms ease, box-shadow 120ms ease, background 120ms ease;
+  transition:
+    transform 120ms ease,
+    border-color 120ms ease,
+    box-shadow 120ms ease,
+    background 120ms ease;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -257,4 +277,769 @@ textarea:focus {
   border-color: rgba(214, 179, 91, 0.55);
   box-shadow: 0 10px 22px rgba(15, 23, 42, 0.07);
   background: #f8fafc;
+}
+
+@media (max-width: 768px) {
+  .nbPage .nbH1 {
+    font-size: 22px;
+  }
+
+  .nbPage .nbChips {
+    gap: 10px;
+  }
+
+  .nbPage .nbChip {
+    padding: 10px 14px;
+    font-size: 14px;
+  }
+}
+
+/* =========================================
+   Header (منقول من Header.jsx لتقليل فلاش النصوص)
+========================================= */
+.hdr {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: rgba(248, 250, 252, 0.85);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--border);
+}
+
+.hdr.scrolled {
+  background: rgba(248, 250, 252, 0.95);
+}
+
+.hdrInner {
+  width: min(1100px, calc(100% - 28px));
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  flex-wrap: wrap;
+}
+
+.hdr .menuBtn {
+  display: none;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  background: rgba(255, 255, 255, 0.65);
+  backdrop-filter: blur(10px);
+  color: #0f172a;
+  padding: 10px 14px;
+  border-radius: 14px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.hdr .brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.logo,
+.logoSm {
+  display: block;
+  flex: 0 0 auto;
+  border-radius: 14px;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(10px);
+  object-fit: contain;
+  object-position: center;
+}
+
+.logo {
+  width: 42px;
+  height: 42px;
+}
+
+.logoSm {
+  width: 40px;
+  height: 40px;
+}
+
+.logoFallback,
+.logoFallbackSm {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 14px;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(10px);
+  color: #0f172a;
+  font-weight: 950;
+  line-height: 1;
+  flex: 0 0 auto;
+  user-select: none;
+}
+
+.logoFallback {
+  width: 42px;
+  height: 42px;
+  font-size: 18px;
+}
+
+.logoFallbackSm {
+  width: 40px;
+  height: 40px;
+  font-size: 17px;
+}
+
+.hdr .brandText {
+  min-width: 0;
+}
+
+.hdr .brandText .title {
+  font-weight: 950;
+  line-height: 1.1;
+  white-space: nowrap;
+  color: #0f172a;
+}
+
+.hdr .brandText .sub {
+  color: var(--muted);
+  font-size: 13px;
+  margin-top: 2px;
+  white-space: nowrap;
+}
+
+.hdr .search {
+  flex: 1 1 360px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  min-width: 240px;
+}
+
+.navDesktop {
+  flex: 1 1 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-top: 4px;
+  overflow-x: auto;
+  white-space: nowrap;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.navDesktop::-webkit-scrollbar {
+  display: none;
+}
+
+.navLink {
+  text-decoration: none !important;
+  color: #0f172a;
+  font-weight: 900;
+  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 38px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.62);
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.08);
+  backdrop-filter: blur(12px);
+  transition: transform 120ms ease, background 120ms ease, border-color 120ms ease;
+}
+
+.navLink:hover {
+  background: rgba(255, 255, 255, 0.78);
+  border-color: rgba(15, 23, 42, 0.16);
+  transform: translateY(-1px);
+}
+
+.navLink.active {
+  background: rgba(255, 255, 255, 0.92);
+  border-color: rgba(214, 179, 91, 0.55);
+  box-shadow:
+    0 10px 26px rgba(214, 179, 91, 0.14),
+    0 6px 18px rgba(15, 23, 42, 0.08);
+}
+
+.drawerRoot {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+}
+
+.drawerRoot .overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.35);
+}
+
+.drawer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  height: 100%;
+  width: min(360px, 92vw);
+  background: #fff;
+  border-left: 1px solid var(--border);
+  box-shadow: -18px 0 40px rgba(15, 23, 42, 0.12);
+  display: flex;
+  flex-direction: column;
+  padding: 14px;
+}
+
+.drawerTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.drawerBrand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.drawerTitle {
+  font-weight: 950;
+  line-height: 1.1;
+  color: #0f172a;
+}
+
+.drawerSub {
+  color: var(--muted);
+  font-size: 13px;
+  margin-top: 2px;
+}
+
+.drawerLinks {
+  display: grid;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.drawerLink {
+  text-decoration: none !important;
+  padding: 12px 12px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: #fff;
+  font-weight: 900;
+  color: #0f172a;
+}
+
+.drawerLink:hover {
+  border-color: var(--border2);
+  background: #f8fafc;
+}
+
+.drawerHint {
+  margin-top: auto;
+  padding-top: 12px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+@media (max-width: 900px) {
+  .navDesktop {
+    display: none;
+  }
+
+  .hdr .menuBtn {
+    display: inline-flex;
+  }
+
+  .hdr .search {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+}
+
+@media (max-width: 768px) {
+  .hdrInner {
+    gap: 10px;
+  }
+
+  .hdr .brandText .sub {
+    display: none;
+  }
+}
+
+/* =========================================
+   شريط الأحياء في الرئيسية
+========================================= */
+.nbStrip {
+  margin: 14px 0 10px;
+}
+
+.nbStrip .nbHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.nbStrip .nbTitle {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 950;
+  letter-spacing: 0.2px;
+  color: #0f172a;
+}
+
+.nbStrip .nbAll {
+  color: #0f172a;
+  font-weight: 900;
+  font-size: 14px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(10px);
+  text-decoration: none;
+  transition: transform 120ms ease, background 120ms ease, border-color 120ms ease;
+  white-space: nowrap;
+}
+
+.nbStrip .nbAll:hover {
+  background: rgba(255, 255, 255, 0.9);
+  border-color: rgba(214, 179, 91, 0.55);
+  transform: translateY(-1px);
+}
+
+.nbStrip .nbRow {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  gap: 10px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 10px;
+  white-space: nowrap;
+  scrollbar-width: none;
+}
+
+.nbStrip .nbRow::-webkit-scrollbar {
+  display: none;
+}
+
+.nbStrip .nbChip {
+  flex: 0 0 auto;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(10px);
+  color: #0f172a;
+  padding: 12px 18px;
+  border-radius: 999px;
+  font-weight: 950;
+  font-size: 15px;
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
+  transition:
+    transform 120ms ease,
+    background 120ms ease,
+    border-color 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.nbStrip .nbChip:hover {
+  transform: translateY(-1px);
+  background: rgba(255, 255, 255, 0.92);
+  border-color: rgba(214, 179, 91, 0.55);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.1);
+}
+
+.nbStrip .nbChip:active {
+  transform: translateY(0);
+}
+
+/* =========================================
+   بطاقة الإعلان
+========================================= */
+.harajCard {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+  width: 100%;
+}
+
+.harajCard.disabled {
+  cursor: default;
+  opacity: 0.85;
+}
+
+.harajCardRow {
+  direction: ltr;
+  display: flex;
+  gap: 12px;
+  align-items: stretch;
+  background: var(--card, #fff);
+  border: 1px solid var(--border, rgba(0, 0, 0, 0.08));
+  border-radius: 14px;
+  padding: 12px;
+  box-shadow: var(--shadow, 0 6px 16px rgba(0, 0, 0, 0.06));
+}
+
+.harajThumb {
+  flex: 0 0 118px;
+  height: 92px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--border, rgba(0, 0, 0, 0.06));
+  background: rgba(0, 0, 0, 0.04);
+  position: relative;
+}
+
+.harajThumbImg {
+  width: 100%;
+  height: 100%;
+  background-size: cover;
+  background-position: center;
+}
+
+.harajImgCount {
+  position: absolute;
+  left: 8px;
+  top: 8px;
+  background: rgba(0, 0, 0, 0.65);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 900;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(8px);
+}
+
+.harajInfo {
+  direction: rtl;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.harajTitle {
+  font-size: 16px;
+  font-weight: 900;
+  color: #18a86b;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.harajPriceRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.harajPrice {
+  font-size: 15px;
+  font-weight: 900;
+  color: #1e6fd9;
+  white-space: nowrap;
+}
+
+.harajRent {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--muted, rgba(0, 0, 0, 0.55));
+}
+
+.harajStatus {
+  flex: 0 0 auto;
+}
+
+.harajMeta {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  color: var(--muted, rgba(0, 0, 0, 0.55));
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.harajMetaItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.harajTxt {
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.harajBottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 2px;
+}
+
+.harajUser {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted, rgba(0, 0, 0, 0.65));
+  font-weight: 800;
+  font-size: 12.5px;
+  min-width: 0;
+}
+
+.harajAvatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.06);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
+}
+
+.harajUserName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.harajDirect {
+  font-size: 12px;
+  font-weight: 900;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(214, 179, 91, 0.14);
+  border: 1px solid rgba(214, 179, 91, 0.25);
+  white-space: nowrap;
+}
+
+.harajSub {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--muted, rgba(0, 0, 0, 0.5));
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin-top: -2px;
+}
+
+@media (max-width: 600px) {
+  .harajThumb {
+    flex: 0 0 110px;
+    height: 86px;
+  }
+
+  .harajTitle {
+    font-size: 15px;
+  }
+}
+
+/* =========================================
+   Footer (مُقيد بـ .footer لمنع التعارض)
+========================================= */
+.footer {
+  background: var(--bg2);
+  border-top: 1px solid var(--border);
+  padding: 25px 0 15px;
+  margin-top: 40px;
+  color: var(--text);
+}
+
+.footer .container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 20px;
+}
+
+.footer .footerMain {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px 40px;
+  margin-bottom: 25px;
+}
+
+.footer .brand {
+  flex-shrink: 0;
+}
+
+.footer .footerLogo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.footer .logoIcon {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 6px;
+  object-fit: contain;
+  box-shadow: var(--shadow-primary);
+}
+
+.footer .logoText {
+  display: flex;
+  flex-direction: column;
+}
+
+.footer .logoTitle {
+  font-size: 18px;
+  font-weight: 900;
+  margin: 0;
+  color: var(--text);
+}
+
+.footer .logoSubtitle {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 2px;
+  font-weight: 700;
+}
+
+.footer .contactRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  align-items: center;
+}
+
+.footer .contactItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: rgba(214, 179, 91, 0.08);
+  border: 1px solid var(--border);
+  border-radius: 40px;
+  color: var(--text);
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.footer .contactItem:hover {
+  background: var(--primary-light);
+  border-color: var(--primary);
+  color: var(--primary);
+  transform: translateY(-2px);
+}
+
+.footer .contactIcon {
+  font-size: 16px;
+}
+
+.footer .contactValue {
+  line-height: 1;
+}
+
+.footer .quickRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.footer .quickLink {
+  padding: 6px 16px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
+  border-radius: 30px;
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.footer .quickLink:hover {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+  transform: translateY(-2px);
+}
+
+.footer .copyright {
+  border-top: 1px solid var(--border);
+  padding-top: 15px;
+  text-align: center;
+}
+
+.footer .copyright p {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+@media (max-width: 900px) {
+  .footer .footerMain {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 20px;
+  }
+
+  .footer .brand {
+    display: flex;
+    justify-content: center;
+  }
+
+  .footer .contactRow,
+  .footer .quickRow {
+    justify-content: center;
+  }
+
+  .footer .contactItem,
+  .footer .quickLink {
+    white-space: nowrap;
+  }
+}
+
+@media (max-width: 480px) {
+  .footer .contactRow {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .footer .contactItem {
+    justify-content: center;
+    white-space: normal;
+    width: 100%;
+  }
+
+  .footer .quickRow {
+    justify-content: center;
+  }
+
+  .footer .quickLink {
+    white-space: nowrap;
+  }
+}
+
+.footer .quickLink:focus-visible,
+.footer .contactItem:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 3px;
 }
