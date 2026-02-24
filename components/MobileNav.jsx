@@ -3,16 +3,19 @@
 import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 
-// ✅ شريط سفلي بسيط (نص فقط) حسب طلبك:
-// الرئيسية - الأحياء - الخريطة - أرسل طلبك
-// بدون رموز/إيموجي + بدون "الحساب".
+// شريط الجوال السفلي (نص فقط)
+// - بدون رموز
+// - يخفي نفسه عند ملء شاشة الخريطة
+// - بدون <style jsx> لتقليل فلاش التنسيق
 export default function MobileNav() {
   const pathname = usePathname() || '/';
   const router = useRouter();
+
   const [hiddenByFullscreen, setHiddenByFullscreen] = useState(false);
+  const [isDesktop, setIsDesktop] = useState(false);
 
   useEffect(() => {
-    // نخفي الشريط إذا كانت الخريطة في وضع ملء الشاشة (body.isMapFullscreen)
+    // إخفاء الشريط إذا كانت الخريطة في وضع ملء الشاشة
     const tick = () => {
       try {
         setHiddenByFullscreen(document.body.classList.contains('isMapFullscreen'));
@@ -24,6 +27,25 @@ export default function MobileNav() {
     tick();
     const id = setInterval(tick, 200);
     return () => clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    // بديل media query بدون style jsx
+    if (typeof window === 'undefined' || !window.matchMedia) return;
+
+    const mq = window.matchMedia('(min-width: 900px)');
+    const apply = () => setIsDesktop(!!mq.matches);
+
+    apply();
+
+    if (typeof mq.addEventListener === 'function') {
+      mq.addEventListener('change', apply);
+      return () => mq.removeEventListener('change', apply);
+    }
+
+    // Safari القديم
+    mq.addListener?.(apply);
+    return () => mq.removeListener?.(apply);
   }, []);
 
   const items = [
@@ -38,85 +60,72 @@ export default function MobileNav() {
     return pathname.startsWith(href);
   };
 
+  if (isDesktop) return null;
+
   return (
-    <nav className={`mobileNav ${hiddenByFullscreen ? 'hidden' : ''}`} aria-label="قائمة الجوال">
-      <div className="wrap">
+    <nav
+      aria-label="قائمة الجوال"
+      style={{
+        position: 'fixed',
+        left: 0,
+        right: 0,
+        bottom: 0,
+        zIndex: 1000,
+        padding: '10px 12px 14px',
+        transition: 'transform 180ms ease, opacity 180ms ease',
+        transform: hiddenByFullscreen ? 'translateY(120%)' : 'translateY(0)',
+        opacity: hiddenByFullscreen ? 0 : 1,
+        pointerEvents: hiddenByFullscreen ? 'none' : 'auto',
+      }}
+    >
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+          gap: 10,
+          background: 'rgba(255,255,255,0.94)',
+          border: '1px solid var(--border)',
+          borderRadius: 16,
+          padding: 10,
+          backdropFilter: 'blur(16px)',
+          boxShadow: '0 -8px 24px rgba(15, 23, 42, 0.10)',
+        }}
+      >
         {items.map((it) => {
           const active = isActive(it.href);
+          const isPrimary = it.href === '/request';
+
           return (
             <button
               key={it.href}
               type="button"
-              className={`item ${active ? 'active' : ''} ${it.href === '/request' ? 'primary' : ''}`}
               onClick={() => router.push(it.href)}
               aria-current={active ? 'page' : undefined}
+              style={{
+                border: active
+                  ? '1px solid rgba(214,179,91,0.55)'
+                  : '1px solid var(--border)',
+                background: isPrimary
+                  ? 'linear-gradient(135deg, var(--primary), var(--primary2))'
+                  : active
+                    ? 'rgba(214,179,91,0.12)'
+                    : '#ffffff',
+                color: isPrimary ? '#1f2937' : 'var(--text)',
+                borderRadius: 14,
+                padding: '10px 8px',
+                fontWeight: 950,
+                fontSize: 13,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+                lineHeight: 1.2,
+              }}
+              title={it.label}
             >
               {it.label}
             </button>
           );
         })}
       </div>
-
-      <style jsx>{`
-        .mobileNav {
-          position: fixed;
-          left: 0;
-          right: 0;
-          bottom: 0;
-          z-index: 1000;
-          padding: 10px 12px 14px;
-          transition: transform 180ms ease, opacity 180ms ease;
-        }
-        .mobileNav.hidden {
-          transform: translateY(120%);
-          opacity: 0;
-          pointer-events: none;
-        }
-
-        .wrap {
-          display: grid;
-          grid-template-columns: repeat(4, minmax(0, 1fr));
-          gap: 10px;
-          background: rgba(10, 13, 18, 0.92);
-          border: 1px solid var(--border);
-          border-radius: 16px;
-          padding: 10px;
-          backdrop-filter: blur(16px);
-          box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.35);
-        }
-
-        .item {
-          border: 1px solid var(--border);
-          background: rgba(255, 255, 255, 0.04);
-          color: var(--text);
-          border-radius: 14px;
-          padding: 10px 8px;
-          font-weight: 950;
-          font-size: 13px;
-          cursor: pointer;
-          white-space: nowrap;
-        }
-        .item.active {
-          border-color: rgba(214, 179, 91, 0.55);
-          background: rgba(214, 179, 91, 0.12);
-          color: #f6f0df;
-        }
-
-        .item.primary {
-          border-color: rgba(214, 179, 91, 0.35);
-          background: linear-gradient(135deg, var(--primary), var(--primary2));
-          color: #0a0d12;
-        }
-        .item.primary.active {
-          filter: brightness(0.98);
-        }
-
-        @media (min-width: 900px) {
-          .mobileNav {
-            display: none;
-          }
-        }
-      `}</style>
     </nav>
   );
 }
