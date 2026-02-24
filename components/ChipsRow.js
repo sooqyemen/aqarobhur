@@ -1,79 +1,66 @@
 'use client';
 
-// شريط اختيارات (Chips) متوافق مع ثيم الموقع الداكن/الذهبي
+// شريط اختيارات (Chips)
 // - يدعم التمرير الأفقي في الجوال
 // - يعطّل الاختيارات إذا كان disabled
+// - بدون <style jsx> لتقليل فلاش/تأخر التنسيق
 
-export default function ChipsRow({ value, options, onChange, disabled }) {
+export default function ChipsRow({ value, options = [], onChange, disabled = false }) {
   return (
-    <div className="chipsOuter" aria-disabled={disabled ? 'true' : 'false'}>
-      <div className="chipsInner">
+    <div
+      aria-disabled={disabled ? 'true' : 'false'}
+      style={{
+        width: '100%',
+        overflowX: 'auto',
+        WebkitOverflowScrolling: 'touch',
+        paddingBottom: 2,
+        opacity: disabled ? 0.55 : 1,
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          gap: 8,
+          whiteSpace: 'nowrap',
+        }}
+      >
         {options.map((opt) => {
           const active = value === opt.value;
+
           return (
             <button
-              key={opt.value}
+              key={String(opt.value)}
               type="button"
-              className={`chip ${active ? 'chipActive' : ''}`}
-              onClick={() => !disabled && onChange(active ? '' : opt.value)}
+              onClick={() => {
+                if (disabled) return;
+                onChange?.(active ? '' : opt.value);
+              }}
               disabled={disabled}
+              style={{
+                flex: '0 0 auto',
+                border: active
+                  ? '1px solid rgba(214,179,91,0.55)'
+                  : '1px solid var(--border)',
+                background: active
+                  ? 'rgba(214,179,91,0.12)'
+                  : 'rgba(255,255,255,0.04)',
+                color: active ? '#f6f0df' : 'var(--text)',
+                padding: '8px 12px',
+                borderRadius: 999,
+                fontWeight: 900,
+                cursor: disabled ? 'not-allowed' : 'pointer',
+                transition: 'transform 120ms ease, background 120ms ease, border-color 120ms ease',
+                lineHeight: 1.2,
+                fontSize: 14,
+              }}
+              title={opt.label}
+              aria-pressed={active ? 'true' : 'false'}
             >
               {opt.label}
             </button>
           );
         })}
       </div>
-
-      <style jsx>{`
-        .chipsOuter {
-          width: 100%;
-          overflow-x: auto;
-          -webkit-overflow-scrolling: touch;
-          padding-bottom: 2px;
-        }
-        .chipsInner {
-          display: flex;
-          gap: 8px;
-          white-space: nowrap;
-        }
-
-        .chip {
-          flex: 0 0 auto;
-          border: 1px solid var(--border);
-          background: rgba(255,255,255,0.04);
-          color: var(--text);
-          padding: 8px 12px;
-          border-radius: 999px;
-          font-weight: 900;
-          cursor: pointer;
-          transition: transform 120ms ease, background 120ms ease, border-color 120ms ease;
-        }
-        .chip:hover {
-          transform: translateY(-1px);
-          background: rgba(255,255,255,0.06);
-          border-color: rgba(255,255,255,0.18);
-        }
-
-        .chipActive {
-          border-color: rgba(214,179,91,0.55);
-          background: rgba(214,179,91,0.12);
-          color: #f6f0df;
-        }
-
-        .chipsOuter[aria-disabled='true'] {
-          opacity: 0.55;
-        }
-        .chip:disabled {
-          cursor: not-allowed;
-        }
-
-        @media (max-width: 640px) {
-          .chip {
-            padding: 7px 10px;
-            font-weight: 850;
-          }
-        }
-      `}</style>
     </div>
   );
 }
