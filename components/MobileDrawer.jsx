@@ -13,13 +13,21 @@ function hashHue(text) {
 
 function IconBadge({ emoji, label }) {
   const hue = useMemo(() => hashHue(label), [label]);
+
   return (
     <span
-      className="icon"
       aria-hidden="true"
       style={{
+        width: 36,
+        height: 36,
+        borderRadius: 14,
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontSize: 18,
+        border: `1px solid hsla(${hue}, 70%, 60%, 0.35)`,
         background: `hsla(${hue}, 70%, 55%, 0.18)`,
-        borderColor: `hsla(${hue}, 70%, 60%, 0.35)`,
+        flex: '0 0 auto',
       }}
     >
       {emoji}
@@ -43,12 +51,10 @@ export default function MobileDrawer({ open, onClose }) {
     []
   );
 
-  // إغلاق عند الضغط على الخلفية
   const onBackdrop = (e) => {
     if (e.target === e.currentTarget) onClose?.();
   };
 
-  // تحسين: عند فتح القائمة نحرّك الفوكس للحاوية
   useEffect(() => {
     if (!open) return;
     try {
@@ -57,167 +63,183 @@ export default function MobileDrawer({ open, onClose }) {
     } catch {}
   }, [open]);
 
+  // قفل تمرير الصفحة عند فتح القائمة
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+
+    const html = document.documentElement;
+    const body = document.body;
+    const prevHtmlOverflow = html.style.overflow;
+    const prevBodyOverflow = body.style.overflow;
+
+    if (open) {
+      html.style.overflow = 'hidden';
+      body.style.overflow = 'hidden';
+    }
+
+    return () => {
+      html.style.overflow = prevHtmlOverflow;
+      body.style.overflow = prevBodyOverflow;
+    };
+  }, [open]);
+
+  // إخفاء كامل في الشاشات الكبيرة (بديل media query)
+  const desktopHiddenStyle =
+    typeof window !== 'undefined' && window.innerWidth >= 1024 ? { display: 'none' } : null;
+
   return (
-    <div className={`drawerRoot ${open ? 'open' : ''}`} onMouseDown={onBackdrop} aria-hidden={!open}>
+    <div
+      className={`mobileDrawerRoot ${open ? 'open' : ''}`}
+      onMouseDown={onBackdrop}
+      aria-hidden={!open}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 10050,
+        pointerEvents: open ? 'auto' : 'none',
+        ...desktopHiddenStyle,
+      }}
+    >
+      {/* الخلفية */}
+      <div
+        aria-hidden="true"
+        style={{
+          position: 'absolute',
+          inset: 0,
+          background: 'rgba(15, 23, 42, 0.42)',
+          opacity: open ? 1 : 0,
+          transition: 'opacity 180ms ease',
+        }}
+      />
+
+      {/* الدرج */}
       <aside
         id="mobile-drawer"
-        className="drawer"
         role="dialog"
         aria-modal="true"
         aria-label="قائمة الجوال"
         tabIndex={-1}
+        style={{
+          position: 'absolute',
+          top: 0,
+          bottom: 0,
+          right: 0,
+          width: 'min(86vw, 340px)',
+          background: '#ffffff',
+          borderLeft: '1px solid var(--border)',
+          boxShadow: '-22px 0 50px rgba(15, 23, 42, 0.18)',
+          transform: open ? 'translateX(0)' : 'translateX(110%)',
+          transition: 'transform 220ms ease',
+          padding: 14,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 12,
+          outline: 'none',
+        }}
       >
-        <div className="head">
-          <div className="title">القائمة</div>
-          <button className="close" type="button" onClick={onClose} aria-label="إغلاق القائمة">
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 12,
+            padding: '4px 2px 10px',
+            borderBottom: '1px solid var(--border)',
+          }}
+        >
+          <div
+            style={{
+              fontWeight: 950,
+              fontSize: 16,
+              color: 'var(--text)',
+            }}
+          >
+            القائمة
+          </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="إغلاق القائمة"
+            style={{
+              width: 42,
+              height: 42,
+              borderRadius: 12,
+              border: '1px solid var(--border)',
+              background: '#fff',
+              color: 'var(--text)',
+              fontWeight: 950,
+              cursor: 'pointer',
+            }}
+          >
             ✕
           </button>
         </div>
 
-        <div className="items" role="navigation" aria-label="روابط">
+        <div
+          role="navigation"
+          aria-label="روابط"
+          style={{
+            display: 'grid',
+            gap: 10,
+            paddingTop: 10,
+          }}
+        >
           {links.map((it) => {
             const active = it.href === '/' ? pathname === '/' : pathname.startsWith(it.href.split('?')[0]);
+
             return (
               <Link
                 key={it.href}
                 href={it.href}
                 onClick={onClose}
-                className={`item ${active ? 'active' : ''} ${it.primary ? 'primary' : ''}`}
                 aria-current={active ? 'page' : undefined}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  padding: '12px 12px',
+                  borderRadius: 16,
+                  border: active
+                    ? '1px solid rgba(214, 179, 91, 0.55)'
+                    : '1px solid var(--border)',
+                  background: it.primary
+                    ? 'linear-gradient(135deg, var(--primary), var(--primary2))'
+                    : active
+                      ? 'rgba(214, 179, 91, 0.12)'
+                      : '#ffffff',
+                  color: it.primary ? '#1f2937' : 'var(--text)',
+                  fontWeight: 950,
+                  textDecoration: 'none',
+                }}
               >
                 <IconBadge emoji={it.emoji} label={it.label} />
-                <span className="label">{it.label}</span>
+                <span
+                  style={{
+                    fontSize: 14,
+                    whiteSpace: 'nowrap',
+                    lineHeight: 1.2,
+                  }}
+                >
+                  {it.label}
+                </span>
               </Link>
             );
           })}
         </div>
 
-        <div className="hint muted">اسحب للأسفل أو اضغط ✕ للإغلاق.</div>
+        <div
+          className="muted"
+          style={{
+            marginTop: 'auto',
+            fontSize: 12,
+            opacity: 0.9,
+            padding: '8px 2px 0',
+          }}
+        >
+          اسحب للأسفل أو اضغط ✕ للإغلاق.
+        </div>
       </aside>
-
-      <style jsx>{`
-        .drawerRoot {
-          position: fixed;
-          inset: 0;
-          z-index: 10050;
-          pointer-events: none;
-        }
-        .drawerRoot::before {
-          content: '';
-          position: absolute;
-          inset: 0;
-          background: rgba(0, 0, 0, 0.45);
-          opacity: 0;
-          transition: opacity 180ms ease;
-        }
-        .drawer {
-          position: absolute;
-          top: 0;
-          bottom: 0;
-          right: 0;
-          width: min(86vw, 340px);
-          background: rgba(10, 13, 18, 0.98);
-          border-left: 1px solid var(--border);
-          box-shadow: -22px 0 50px rgba(0, 0, 0, 0.55);
-          transform: translateX(110%);
-          transition: transform 220ms ease;
-          padding: 14px;
-          display: flex;
-          flex-direction: column;
-          gap: 12px;
-          outline: none;
-        }
-
-        .drawerRoot.open {
-          pointer-events: auto;
-        }
-        .drawerRoot.open::before {
-          opacity: 1;
-        }
-        .drawerRoot.open .drawer {
-          transform: translateX(0);
-        }
-
-        .head {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 12px;
-          padding: 4px 2px 10px;
-          border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-        }
-        .title {
-          font-weight: 950;
-          font-size: 16px;
-        }
-        .close {
-          width: 42px;
-          height: 42px;
-          border-radius: 12px;
-          border: 1px solid var(--border);
-          background: rgba(255, 255, 255, 0.06);
-          color: var(--text);
-          font-weight: 950;
-          cursor: pointer;
-        }
-
-        .items {
-          display: grid;
-          gap: 10px;
-          padding-top: 10px;
-        }
-
-        .item {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          padding: 12px 12px;
-          border-radius: 16px;
-          border: 1px solid var(--border);
-          background: rgba(255, 255, 255, 0.05);
-          color: var(--text);
-          font-weight: 950;
-        }
-        .item.active {
-          border-color: rgba(214, 179, 91, 0.55);
-          background: rgba(214, 179, 91, 0.12);
-        }
-        .item.primary {
-          border-color: rgba(214, 179, 91, 0.35);
-          background: linear-gradient(135deg, var(--primary), var(--primary2));
-          color: #0a0d12;
-        }
-
-        .icon {
-          width: 36px;
-          height: 36px;
-          border-radius: 14px;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 18px;
-          border: 1px solid rgba(255, 255, 255, 0.14);
-          background: rgba(255, 255, 255, 0.06);
-          flex: 0 0 auto;
-        }
-        .label {
-          font-size: 14px;
-          white-space: nowrap;
-        }
-
-        .hint {
-          margin-top: auto;
-          font-size: 12px;
-          opacity: 0.9;
-          padding: 8px 2px 0;
-        }
-
-        @media (min-width: 1024px) {
-          .drawerRoot {
-            display: none;
-          }
-        }
-      `}</style>
     </div>
   );
 }
