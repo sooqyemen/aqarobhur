@@ -4,7 +4,7 @@ import MapClient from './MapClient';
 function MapLoading() {
   return (
     <div className="container" style={{ paddingTop: 16 }}>
-      <section className="card">
+      <section className="card" style={{ padding: 14 }}>
         <div style={{ fontWeight: 900, marginBottom: 6 }}>جاري التحميل…</div>
         <div className="muted">يتم تجهيز الخريطة والفلترة.</div>
       </section>
