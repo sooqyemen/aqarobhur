@@ -25,7 +25,8 @@ function compactName(name) {
 export default function NeighborhoodPage({ params }) {
   const rawSlug = params?.slug || '';
   const neighborhoodKey = normalizeNeighborhoodKey(rawSlug);
-  const neighborhoodLabel = neighborhoodLabelFromKey(neighborhoodKey) || decodeURIComponent(String(rawSlug));
+  const neighborhoodLabel =
+    neighborhoodLabelFromKey(neighborhoodKey) || decodeURIComponent(String(rawSlug));
 
   const [dealType, setDealType] = useState('');
   const [propertyClass, setPropertyClass] = useState('');
@@ -60,10 +61,8 @@ export default function NeighborhoodPage({ params }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // خيارات الفئات حسب فلتر سكني/تجاري
   const typeOptions = useMemo(() => getPropertyTypesByClass(propertyClass), [propertyClass]);
 
-  // إعادة ضبط اختيار الفئة لو تغيرت قائمة الخيارات
   useEffect(() => {
     if (propertyType && !typeOptions.includes(propertyType)) {
       setPropertyType('');
@@ -96,22 +95,36 @@ export default function NeighborhoodPage({ params }) {
 
   return (
     <div className="container" style={{ paddingTop: 16 }}>
-      <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <div className="muted" style={{ fontSize: 13 }}>حي</div>
-          <h1 className="h1" style={{ margin: '4px 0 0' }}>{neighborhoodLabel}</h1>
+      <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+        <div style={{ minWidth: 0 }}>
+          <div className="muted" style={{ fontSize: 13 }}>
+            حي
+          </div>
+          <h1 style={{ margin: '4px 0 0', fontSize: 26, fontWeight: 950, lineHeight: 1.2 }}>
+            {neighborhoodLabel}
+          </h1>
         </div>
-        <div className="row">
-          <Link className="btn" href="/">الرئيسية</Link>
-          <Link className="btn" href="/request">أرسل طلبك</Link>
+
+        <div className="row" style={{ flexWrap: 'wrap' }}>
+          <Link className="btn" href="/">
+            الرئيسية
+          </Link>
+          <Link className="btn" href="/request">
+            أرسل طلبك
+          </Link>
         </div>
       </div>
 
-      <section className="card" style={{ marginTop: 12 }}>
+      <section className="card" style={{ marginTop: 12, padding: 14 }}>
         <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ fontWeight: 950 }}>1) اختر بيع أو إيجار</div>
-          <button className="btn" type="button" onClick={() => setShowClassFilter((v) => !v)} aria-expanded={showClassFilter ? 'true' : 'false'}>
-            🎛️ فلاتر
+          <button
+            className="btn"
+            type="button"
+            onClick={() => setShowClassFilter((v) => !v)}
+            aria-expanded={showClassFilter ? 'true' : 'false'}
+          >
+            فلاتر
           </button>
         </div>
 
@@ -120,16 +133,23 @@ export default function NeighborhoodPage({ params }) {
             <button
               key={t.key}
               type="button"
-              className={dealType === t.key ? 'btnPrimary' : 'btn'}
-              onClick={() => {
-                setDealType(t.key);
-              }}
+              className={dealType === t.key ? 'btn btnPrimary' : 'btn'}
+              onClick={() => setDealType((v) => (v === t.key ? '' : t.key))}
             >
               {t.label}
             </button>
           ))}
-          {dealType ? (
-            <button type="button" className="btn" onClick={() => { setDealType(''); setPropertyType(''); }}>
+
+          {(dealType || propertyClass || propertyType) ? (
+            <button
+              type="button"
+              className="btn"
+              onClick={() => {
+                setDealType('');
+                setPropertyClass('');
+                setPropertyType('');
+              }}
+            >
               مسح
             </button>
           ) : null}
@@ -137,21 +157,28 @@ export default function NeighborhoodPage({ params }) {
 
         {showClassFilter ? (
           <div style={{ marginTop: 12 }}>
-            <div className="muted" style={{ fontSize: 13 }}>فلتر العقار: سكني/تجاري</div>
+            <div className="muted" style={{ fontSize: 13 }}>
+              فلتر العقار: سكني/تجاري
+            </div>
+
             <div className="row" style={{ gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
               <button
                 type="button"
-                className={!propertyClass ? 'btnPrimary' : 'btn'}
+                className={!propertyClass ? 'btn btnPrimary' : 'btn'}
                 onClick={() => setPropertyClass('')}
               >
                 الكل
               </button>
+
               {PROPERTY_CLASSES.map((c) => (
                 <button
                   key={c.key}
                   type="button"
-                  className={propertyClass === c.key ? 'btnPrimary' : 'btn'}
-                  onClick={() => setPropertyClass(c.key)}
+                  className={propertyClass === c.key ? 'btn btnPrimary' : 'btn'}
+                  onClick={() => {
+                    setPropertyClass((v) => (v === c.key ? '' : c.key));
+                    setPropertyType('');
+                  }}
                 >
                   {c.label}
                 </button>
@@ -160,25 +187,32 @@ export default function NeighborhoodPage({ params }) {
           </div>
         ) : null}
 
-        <div style={{ marginTop: 14, borderTop: '1px solid rgba(255,255,255,.10)', paddingTop: 12 }}>
-          <div style={{ fontWeight: 950, marginBottom: 8, opacity: dealType ? 1 : 0.65 }}>2) اختر الفئة</div>
+        <div style={{ marginTop: 14, borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+          <div style={{ fontWeight: 950, marginBottom: 8, opacity: dealType ? 1 : 0.65 }}>
+            2) اختر الفئة
+          </div>
 
           {!dealType ? (
-            <div className="muted" style={{ fontSize: 13 }}>اختر (بيع/إيجار) أولاً لعرض الفئات.</div>
+            <div className="muted" style={{ fontSize: 13 }}>
+              اختر (بيع/إيجار) أولاً لعرض الفئات.
+            </div>
           ) : (
             <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
               {typeOptions.map((t) => (
                 <button
                   key={t}
                   type="button"
-                  className={propertyType === t ? 'btnPrimary' : 'btn'}
+                  className={propertyType === t ? 'btn btnPrimary' : 'btn'}
                   onClick={() => setPropertyType((v) => (v === t ? '' : t))}
                 >
                   {t}
                 </button>
               ))}
+
               {propertyType ? (
-                <button type="button" className="btn" onClick={() => setPropertyType('')}>مسح الفئة</button>
+                <button type="button" className="btn" onClick={() => setPropertyType('')}>
+                  مسح الفئة
+                </button>
               ) : null}
             </div>
           )}
@@ -188,52 +222,55 @@ export default function NeighborhoodPage({ params }) {
       <section style={{ marginTop: 12 }}>
         <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-end' }}>
           <div>
-            <h2 className="h2">العروض ({loading ? '—' : String(filtered.length)})</h2>
-            <div className="muted" style={{ fontSize: 13 }}>
+            <h2 style={{ margin: 0, fontSize: 18, fontWeight: 950 }}>
+              العروض ({loading ? '—' : String(filtered.length)})
+            </h2>
+            <div className="muted" style={{ fontSize: 13, marginTop: 4 }}>
               {dealType ? 'يمكنك تغيير الفلاتر لإظهار خيارات أكثر.' : 'اختر بيع/إيجار لبدء التصفية.'}
             </div>
           </div>
-          <button className="btn" onClick={load} disabled={loading}>تحديث</button>
+
+          <button className="btn" onClick={load} disabled={loading}>
+            تحديث
+          </button>
         </div>
 
         {err ? (
-          <div className="card" style={{ marginTop: 10, borderColor: 'rgba(255,77,77,.25)', background: 'rgba(255,77,77,.08)' }}>
+          <div
+            className="card"
+            style={{
+              marginTop: 10,
+              borderColor: 'rgba(220,38,38,.22)',
+              background: 'rgba(220,38,38,.06)',
+              padding: 14,
+              fontWeight: 850,
+            }}
+          >
             {err}
           </div>
         ) : null}
 
         {loading ? (
-          <div className="card muted" style={{ marginTop: 10 }}>جاري التحميل…</div>
+          <div className="card muted" style={{ marginTop: 10, padding: 14 }}>
+            جاري التحميل…
+          </div>
         ) : filtered.length === 0 ? (
-          <div className="card muted" style={{ marginTop: 10 }}>
+          <div className="card muted" style={{ marginTop: 10, padding: 14 }}>
             لا توجد عروض مطابقة حالياً.
             <div style={{ marginTop: 10 }}>
-              <Link className="btnPrimary" href="/request">أرسل طلبك الآن</Link>
+              <Link className="btn btnPrimary" href="/request">
+                أرسل طلبك الآن
+              </Link>
             </div>
           </div>
         ) : (
-          <div className="cards" style={{ marginTop: 10 }}>
-            {filtered.map((item) => (
-              <div key={item.id} className="cardItem">
-                <ListingCard item={item} />
-              </div>
+          <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {filtered.map((item, idx) => (
+              <ListingCard key={item.id || item.docId || `idx-${idx}`} item={item} />
             ))}
           </div>
         )}
       </section>
-
-      <style jsx>{`
-        .h1 {
-          font-size: 26px;
-          font-weight: 950;
-          line-height: 1.2;
-        }
-        .h2 {
-          margin: 0;
-          font-size: 18px;
-          font-weight: 950;
-        }
-      `}</style>
     </div>
   );
 }
