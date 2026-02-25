@@ -1,12 +1,6 @@
 'use client';
 
-/**
- * صفحة إضافة إعلان (منفصلة عن لوحة الأدمن)
- * - تسجيل دخول الأدمن
- * - تحقق صلاحية الأدمن
- * - نموذج إضافة/تعديل إعلان + رفع وسائط + خريطة اختيار موقع
- * ملاحظة: لا تحتوي على إدارة العروض (قائمة/حذف) — فقط الإضافة/التعديل.
- */
+
 
 // ===================== الواردات =====================
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
@@ -719,7 +713,7 @@ export default function AddListingPage() {
             className="input"
             value={form.title}
             onChange={(e) => setForm((p) => ({ ...p, title: e.target.value }))}
-            placeholder="مثال: أرض في الياقوت 99جس مباشر"
+            placeholder="مثال: أرض في الياقوت مخطط العمرية "
           />
         </Field>
 
@@ -771,7 +765,7 @@ export default function AddListingPage() {
               className="input"
               value={form.plan}
               onChange={(e) => setForm((p) => ({ ...p, plan: e.target.value }))}
-              placeholder="مثال: 99جس"
+              placeholder="مثال:بايزيد"
             />
           </Field>
 
@@ -780,7 +774,7 @@ export default function AddListingPage() {
               className="input"
               value={form.part}
               onChange={(e) => setForm((p) => ({ ...p, part: e.target.value }))}
-              placeholder="مثال: أ / ب / 1ط ..."
+              placeholder="مثال: ج /  ..."
             />
           </Field>
         </div>
