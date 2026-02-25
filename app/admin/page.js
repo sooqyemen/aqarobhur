@@ -4,11 +4,12 @@
  * لوحة تحكم الأدمن - إدارة عقارات أبحر
  * (نسخة محسنة لتفادي ظهور النصوص بدون تنسيق)
  * - إزالة <style jsx>
- * - إلغاء الاعتماد على كلاسات غير موجودة (grid/col-*/dropzone/progress/map..)
+ * - إلغاء الاعتماد على كلاسات غير موجودة مثل: grid, col-*, dropzone, progress, map...
  * - استخدام inline styles + كلاسات المشروع الأساسية
  */
 
-import { useEffect, useMemo, useState, useCallback } from 'react';
+// ===================== الواردات =====================
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { getFirebase } from '@/lib/firebaseClient';
 import { signInWithEmailAndPassword, onAuthStateChanged, signOut } from 'firebase/auth';
 import { ref as storageRef, uploadBytesResumable, getDownloadURL, deleteObject } from 'firebase/storage';
@@ -19,9 +20,11 @@ import { adminCreateListing, adminUpdateListing, fetchListings } from '@/lib/lis
 import { DEAL_TYPES, NEIGHBORHOODS, PROPERTY_TYPES, STATUS_OPTIONS, PROPERTY_CLASSES } from '@/lib/taxonomy';
 import { formatPriceSAR, statusBadge } from '@/lib/format';
 
+// ===================== ثوابت =====================
 const LISTINGS_COLLECTION = 'abhur_listings';
 const MAX_FILES = 30;
 
+// ===================== مكونات مساعدة =====================
 function Field({ label, children, hint }) {
   return (
     <div style={{ marginTop: 10 }}>
@@ -48,15 +51,16 @@ function toNum(v) {
   return Number.isFinite(n) ? n : null;
 }
 
+// ===================== رفع الملفات =====================
 function useUploader(storage) {
-  const [queue, setQueue] = useState([]); // [{id,name,progress,url,refPath}]
+  const [queue, setQueue] = useState([]); // [{name, progress, url, refPath}]
   const [uploading, setUploading] = useState(false);
 
   const removeAt = useCallback(
     async (idx) => {
       const item = queue[idx];
       if (!item) return;
-
+      // حذف من Storage إذا عنده refPath
       if (item.refPath) {
         try {
           await deleteObject(storageRef(storage, item.refPath));
@@ -85,6 +89,7 @@ function useUploader(storage) {
         const path = `abhur_uploads/${Date.now()}_${Math.random().toString(16).slice(2)}_${safeName}`;
         const refObj = storageRef(storage, path);
 
+        // إضافة عنصر مؤقت في القائمة
         const localId = `${path}`;
         setQueue((prev) => [
           ...prev,
@@ -97,19 +102,22 @@ function useUploader(storage) {
           task.on(
             'state_changed',
             (snap) => {
-              const pct = snap.totalBytes
-                ? Math.round((snap.bytesTransferred / snap.totalBytes) * 100)
-                : 0;
-              setQueue((prev) => prev.map((x) => (x.id === localId ? { ...x, progress: pct } : x)));
+              const pct = snap.totalBytes ? Math.round((snap.bytesTransferred / snap.totalBytes) * 100) : 0;
+              setQueue((prev) =>
+                prev.map((x) => (x.id === localId ? { ...x, progress: pct } : x))
+              );
             },
             () => {
+              // فشل: نحذف العنصر
               setQueue((prev) => prev.filter((x) => x.id !== localId));
               resolve();
             },
             async () => {
               try {
                 const url = await getDownloadURL(task.snapshot.ref);
-                setQueue((prev) => prev.map((x) => (x.id === localId ? { ...x, url, progress: 100 } : x)));
+                setQueue((prev) =>
+                  prev.map((x) => (x.id === localId ? { ...x, url, progress: 100 } : x))
+                );
               } catch {
                 setQueue((prev) => prev.filter((x) => x.id !== localId));
               }
@@ -126,11 +134,21 @@ function useUploader(storage) {
 
   const urls = useMemo(() => queue.map((q) => q.url).filter(Boolean), [queue]);
 
-  return { queue, urls, uploading, addFiles, removeAt, setQueue };
+  return {
+    queue,
+    urls,
+    uploading,
+    addFiles,
+    removeAt,
+    setQueue,
+  };
 }
 
+// ===================== نموذج إنشاء/تعديل =====================
 function CreateEditForm({ editingId, form, setForm, onSave, onReset, busy, createdId, uploader }) {
   const isEdit = !!editingId;
+
+  const onPickNeighborhood = (v) => setForm((p) => ({ ...p, neighborhood: v }));
 
   return (
     <section className="card" style={{ padding: 14, marginTop: 12 }}>
@@ -156,7 +174,7 @@ function CreateEditForm({ editingId, form, setForm, onSave, onReset, busy, creat
             background: 'rgba(16,185,129,.07)',
           }}
         >
-          <div style={{ fontWeight: 900 }}>تم الحفظ</div>
+          <div style={{ fontWeight: 900 }}>تم الحفظ ✅</div>
           <div className="muted" style={{ marginTop: 6 }}>
             رقم الإعلان: <b>{createdId}</b>
           </div>
@@ -170,6 +188,7 @@ function CreateEditForm({ editingId, form, setForm, onSave, onReset, busy, creat
       )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 10 }}>
+        {/* خطوة 1 */}
         <div>
           <Field label="اختر نوع الصفقة">
             <div className="row" style={{ gap: 10, flexWrap: 'wrap' }}>
@@ -188,6 +207,7 @@ function CreateEditForm({ editingId, form, setForm, onSave, onReset, busy, creat
           </Field>
         </div>
 
+        {/* خطوة 2 */}
         <div>
           <Field label="نوع العقار">
             <div className="row" style={{ gap: 10, flexWrap: 'wrap' }}>
@@ -205,6 +225,7 @@ function CreateEditForm({ editingId, form, setForm, onSave, onReset, busy, creat
           </Field>
         </div>
 
+        {/* أساسيات */}
         <div>
           <Divider />
 
@@ -223,9 +244,7 @@ function CreateEditForm({ editingId, form, setForm, onSave, onReset, busy, creat
                 className="input"
                 inputMode="numeric"
                 value={form.price}
-                onChange={(e) =>
-                  setForm((p) => ({ ...p, price: e.target.value.replace(/[^\d]/g, '') }))
-                }
+                onChange={(e) => setForm((p) => ({ ...p, price: e.target.value.replace(/[^\d]/g, '') }))}
                 placeholder="مثال: 950000"
               />
               <div className="muted" style={{ marginTop: 6, fontSize: 12 }}>
@@ -238,19 +257,13 @@ function CreateEditForm({ editingId, form, setForm, onSave, onReset, busy, creat
                 className="input"
                 inputMode="numeric"
                 value={form.area}
-                onChange={(e) =>
-                  setForm((p) => ({ ...p, area: e.target.value.replace(/[^\d]/g, '') }))
-                }
+                onChange={(e) => setForm((p) => ({ ...p, area: e.target.value.replace(/[^\d]/g, '') }))}
                 placeholder="مثال: 400"
               />
             </Field>
 
             <Field label="الحي">
-              <select
-                className="input"
-                value={form.neighborhood}
-                onChange={(e) => setForm((p) => ({ ...p, neighborhood: e.target.value }))}
-              >
+              <select className="input" value={form.neighborhood} onChange={(e) => onPickNeighborhood(e.target.value)}>
                 <option value="">اختر الحي</option>
                 {NEIGHBORHOODS.map((n) => (
                   <option key={n} value={n}>
@@ -330,6 +343,7 @@ function CreateEditForm({ editingId, form, setForm, onSave, onReset, busy, creat
           </div>
         </div>
 
+        {/* رفع الصور/فيديو */}
         <div>
           <Divider />
           <div
@@ -417,9 +431,10 @@ function CreateEditForm({ editingId, form, setForm, onSave, onReset, busy, creat
           )}
         </div>
 
+        {/* الموقع */}
         <div>
           <Divider />
-          <Field label="الموقع (Lat/Lng) - اختياري">
+          <Field label="الموقع (Lat/Lng) - اختياري" hint="يمكنك إدخال الإحداثيات يدويًا الآن.">
             <div className="row" style={{ gap: 10, flexWrap: 'wrap' }}>
               <input
                 className="input"
@@ -443,11 +458,12 @@ function CreateEditForm({ editingId, form, setForm, onSave, onReset, busy, creat
   );
 }
 
+// ===================== إدارة العروض =====================
 function ManageListings({ list, loadingList, actionBusyId, onLoad, onDelete, onEdit }) {
-  const dangerStyle = {
-    borderColor: 'rgba(220,38,38,.28)',
+  const dangerBtnStyle = {
+    border: '1px solid rgba(220,38,38,.35)',
     background: 'rgba(220,38,38,.08)',
-    color: '#7f1d1d',
+    color: '#b42318',
   };
 
   return (
@@ -459,10 +475,16 @@ function ManageListings({ list, loadingList, actionBusyId, onLoad, onDelete, onE
         </button>
       </div>
 
-      {loadingList ? <div className="muted" style={{ marginTop: 10 }}>جاري تحميل العروض…</div> : null}
+      {loadingList ? (
+        <div className="muted" style={{ marginTop: 10 }}>
+          جاري تحميل العروض…
+        </div>
+      ) : null}
 
       {!loadingList && (!list || list.length === 0) ? (
-        <div className="muted" style={{ marginTop: 10 }}>لا توجد عروض حالياً.</div>
+        <div className="muted" style={{ marginTop: 10 }}>
+          لا توجد عروض حالياً.
+        </div>
       ) : null}
 
       <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -487,9 +509,9 @@ function ManageListings({ list, loadingList, actionBusyId, onLoad, onDelete, onE
                 <button
                   className="btn"
                   type="button"
-                  style={dangerStyle}
                   onClick={() => onDelete(it)}
                   disabled={actionBusyId === it.id}
+                  style={dangerBtnStyle}
                 >
                   حذف
                 </button>
@@ -504,6 +526,7 @@ function ManageListings({ list, loadingList, actionBusyId, onLoad, onDelete, onE
   );
 }
 
+// ===================== الصفحة الرئيسية للأدمن =====================
 export default function AdminPage() {
   const { auth, storage } = getFirebase();
   const db = getFirestore();
@@ -511,15 +534,19 @@ export default function AdminPage() {
   const [user, setUser] = useState(null);
   const [checking, setChecking] = useState(true);
 
+  // login
   const [email, setEmail] = useState('');
   const [pass, setPass] = useState('');
   const [authErr, setAuthErr] = useState('');
   const [authBusy, setAuthBusy] = useState(false);
 
+  // tabs
   const [tab, setTab] = useState('create'); // create | manage
 
+  // form
   const [editingId, setEditingId] = useState('');
   const [createdId, setCreatedId] = useState('');
+
   const [saving, setSaving] = useState(false);
 
   const initialForm = useMemo(
@@ -545,6 +572,7 @@ export default function AdminPage() {
 
   const [form, setForm] = useState(initialForm);
 
+  // list
   const [list, setList] = useState([]);
   const [loadingList, setLoadingList] = useState(false);
   const [actionBusyId, setActionBusyId] = useState('');
@@ -638,6 +666,7 @@ export default function AdminPage() {
         images: Array.isArray(it.images) ? it.images : [],
       }));
 
+      // مزامنة الصور الحالية داخل queue (عرض فقط)
       const imgs = Array.isArray(it.images) ? it.images : [];
       uploader.setQueue(
         imgs.map((url, i) => ({
@@ -726,7 +755,9 @@ export default function AdminPage() {
   if (checking) {
     return (
       <div className="container" style={{ paddingTop: 16 }}>
-        <section className="card" style={{ padding: 14 }}>جاري التحقق…</section>
+        <section className="card" style={{ padding: 14 }}>
+          جاري التحقق…
+        </section>
       </div>
     );
   }
@@ -743,10 +774,18 @@ export default function AdminPage() {
             </Field>
 
             <Field label="كلمة المرور">
-              <input className="input" type="password" value={pass} onChange={(e) => setPass(e.target.value)} autoComplete="current-password" />
+              <input
+                className="input"
+                type="password"
+                value={pass}
+                onChange={(e) => setPass(e.target.value)}
+                autoComplete="current-password"
+              />
             </Field>
 
-            {authErr ? <div style={{ marginTop: 10, color: 'var(--danger)', fontWeight: 900 }}>{authErr}</div> : null}
+            {authErr ? (
+              <div style={{ marginTop: 10, color: 'var(--danger)', fontWeight: 900 }}>{authErr}</div>
+            ) : null}
 
             <button className="btn btnPrimary" style={{ marginTop: 12, width: '100%' }} disabled={authBusy}>
               {authBusy ? '...' : 'دخول'}
@@ -762,8 +801,13 @@ export default function AdminPage() {
       <div className="container" style={{ paddingTop: 16 }}>
         <section className="card" style={{ padding: 14 }}>
           <div style={{ fontWeight: 950 }}>غير مصرح</div>
-          <div className="muted" style={{ marginTop: 8 }}>هذا الحساب لا يملك صلاحية الأدمن.</div>
-          <button className="btn" style={{ marginTop: 12 }} onClick={doLogout} disabled={authBusy}>تسجيل خروج</button>
+          <div className="muted" style={{ marginTop: 8 }}>
+            هذا الحساب لا يملك صلاحية الأدمن.
+          </div>
+
+          <button className="btn" style={{ marginTop: 12 }} onClick={doLogout} disabled={authBusy}>
+            تسجيل خروج
+          </button>
         </section>
       </div>
     );
@@ -775,14 +819,26 @@ export default function AdminPage() {
         <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
           <div style={{ minWidth: 0 }}>
             <div style={{ fontWeight: 950, overflow: 'hidden', textOverflow: 'ellipsis' }}>{user.email}</div>
-            <div className="muted" style={{ marginTop: 4, fontSize: 12 }}>لوحة تحكم الأدمن</div>
+            <div className="muted" style={{ marginTop: 4, fontSize: 12 }}>
+              لوحة تحكم الأدمن
+            </div>
           </div>
 
-          <button className="btn" type="button" onClick={doLogout} disabled={authBusy}>خروج</button>
+          <button className="btn" type="button" onClick={doLogout} disabled={authBusy}>
+            خروج
+          </button>
         </div>
 
         {authErr ? (
-          <div className="card" style={{ marginTop: 12, padding: 12, borderColor: 'rgba(220,38,38,.22)', background: 'rgba(220,38,38,.06)' }}>
+          <div
+            className="card"
+            style={{
+              marginTop: 12,
+              padding: 12,
+              borderColor: 'rgba(220,38,38,.22)',
+              background: 'rgba(220,38,38,.06)',
+            }}
+          >
             <div style={{ fontWeight: 900 }}>{authErr}</div>
           </div>
         ) : null}
