@@ -1,4 +1,5 @@
 import './globals.css';
+
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 import MobileNav from '@/components/MobileNav';
@@ -15,9 +16,7 @@ export default function RootLayout({ children }) {
       <body>
         <div className="appShell">
           <Header />
-          <main className="appMain">
-            {children}
-          </main>
+          <main className="appMain">{children}</main>
           <Footer />
           <MobileNav />
           <WhatsAppBar />
