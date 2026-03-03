@@ -40,6 +40,57 @@ function normalizeDealType(v) {
   return '';
 }
 
+/** Escape للنص داخل SVG */
+function escapeXml(s) {
+  return String(s || '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+/**
+ * ✅ إنشاء أيقونة SVG مستطيلة خضراء تعرض السعر داخلها
+ * - بدون دبوس
+ * - العرض يتكيّف تقريبياً حسب طول النص
+ */
+function buildPriceBadgeIcon(maps, priceText) {
+  const text = String(priceText || '?');
+
+  // تقدير عرض مناسب حسب طول النص (تقريب)
+  const charW = 8; // متوسط عرض الحرف/الرقم
+  const padX = 12;
+  const h = 30;
+  const minW = 56;
+  const maxW = 160;
+  const w = Math.max(minW, Math.min(maxW, text.length * charW + padX * 2));
+
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
+      <rect x="1" y="1" width="${w - 2}" height="${h - 2}" rx="12"
+        fill="#16a34a" stroke="rgba(255,255,255,0.95)" stroke-width="2"/>
+      <text x="${w / 2}" y="${h / 2 + 5}"
+        text-anchor="middle"
+        font-family="system-ui, -apple-system, Segoe UI, Roboto, Arial"
+        font-size="13"
+        font-weight="900"
+        fill="#ffffff"
+        direction="rtl"
+        unicode-bidi="plaintext">${escapeXml(text)}</text>
+    </svg>
+  `.trim();
+
+  const url = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+
+  return {
+    url,
+    scaledSize: new maps.Size(w, h),
+    // نخلي نقطة المكان عند أسفل المنتصف (الـ badge يكون فوق الإحداثية)
+    anchor: new maps.Point(Math.round(w / 2), h),
+  };
+}
+
 let __gmapsPromise = null;
 function loadGoogleMaps(apiKey) {
   if (typeof window === 'undefined') return Promise.reject(new Error('No window'));
@@ -300,6 +351,7 @@ export default function MapClient() {
 
     // إضافة ماركرز
     const bounds = new maps.LatLngBounds();
+
     mapItems.forEach((it) => {
       const lat = Number(it.lat);
       const lng = Number(it.lng);
@@ -308,17 +360,18 @@ export default function MapClient() {
       const pos = { lat, lng };
       bounds.extend(pos);
 
-      const price = formatPrice(it.price);
+      const priceText = formatPrice(it.price);
+
+      // ✅ مستطيل أخضر فيه السعر
+      const icon = buildPriceBadgeIcon(maps, priceText);
+
       const marker = new maps.Marker({
         position: pos,
         map,
         title: it.title || 'عرض',
-        label: {
-          text: String(price),
-          color: '#0f172a',
-          fontSize: '12px',
-          fontWeight: '900',
-        },
+        icon,
+        // هذا يساعد أحياناً على وضوح SVG على بعض المتصفحات
+        optimized: true,
       });
 
       marker.addListener('click', () => {
