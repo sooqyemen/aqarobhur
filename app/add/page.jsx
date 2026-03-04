@@ -1,7 +1,7 @@
 'use client';
 
 // ===================== الواردات =====================
-import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import Link from 'next/link';
 
 import { getFirebase } from '@/lib/firebaseClient';
@@ -11,7 +11,7 @@ import { ref as storageRef, uploadBytesResumable, getDownloadURL } from 'firebas
 import { isAdminUser } from '@/lib/admin';
 import { adminCreateListing, adminUpdateListing } from '@/lib/listings';
 import { DEAL_TYPES, NEIGHBORHOODS, PROPERTY_TYPES, STATUS_OPTIONS, PROPERTY_CLASSES } from '@/lib/taxonomy';
-import { formatPriceSAR, statusBadge } from '@/lib/format';
+import { formatPriceSAR, statusBadge } from '@/lib/format'; // ✅ إصلاح مهم
 
 // ===================== الثوابت =====================
 const MAX_FILES = 30;
@@ -50,6 +50,11 @@ function toNum(v) {
   return Number.isFinite(n) ? n : null;
 }
 
+function toFixed6(n) {
+  if (!Number.isFinite(n)) return '';
+  return Number(n).toFixed(6);
+}
+
 function inJeddahBounds(lat, lng) {
   return (
     lat <= JEDDAH_BOUNDS.north &&
@@ -57,11 +62,6 @@ function inJeddahBounds(lat, lng) {
     lng <= JEDDAH_BOUNDS.east &&
     lng >= JEDDAH_BOUNDS.west
   );
-}
-
-function toFixed6(n) {
-  if (!Number.isFinite(n)) return '';
-  return Number(n).toFixed(6);
 }
 
 // ===================== تحميل Google Maps (Singleton) =====================
@@ -280,6 +280,12 @@ export default function AddListingPage() {
         const el = mapElRef.current;
         if (!el) return;
 
+        // ✅ حماية: لا تعيد تهيئة الخريطة إذا كانت موجودة
+        if (mapRef.current && markerRef.current) {
+          setMapReady(true);
+          return;
+        }
+
         const center = DEFAULT_CENTER;
 
         const map = new maps.Map(el, {
@@ -310,7 +316,6 @@ export default function AddListingPage() {
             setBoundsMsg('اختر موقعًا داخل حدود جدة فقط.');
             return;
           }
-
           setBoundsMsg('');
           setForm((p) => ({ ...p, lat: toFixed6(lat), lng: toFixed6(lng) }));
         };
@@ -360,7 +365,7 @@ export default function AddListingPage() {
       }
     }
 
-    // لا تهيّئ الخريطة قبل تسجيل الدخول كأدمن (لتخفيف الحمل)
+    // لا تهيّئ الخريطة قبل تسجيل الدخول كأدمن
     if (user && isAdmin) init();
 
     return () => {
@@ -412,7 +417,6 @@ export default function AddListingPage() {
     setQueue([]);
     setBoundsMsg('');
     setGeoErr('');
-
     setForm({
       dealType: 'sale',
       propertyType: 'أرض',
@@ -427,9 +431,8 @@ export default function AddListingPage() {
       description: '',
       licenseNumber: '',
       direct: false,
-      // ✅ نرجع لمركز أبحر بدل ما نخليها فاضية (وبما إن الإدخال صار من الخريطة فقط)
-      lat: toFixed6(DEFAULT_CENTER.lat),
-      lng: toFixed6(DEFAULT_CENTER.lng),
+      lat: '',
+      lng: '',
       images: [],
     });
 
@@ -473,7 +476,7 @@ export default function AddListingPage() {
     if (!payload.title) return setSaveErr('اكتب عنوان الإعلان.');
     if (!payload.neighborhood) return setSaveErr('اختر الحي.');
 
-    // ✅ الآن الموقع مطلوب ويأتي من الخريطة فقط
+    // ✅ الموقع مطلوب ويتحدد من الخريطة
     if (payload.lat == null || payload.lng == null) {
       return setSaveErr('حدد الموقع على الخريطة.');
     }
@@ -1035,7 +1038,7 @@ export default function AddListingPage() {
             ) : null}
           </div>
 
-          {/* ✅ بديل حقول الإدخال اليدوي: عرض الإحداثيات فقط */}
+          {/* ✅ حذف إدخال الإحداثيات يدويًا + عرض فقط */}
           <div className="muted" style={{ marginTop: 10, fontSize: 12, fontWeight: 900 }}>
             الإحداثيات (تلقائيًا من الخريطة):{' '}
             <span style={{ fontWeight: 950, color: 'var(--text)' }}>
