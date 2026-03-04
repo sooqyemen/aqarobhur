@@ -1,7 +1,5 @@
 'use client';
 
-
-
 // ===================== الواردات =====================
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import Link from 'next/link';
@@ -13,7 +11,7 @@ import { ref as storageRef, uploadBytesResumable, getDownloadURL } from 'firebas
 import { isAdminUser } from '@/lib/admin';
 import { adminCreateListing, adminUpdateListing } from '@/lib/listings';
 import { DEAL_TYPES, NEIGHBORHOODS, PROPERTY_TYPES, STATUS_OPTIONS, PROPERTY_CLASSES } from '@/lib/taxonomy';
-import { formatPriceSAR } from '@/lib/format';
+import { formatPriceSAR, statusBadge } from '@/lib/format';
 
 // ===================== الثوابت =====================
 const MAX_FILES = 30;
@@ -59,6 +57,11 @@ function inJeddahBounds(lat, lng) {
     lng <= JEDDAH_BOUNDS.east &&
     lng >= JEDDAH_BOUNDS.west
   );
+}
+
+function toFixed6(n) {
+  if (!Number.isFinite(n)) return '';
+  return Number(n).toFixed(6);
 }
 
 // ===================== تحميل Google Maps (Singleton) =====================
@@ -267,6 +270,7 @@ export default function AddListingPage() {
     async function init() {
       setMapErr('');
       setBoundsMsg('');
+      setGeoErr('');
 
       try {
         if (!apiKey) throw new Error('تعذر تحميل الخريطة. تأكد من NEXT_PUBLIC_GOOGLE_MAPS_API_KEY.');
@@ -306,8 +310,9 @@ export default function AddListingPage() {
             setBoundsMsg('اختر موقعًا داخل حدود جدة فقط.');
             return;
           }
+
           setBoundsMsg('');
-          setForm((p) => ({ ...p, lat: String(lat), lng: String(lng) }));
+          setForm((p) => ({ ...p, lat: toFixed6(lat), lng: toFixed6(lng) }));
         };
 
         // إن كان عندنا قيم محفوظة
@@ -316,7 +321,10 @@ export default function AddListingPage() {
         if (Number.isFinite(initLat) && Number.isFinite(initLng)) {
           marker.setPosition({ lat: initLat, lng: initLng });
           map.setCenter({ lat: initLat, lng: initLng });
+          applyPos(initLat, initLng);
         } else {
+          marker.setPosition(center);
+          map.setCenter(center);
           applyPos(center.lat, center.lng);
         }
 
@@ -381,7 +389,7 @@ export default function AddListingPage() {
             return;
           }
 
-          setForm((p) => ({ ...p, lat: String(lat), lng: String(lng) }));
+          setForm((p) => ({ ...p, lat: toFixed6(lat), lng: toFixed6(lng) }));
           setBoundsMsg('');
 
           if (markerRef.current) markerRef.current.setPosition({ lat, lng });
@@ -402,6 +410,9 @@ export default function AddListingPage() {
     setSaveOk('');
     setUploadErr('');
     setQueue([]);
+    setBoundsMsg('');
+    setGeoErr('');
+
     setForm({
       dealType: 'sale',
       propertyType: 'أرض',
@@ -416,8 +427,9 @@ export default function AddListingPage() {
       description: '',
       licenseNumber: '',
       direct: false,
-      lat: '',
-      lng: '',
+      // ✅ نرجع لمركز أبحر بدل ما نخليها فاضية (وبما إن الإدخال صار من الخريطة فقط)
+      lat: toFixed6(DEFAULT_CENTER.lat),
+      lng: toFixed6(DEFAULT_CENTER.lng),
       images: [],
     });
 
@@ -461,8 +473,12 @@ export default function AddListingPage() {
     if (!payload.title) return setSaveErr('اكتب عنوان الإعلان.');
     if (!payload.neighborhood) return setSaveErr('اختر الحي.');
 
-    // لو تم إدخال إحداثيات، تحقق أنها داخل جدة
-    if (payload.lat != null && payload.lng != null && !inJeddahBounds(payload.lat, payload.lng)) {
+    // ✅ الآن الموقع مطلوب ويأتي من الخريطة فقط
+    if (payload.lat == null || payload.lng == null) {
+      return setSaveErr('حدد الموقع على الخريطة.');
+    }
+
+    if (!inJeddahBounds(payload.lat, payload.lng)) {
       return setSaveErr('الموقع خارج حدود جدة. اختر موقعًا صحيحًا.');
     }
 
@@ -1019,13 +1035,12 @@ export default function AddListingPage() {
             ) : null}
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 10 }}>
-            <Field label="Latitude">
-              <input className="input" value={form.lat} onChange={(e) => setForm((p) => ({ ...p, lat: e.target.value }))} />
-            </Field>
-            <Field label="Longitude">
-              <input className="input" value={form.lng} onChange={(e) => setForm((p) => ({ ...p, lng: e.target.value }))} />
-            </Field>
+          {/* ✅ بديل حقول الإدخال اليدوي: عرض الإحداثيات فقط */}
+          <div className="muted" style={{ marginTop: 10, fontSize: 12, fontWeight: 900 }}>
+            الإحداثيات (تلقائيًا من الخريطة):{' '}
+            <span style={{ fontWeight: 950, color: 'var(--text)' }}>
+              {form.lat || '—'} , {form.lng || '—'}
+            </span>
           </div>
 
           {boundsMsg ? (
