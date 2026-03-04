@@ -2,15 +2,11 @@
 
 /**
  * لوحة تحكم الأدمن - إدارة عقارات أبحر
- * (نسخة محسنة لتفادي ظهور النصوص بدون تنسيق)
- * - استخدام inline styles + كلاسات المشروع الأساسية
- * - إصلاح رفع الصور/الفيديو (تتبّع العناصر بالـ id بدل index)
- * - إظهار أخطاء الرفع بدل إخفائها
- * - السماح بإعادة اختيار نفس الملف (reset input value)
- * - منع إعادة تهيئة الخريطة عند تغيّر lat/lng
+ * - inline styles + كلاسات المشروع الأساسية
+ * - رفع الصور/الفيديو: تتبع بالـ id + إظهار الأخطاء + إعادة اختيار نفس الملف
+ * - الخريطة: إصلاح اختفاء الخريطة بعد اختيار الموقع (عدم إعادة التهيئة مع كل render)
  */
 
-// ===================== الواردات =====================
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { getFirebase } from '@/lib/firebaseClient';
 import { signInWithEmailAndPassword, onAuthStateChanged, signOut } from 'firebase/auth';
@@ -22,11 +18,9 @@ import { adminCreateListing, adminUpdateListing, fetchListings } from '@/lib/lis
 import { DEAL_TYPES, NEIGHBORHOODS, PROPERTY_TYPES, STATUS_OPTIONS, PROPERTY_CLASSES } from '@/lib/taxonomy';
 import { formatPriceSAR, statusBadge } from '@/lib/format';
 
-// ===================== ثوابت =====================
 const LISTINGS_COLLECTION = 'abhur_listings';
 const MAX_FILES = 30;
 
-// ===================== مكونات مساعدة =====================
 function Field({ label, children, hint }) {
   return (
     <div style={{ marginTop: 10 }}>
@@ -53,26 +47,17 @@ function toNum(v) {
   return Number.isFinite(n) ? n : null;
 }
 
-// ===================== خريطة اختيار الموقع (Google Maps) =====================
-// حدود جدة التقريبية
-const JEDDAH_BOUNDS = {
-  north: 22.0,
-  south: 21.0,
-  east: 39.5,
-  west: 39.0,
-};
+// ===================== خريطة اختيار الموقع =====================
 
-// افتراضي: شمال جدة (أبحر)
+const JEDDAH_BOUNDS = { north: 22.0, south: 21.0, east: 39.5, west: 39.0 };
 const DEFAULT_CENTER = { lat: 21.7628, lng: 39.0994 };
 
 function isFiniteNum(n) {
   return typeof n === 'number' && Number.isFinite(n);
 }
-
 function round6(n) {
   return Math.round(n * 1e6) / 1e6;
 }
-
 function inJeddahBounds(lat, lng) {
   return (
     lat <= JEDDAH_BOUNDS.north &&
@@ -82,7 +67,6 @@ function inJeddahBounds(lat, lng) {
   );
 }
 
-// تحميل Google Maps (Singleton) بدون مكتبات إضافية
 let __gmapsPromise = null;
 function loadGoogleMaps(apiKey) {
   if (typeof window === 'undefined') return Promise.reject(new Error('No window'));
@@ -143,33 +127,41 @@ function MapPicker({ lat, lng, onChange }) {
   const [boundsMsg, setBoundsMsg] = useState('');
   const [geoErr, setGeoErr] = useState('');
 
-  const applyPos = useCallback(
-    (lat0, lng0, { pan = true } = {}) => {
-      if (!isFiniteNum(lat0) || !isFiniteNum(lng0)) return;
+  // ✅ تثبيت onChange (عشان ما تتغير applyPos وتتسبب بإعادة تهيئة الخريطة)
+  const onChangeRef = useRef(onChange);
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  }, [onChange]);
 
-      if (!inJeddahBounds(lat0, lng0)) {
-        setBoundsMsg('اختر موقعًا داخل حدود جدة فقط.');
-        const back = lastValidRef.current || DEFAULT_CENTER;
-        try {
-          markerRef.current?.setPosition?.(back);
-          mapRef.current?.panTo?.(back);
-        } catch {}
-        return;
-      }
+  // ✅ applyPos ثابتة (لا تعتمد على onChange مباشرة)
+  const applyPos = useCallback((lat0, lng0, { pan = true } = {}) => {
+    if (!isFiniteNum(lat0) || !isFiniteNum(lng0)) return;
 
-      setBoundsMsg('');
-      lastValidRef.current = { lat: lat0, lng: lng0 };
-      onChange?.({ lat: round6(lat0), lng: round6(lng0) });
-
+    if (!inJeddahBounds(lat0, lng0)) {
+      setBoundsMsg('اختر موقعًا داخل حدود جدة فقط.');
+      const back = lastValidRef.current || DEFAULT_CENTER;
       try {
-        markerRef.current?.setPosition?.({ lat: lat0, lng: lng0 });
-        if (pan) mapRef.current?.panTo?.({ lat: lat0, lng: lng0 });
+        markerRef.current?.setPosition?.(back);
+        mapRef.current?.panTo?.(back);
       } catch {}
-    },
-    [onChange]
-  );
+      return;
+    }
 
-  // ✅ تهيئة الخريطة مرة واحدة (لا تعتمد على lat/lng حتى لا تُعاد التهيئة)
+    setBoundsMsg('');
+    lastValidRef.current = { lat: lat0, lng: lng0 };
+
+    // ✅ استدعاء onChange من ref
+    try {
+      onChangeRef.current?.({ lat: round6(lat0), lng: round6(lng0) });
+    } catch {}
+
+    try {
+      markerRef.current?.setPosition?.({ lat: lat0, lng: lng0 });
+      if (pan) mapRef.current?.panTo?.({ lat: lat0, lng: lng0 });
+    } catch {}
+  }, []);
+
+  // ✅ تهيئة الخريطة مرة واحدة فقط (يعالج “الصندوق الأبيض”)
   useEffect(() => {
     let alive = true;
 
@@ -177,6 +169,9 @@ function MapPicker({ lat, lng, onChange }) {
       setErr('');
       setBoundsMsg('');
       setGeoErr('');
+
+      // لو الخريطة غير مهيأة، أظهر شاشة التحميل
+      if (!mapRef.current) setReady(false);
 
       try {
         if (!apiKey) throw new Error('تعذر تحميل الخريطة. تأكد من NEXT_PUBLIC_GOOGLE_MAPS_API_KEY.');
@@ -186,7 +181,6 @@ function MapPicker({ lat, lng, onChange }) {
         const el = mapElRef.current;
         if (!el) return;
 
-        // لا تعيد تهيئة الخريطة إذا كانت موجودة
         if (mapRef.current && markerRef.current) {
           setReady(true);
           return;
@@ -216,7 +210,6 @@ function MapPicker({ lat, lng, onChange }) {
         mapRef.current = map;
         markerRef.current = marker;
 
-        // أحداث
         listenersRef.current.push(
           map.addListener('click', (e) => {
             const lat1 = e?.latLng?.lat?.();
@@ -236,9 +229,12 @@ function MapPicker({ lat, lng, onChange }) {
           })
         );
 
-        // مزامنة أولية
         if (has) {
-          applyPos(lat, lng, { pan: false });
+          lastValidRef.current = { lat, lng };
+          // بدون setForm هنا حتى لا يصير loop
+          try {
+            marker.setPosition(center);
+          } catch {}
         } else {
           lastValidRef.current = null;
         }
@@ -272,10 +268,9 @@ function MapPicker({ lat, lng, onChange }) {
       markerRef.current = null;
       mapRef.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [apiKey, applyPos]);
+  }, [apiKey, applyPos, lat, lng]);
 
-  // إذا تغيّرت الإحداثيات من الخارج حدّث الماركر (بدون إعادة التهيئة)
+  // تحديث الماركر إذا تغيّرت الإحداثيات من الخارج
   useEffect(() => {
     if (!mapRef.current || !markerRef.current) return;
     if (!isFiniteNum(lat) || !isFiniteNum(lng)) return;
@@ -404,12 +399,11 @@ function MapPicker({ lat, lng, onChange }) {
   );
 }
 
-// ===================== رفع الملفات (FIXED) =====================
+// ===================== رفع الملفات =====================
 function useUploader(storage) {
   const [queue, setQueue] = useState([]); // [{id,name,progress,url,refPath,error}]
   const [uploading, setUploading] = useState(false);
 
-  // مرجع لآخر queue لتجنب stale closures عند الحذف
   const queueRef = useRef(queue);
   useEffect(() => {
     queueRef.current = queue;
@@ -421,10 +415,8 @@ function useUploader(storage) {
       const item = current[idx];
       if (!item) return;
 
-      // حذف من الواجهة أولاً
       setQueue((prev) => prev.filter((_, i) => i !== idx));
 
-      // ثم حذف من Storage إن وجد refPath
       if (storage && item.refPath) {
         try {
           await deleteObject(storageRef(storage, item.refPath));
@@ -436,10 +428,7 @@ function useUploader(storage) {
 
   const addFiles = useCallback(
     async (files) => {
-      if (!storage) {
-        console.warn('Firebase Storage غير جاهز.');
-        return;
-      }
+      if (!storage) return;
 
       const arr = Array.from(files || []);
       if (!arr.length) return;
@@ -457,10 +446,7 @@ function useUploader(storage) {
         const refPath = `abhur_uploads/${Date.now()}_${Math.random().toString(16).slice(2)}_${safeName}`;
         const refObj = storageRef(storage, refPath);
 
-        setQueue((prev) => [
-          ...prev,
-          { id, name: file.name || 'file', progress: 0, url: '', refPath, error: '' },
-        ]);
+        setQueue((prev) => [...prev, { id, name: file.name || 'file', progress: 0, url: '', refPath, error: '' }]);
 
         await new Promise((resolve) => {
           const task = uploadBytesResumable(refObj, file);
@@ -468,36 +454,22 @@ function useUploader(storage) {
           task.on(
             'state_changed',
             (snap) => {
-              const pct = snap.totalBytes
-                ? Math.round((snap.bytesTransferred / snap.totalBytes) * 100)
-                : 0;
-
-              setQueue((prev) =>
-                prev.map((x) => (x.id === id ? { ...x, progress: pct } : x))
-              );
+              const pct = snap.totalBytes ? Math.round((snap.bytesTransferred / snap.totalBytes) * 100) : 0;
+              setQueue((prev) => prev.map((x) => (x.id === id ? { ...x, progress: pct } : x)));
             },
             (err) => {
-              // ✅ لا نخفي الخطأ
               setQueue((prev) =>
-                prev.map((x) =>
-                  x.id === id ? { ...x, error: String(err?.message || 'فشل رفع الملف') } : x
-                )
+                prev.map((x) => (x.id === id ? { ...x, error: String(err?.message || 'فشل رفع الملف') } : x))
               );
               resolve();
             },
             async () => {
               try {
                 const url = await getDownloadURL(task.snapshot.ref);
-                setQueue((prev) =>
-                  prev.map((x) => (x.id === id ? { ...x, url, progress: 100 } : x))
-                );
+                setQueue((prev) => prev.map((x) => (x.id === id ? { ...x, url, progress: 100 } : x)));
               } catch (e) {
                 setQueue((prev) =>
-                  prev.map((x) =>
-                    x.id === id
-                      ? { ...x, error: String(e?.message || 'تعذر استخراج رابط الملف') }
-                      : x
-                  )
+                  prev.map((x) => (x.id === id ? { ...x, error: String(e?.message || 'تعذر استخراج الرابط') } : x))
                 );
               }
               resolve();
@@ -522,6 +494,12 @@ function CreateEditForm({ editingId, form, setForm, onSave, onReset, busy, creat
 
   const pricePreview = form.price ? formatPriceSAR(Number(form.price)) : '';
 
+  // ✅ تثبيت onChange للـ MapPicker (هذا وحده كان كفيل بحل “الصندوق الأبيض”)
+  const onMapPick = useCallback(
+    ({ lat, lng }) => setForm((p) => ({ ...p, lat: String(lat), lng: String(lng) })),
+    [setForm]
+  );
+
   return (
     <section className="card" style={{ padding: 14, marginTop: 12 }}>
       <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
@@ -537,16 +515,7 @@ function CreateEditForm({ editingId, form, setForm, onSave, onReset, busy, creat
       </div>
 
       {createdId ? (
-        <div
-          className="card"
-          style={{
-            marginTop: 12,
-            padding: 12,
-            borderColor: 'rgba(16,185,129,.25)',
-            background: 'rgba(16,185,129,.07)',
-            fontWeight: 900,
-          }}
-        >
+        <div className="card" style={{ marginTop: 12, padding: 12, borderColor: 'rgba(16,185,129,.25)', background: 'rgba(16,185,129,.07)', fontWeight: 900 }}>
           تم حفظ الإعلان. رقم الإعلان: <b>{createdId}</b>
         </div>
       ) : null}
@@ -555,12 +524,7 @@ function CreateEditForm({ editingId, form, setForm, onSave, onReset, busy, creat
         <div className="row" style={{ gap: 10, flexWrap: 'wrap' }}>
           {DEAL_TYPES.map((d) => (
             <label key={d.key} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <input
-                type="radio"
-                name="dealType"
-                checked={form.dealType === d.key}
-                onChange={() => setForm((p) => ({ ...p, dealType: d.key }))}
-              />
+              <input type="radio" name="dealType" checked={form.dealType === d.key} onChange={() => setForm((p) => ({ ...p, dealType: d.key }))} />
               <span style={{ fontWeight: 900 }}>{d.label}</span>
             </label>
           ))}
@@ -570,12 +534,7 @@ function CreateEditForm({ editingId, form, setForm, onSave, onReset, busy, creat
       <Field label="نوع العقار">
         <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
           {PROPERTY_TYPES.map((t) => (
-            <button
-              key={t}
-              type="button"
-              className={form.propertyType === t ? 'btn btnPrimary' : 'btn'}
-              onClick={() => setForm((p) => ({ ...p, propertyType: t }))}
-            >
+            <button key={t} type="button" className={form.propertyType === t ? 'btn btnPrimary' : 'btn'} onClick={() => setForm((p) => ({ ...p, propertyType: t }))}>
               {t}
             </button>
           ))}
@@ -583,11 +542,7 @@ function CreateEditForm({ editingId, form, setForm, onSave, onReset, busy, creat
       </Field>
 
       <Field label="تصنيف (سكني/تجاري) - اختياري">
-        <select
-          className="input"
-          value={form.propertyClass}
-          onChange={(e) => setForm((p) => ({ ...p, propertyClass: e.target.value }))}
-        >
+        <select className="input" value={form.propertyClass} onChange={(e) => setForm((p) => ({ ...p, propertyClass: e.target.value }))}>
           <option value="">بدون</option>
           {PROPERTY_CLASSES.map((c) => (
             <option key={c.key} value={c.key}>
@@ -598,47 +553,22 @@ function CreateEditForm({ editingId, form, setForm, onSave, onReset, busy, creat
       </Field>
 
       <Field label="عنوان الإعلان">
-        <input
-          className="input"
-          value={form.title}
-          onChange={(e) => setForm((p) => ({ ...p, title: e.target.value }))}
-          placeholder="مثال: أرض في الياقوت مخطط العمرية"
-        />
+        <input className="input" value={form.title} onChange={(e) => setForm((p) => ({ ...p, title: e.target.value }))} placeholder="مثال: أرض في الياقوت مخطط العمرية" />
       </Field>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
         <Field label="السعر (ريال)">
-          <input
-            className="input"
-            inputMode="numeric"
-            value={form.price}
-            onChange={(e) => setForm((p) => ({ ...p, price: e.target.value.replace(/[^\d]/g, '') }))}
-            placeholder="مثال: 950000"
-          />
-          {pricePreview ? (
-            <div className="muted" style={{ marginTop: 6, fontSize: 12 }}>
-              المعاينة: {pricePreview}
-            </div>
-          ) : null}
+          <input className="input" inputMode="numeric" value={form.price} onChange={(e) => setForm((p) => ({ ...p, price: e.target.value.replace(/[^\d]/g, '') }))} placeholder="مثال: 950000" />
+          {pricePreview ? <div className="muted" style={{ marginTop: 6, fontSize: 12 }}>المعاينة: {pricePreview}</div> : null}
         </Field>
 
         <Field label="المساحة (م²) - اختياري">
-          <input
-            className="input"
-            inputMode="numeric"
-            value={form.area}
-            onChange={(e) => setForm((p) => ({ ...p, area: e.target.value.replace(/[^\d]/g, '') }))}
-            placeholder="مثال: 400"
-          />
+          <input className="input" inputMode="numeric" value={form.area} onChange={(e) => setForm((p) => ({ ...p, area: e.target.value.replace(/[^\d]/g, '') }))} placeholder="مثال: 400" />
         </Field>
       </div>
 
       <Field label="الحي">
-        <select
-          className="input"
-          value={form.neighborhood}
-          onChange={(e) => setForm((p) => ({ ...p, neighborhood: e.target.value }))}
-        >
+        <select className="input" value={form.neighborhood} onChange={(e) => setForm((p) => ({ ...p, neighborhood: e.target.value }))}>
           <option value="">اختر الحي</option>
           {NEIGHBORHOODS.map((n) => (
             <option key={n} value={n}>
@@ -650,30 +580,16 @@ function CreateEditForm({ editingId, form, setForm, onSave, onReset, busy, creat
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
         <Field label="المخطط (اختياري)">
-          <input
-            className="input"
-            value={form.plan}
-            onChange={(e) => setForm((p) => ({ ...p, plan: e.target.value }))}
-            placeholder="مثال: بايزيد"
-          />
+          <input className="input" value={form.plan} onChange={(e) => setForm((p) => ({ ...p, plan: e.target.value }))} placeholder="مثال: بايزيد" />
         </Field>
 
         <Field label="الجزء (اختياري)">
-          <input
-            className="input"
-            value={form.part}
-            onChange={(e) => setForm((p) => ({ ...p, part: e.target.value }))}
-            placeholder="مثال: ج / ..."
-          />
+          <input className="input" value={form.part} onChange={(e) => setForm((p) => ({ ...p, part: e.target.value }))} placeholder="مثال: ج / ..." />
         </Field>
       </div>
 
       <Field label="حالة الإعلان">
-        <select
-          className="input"
-          value={form.status}
-          onChange={(e) => setForm((p) => ({ ...p, status: e.target.value }))}
-        >
+        <select className="input" value={form.status} onChange={(e) => setForm((p) => ({ ...p, status: e.target.value }))}>
           {STATUS_OPTIONS.map((s) => (
             <option key={s.key} value={s.key}>
               {s.label}
@@ -684,26 +600,13 @@ function CreateEditForm({ editingId, form, setForm, onSave, onReset, busy, creat
       </Field>
 
       <Field label="رقم ترخيص الإعلان (اختياري)">
-        <input
-          className="input"
-          value={form.licenseNumber}
-          onChange={(e) => setForm((p) => ({ ...p, licenseNumber: e.target.value }))}
-          placeholder="مثال: 1234567890"
-        />
+        <input className="input" value={form.licenseNumber} onChange={(e) => setForm((p) => ({ ...p, licenseNumber: e.target.value }))} placeholder="مثال: 1234567890" />
       </Field>
 
       <Field label="الوصف (اختياري)">
-        <textarea
-          className="input"
-          rows={4}
-          value={form.description}
-          onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
-          style={{ resize: 'vertical' }}
-          placeholder="اكتب تفاصيل إضافية…"
-        />
+        <textarea className="input" rows={4} value={form.description} onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))} style={{ resize: 'vertical' }} placeholder="اكتب تفاصيل إضافية…" />
       </Field>
 
-      {/* رفع */}
       <Divider />
       <Field label="رفع صور/فيديو" hint={`حد أقصى ${MAX_FILES} ملف`}>
         <label className="btn btnPrimary" style={{ cursor: 'pointer' }}>
@@ -714,7 +617,6 @@ function CreateEditForm({ editingId, form, setForm, onSave, onReset, busy, creat
             accept="image/*,video/*"
             onChange={(e) => {
               addFiles(e.target.files);
-              // ✅ يسمح بإعادة اختيار نفس الملف مرة أخرى
               e.target.value = '';
             }}
             style={{ display: 'none' }}
@@ -731,28 +633,19 @@ function CreateEditForm({ editingId, form, setForm, onSave, onReset, busy, creat
                     <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
                       {q.url ? 'تم الرفع' : q.error ? 'فشل الرفع' : `جاري الرفع: ${q.progress || 0}%`}
                     </div>
-
                     {q.error ? (
                       <div className="muted" style={{ marginTop: 6, color: 'var(--danger)', fontSize: 12 }}>
                         {q.error}
                       </div>
                     ) : null}
                   </div>
-
                   <button className="btn" type="button" onClick={() => removeAt(idx)} style={{ fontSize: 12 }}>
                     حذف
                   </button>
                 </div>
 
                 <div style={{ marginTop: 8, height: 10, borderRadius: 999, background: 'rgba(214,179,91,0.22)', overflow: 'hidden' }}>
-                  <div
-                    style={{
-                      width: `${Math.min(100, q.progress || 0)}%`,
-                      height: '100%',
-                      background: 'linear-gradient(135deg, var(--primary), var(--primary2))',
-                      borderRadius: 999,
-                    }}
-                  />
+                  <div style={{ width: `${Math.min(100, q.progress || 0)}%`, height: '100%', background: 'linear-gradient(135deg, var(--primary), var(--primary2))', borderRadius: 999 }} />
                 </div>
 
                 {q.url ? (
@@ -770,44 +663,23 @@ function CreateEditForm({ editingId, form, setForm, onSave, onReset, busy, creat
         )}
       </Field>
 
-      {/* الموقع */}
-      <div>
-        <Divider />
-        <Field label="الموقع على الخريطة" hint="حدد الموقع من الخريطة (داخل جدة فقط).">
-          <MapPicker
-            lat={toNum(form.lat)}
-            lng={toNum(form.lng)}
-            onChange={({ lat, lng }) => setForm((p) => ({ ...p, lat: String(lat), lng: String(lng) }))}
-          />
+      <Divider />
+      <Field label="الموقع على الخريطة" hint="حدد الموقع من الخريطة (داخل جدة فقط).">
+        <MapPicker lat={toNum(form.lat)} lng={toNum(form.lng)} onChange={onMapPick} />
 
-          <div
-            className="row"
-            style={{
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              gap: 10,
-              flexWrap: 'wrap',
-              marginTop: 10,
-            }}
-          >
-            <div className="muted" style={{ fontSize: 12, fontWeight: 900 }}>
-              الإحداثيات المختارة:{' '}
-              <span style={{ color: 'var(--text)', fontWeight: 950 }}>
-                {form.lat ? form.lat : '—'} , {form.lng ? form.lng : '—'}
-              </span>
-            </div>
-
-            <button
-              className="btn"
-              type="button"
-              onClick={() => setForm((p) => ({ ...p, lat: '', lng: '' }))}
-              style={{ fontSize: 12, padding: '6px 10px' }}
-            >
-              مسح الموقع
-            </button>
+        <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 10 }}>
+          <div className="muted" style={{ fontSize: 12, fontWeight: 900 }}>
+            الإحداثيات المختارة:{' '}
+            <span style={{ color: 'var(--text)', fontWeight: 950 }}>
+              {form.lat ? form.lat : '—'} , {form.lng ? form.lng : '—'}
+            </span>
           </div>
-        </Field>
-      </div>
+
+          <button className="btn" type="button" onClick={() => setForm((p) => ({ ...p, lat: '', lng: '' }))} style={{ fontSize: 12, padding: '6px 10px' }}>
+            مسح الموقع
+          </button>
+        </div>
+      </Field>
     </section>
   );
 }
@@ -868,12 +740,10 @@ function ManageListings({ list, loadingList, actionBusyId, onLoad, onDelete, onE
   );
 }
 
-// ===================== الصفحة =====================
 export default function AdminPage() {
   const fb = getFirebase();
   const auth = fb?.auth;
   const storage = fb?.storage;
-
   const db = getFirestore();
 
   const [checking, setChecking] = useState(true);
@@ -913,7 +783,6 @@ export default function AdminPage() {
 
   const [form, setForm] = useState(initialForm);
 
-  // list
   const [list, setList] = useState([]);
   const [loadingList, setLoadingList] = useState(false);
   const [actionBusyId, setActionBusyId] = useState('');
@@ -921,13 +790,11 @@ export default function AdminPage() {
   const uploader = useUploader(storage);
 
   useEffect(() => {
-    // حماية لو auth غير جاهز لأي سبب
     if (!auth) {
       setUser(null);
       setChecking(false);
       return;
     }
-
     const unsub = onAuthStateChanged(auth, (u) => {
       setUser(u || null);
       setChecking(false);
@@ -1010,7 +877,6 @@ export default function AdminPage() {
         images: Array.isArray(it.images) ? it.images : [],
       }));
 
-      // مزامنة الصور الحالية داخل queue (عرض فقط)
       const imgs = Array.isArray(it.images) ? it.images : [];
       uploader.setQueue(
         imgs.map((url, i) => ({
@@ -1055,7 +921,6 @@ export default function AdminPage() {
         setSaving(false);
         return;
       }
-
       if (!payload.neighborhood) {
         setAuthErr('اختر الحي.');
         setSaving(false);
@@ -1090,7 +955,6 @@ export default function AdminPage() {
       try {
         await deleteDoc(doc(db, LISTINGS_COLLECTION, id));
         await loadList();
-      } catch {
       } finally {
         setActionBusyId('');
       }
@@ -1101,9 +965,7 @@ export default function AdminPage() {
   if (checking) {
     return (
       <div className="container" style={{ paddingTop: 16 }}>
-        <section className="card" style={{ padding: 14 }}>
-          جاري التحقق…
-        </section>
+        <section className="card" style={{ padding: 14 }}>جاري التحقق…</section>
       </div>
     );
   }
@@ -1126,20 +988,10 @@ export default function AdminPage() {
             </Field>
 
             <Field label="كلمة المرور">
-              <input
-                className="input"
-                type="password"
-                value={pass}
-                onChange={(e) => setPass(e.target.value)}
-                autoComplete="current-password"
-              />
+              <input className="input" type="password" value={pass} onChange={(e) => setPass(e.target.value)} autoComplete="current-password" />
             </Field>
 
-            {authErr ? (
-              <div style={{ marginTop: 10, color: 'var(--danger)', fontWeight: 900 }}>
-                {authErr}
-              </div>
-            ) : null}
+            {authErr ? <div style={{ marginTop: 10, color: 'var(--danger)', fontWeight: 900 }}>{authErr}</div> : null}
 
             <button className="btn btnPrimary" style={{ marginTop: 12, width: '100%' }} disabled={authBusy}>
               {authBusy ? '...' : 'دخول'}
@@ -1155,14 +1007,9 @@ export default function AdminPage() {
       <div className="container" style={{ paddingTop: 16 }}>
         <section className="card" style={{ padding: 14 }}>
           <div style={{ fontWeight: 950 }}>غير مصرح</div>
-          <div className="muted" style={{ marginTop: 8 }}>
-            هذا الحساب لا يملك صلاحية الأدمن.
-          </div>
-
+          <div className="muted" style={{ marginTop: 8 }}>هذا الحساب لا يملك صلاحية الأدمن.</div>
           <div className="row" style={{ gap: 10, marginTop: 12, flexWrap: 'wrap' }}>
-            <button className="btn" onClick={logout} disabled={authBusy}>
-              تسجيل خروج
-            </button>
+            <button className="btn" onClick={logout} disabled={authBusy}>تسجيل خروج</button>
           </div>
         </section>
       </div>
@@ -1175,29 +1022,16 @@ export default function AdminPage() {
         <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <div style={{ minWidth: 0 }}>
             <div style={{ fontWeight: 950 }}>لوحة الأدمن</div>
-            <div className="muted" style={{ fontSize: 12, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {user.email}
-            </div>
+            <div className="muted" style={{ fontSize: 12, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis' }}>{user.email}</div>
           </div>
 
           <div className="row" style={{ gap: 10, flexWrap: 'wrap' }}>
-            <button className="btn" onClick={logout} disabled={authBusy}>
-              خروج
-            </button>
+            <button className="btn" onClick={logout} disabled={authBusy}>خروج</button>
           </div>
         </div>
 
         {authErr ? (
-          <div
-            className="card"
-            style={{
-              marginTop: 12,
-              padding: 12,
-              borderColor: 'rgba(220,38,38,.22)',
-              background: 'rgba(220,38,38,.06)',
-              fontWeight: 900,
-            }}
-          >
+          <div className="card" style={{ marginTop: 12, padding: 12, borderColor: 'rgba(220,38,38,.22)', background: 'rgba(220,38,38,.06)', fontWeight: 900 }}>
             {authErr}
           </div>
         ) : null}
