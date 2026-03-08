@@ -13,22 +13,27 @@ export default function Header() {
   const [q, setQ] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
-
   const [logoIndex, setLogoIndex] = useState(0);
   const [logoDead, setLogoDead] = useState(false);
 
   const prevBodyOverflowRef = useRef('');
   const prevHtmlOverflowRef = useRef('');
 
-  const links = useMemo(
+  const navLinks = useMemo(
     () => [
       { href: '/', label: 'الرئيسية' },
       { href: '/listings', label: 'كل العروض' },
       { href: '/map', label: 'الخريطة' },
       { href: '/neighborhoods', label: 'الأحياء' },
       { href: '/request', label: 'أرسل طلبك' },
+    ],
+    []
+  );
+
+  const actionLinks = useMemo(
+    () => [
       { href: '/add', label: 'إضافة إعلان', kind: 'primary' },
-      { href: '/account', label: 'تسجيل / دخول' },
+      { href: '/account', label: 'تسجيل / دخول', kind: 'secondary' },
     ],
     []
   );
@@ -51,7 +56,6 @@ export default function Header() {
     };
   }, []);
 
-  // قفل تمرير الصفحة عند فتح قائمة الجوال بدون تخريب القيمة السابقة
   useEffect(() => {
     if (typeof document === 'undefined') return;
 
@@ -97,7 +101,7 @@ export default function Header() {
 
   function isActive(href) {
     if (href === '/') return pathname === '/';
-    if (href === '/account') return pathname === '/account' || pathname?.startsWith('/admin');
+    if (href === '/account') return pathname === '/account' || pathname === '/admin';
     return pathname?.startsWith(href);
   }
 
@@ -118,7 +122,6 @@ export default function Header() {
       );
     }
 
-    // eslint-disable-next-line @next/next/no-img-element
     return (
       <img
         src={LOGO_SOURCES[logoIndex]}
@@ -169,16 +172,28 @@ export default function Header() {
           </form>
 
           <nav className="navDesktop" aria-label="روابط الموقع">
-            {links.map((link) => (
+            {navLinks.map((link) => (
               <Link
                 key={link.href}
                 href={link.href}
-                className={`navLink ${link.kind === 'primary' ? 'navLinkPrimary' : ''} ${isActive(link.href) ? 'active' : ''}`}
+                className={`navLink ${isActive(link.href) ? 'active' : ''}`}
               >
                 {link.label}
               </Link>
             ))}
           </nav>
+
+          <div className="headerActions" aria-label="إجراءات الحساب">
+            {actionLinks.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                className={`headerAction ${link.kind} ${isActive(link.href) ? 'active' : ''}`}
+              >
+                {link.label}
+              </Link>
+            ))}
+          </div>
         </div>
       </header>
 
@@ -200,14 +215,22 @@ export default function Header() {
               </button>
             </div>
 
-            <div className="drawerLinks">
-              {links.map((l) => (
+            <div className="drawerActions">
+              {actionLinks.map((l) => (
                 <Link
                   key={l.href}
                   href={l.href}
-                  className={`drawerLink ${l.kind === 'primary' ? 'drawerLinkPrimary' : ''}`}
+                  className={`drawerAction ${l.kind}`}
                   onClick={() => setMenuOpen(false)}
                 >
+                  {l.label}
+                </Link>
+              ))}
+            </div>
+
+            <div className="drawerLinks">
+              {navLinks.map((l) => (
+                <Link key={l.href} href={l.href} className="drawerLink" onClick={() => setMenuOpen(false)}>
                   {l.label}
                 </Link>
               ))}
