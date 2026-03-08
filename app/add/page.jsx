@@ -1,30 +1,26 @@
 'use client';
 
-/**
- * لوحة تحكم الأدمن - إدارة عقارات أبحر
- * (نسخة محسنة لتفادي ظهور النصوص بدون تنسيق)
- * - إزالة <style jsx>
- * - إلغاء الاعتماد على كلاسات غير موجودة مثل: grid, col-*, dropzone, progress, map...
- * - استخدام inline styles + كلاسات المشروع الأساسية
- */
-
-// ===================== الواردات =====================
-import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
 import { getFirebase } from '@/lib/firebaseClient';
-import { signInWithEmailAndPassword, onAuthStateChanged, signOut } from 'firebase/auth';
-import { ref as storageRef, uploadBytesResumable, getDownloadURL, deleteObject } from 'firebase/storage';
-import { doc, deleteDoc, getFirestore } from 'firebase/firestore';
+import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth';
+import { deleteObject, getDownloadURL, ref as storageRef, uploadBytesResumable } from 'firebase/storage';
 
 import { isAdminUser } from '@/lib/admin';
-import { adminCreateListing, adminUpdateListing, fetchListings } from '@/lib/listings';
-import { DEAL_TYPES, NEIGHBORHOODS, PROPERTY_TYPES, STATUS_OPTIONS, PROPERTY_CLASSES } from '@/lib/taxonomy';
+import { adminCreateListing } from '@/lib/listings';
+import { DEAL_TYPES, NEIGHBORHOODS, PROPERTY_CLASSES, PROPERTY_TYPES, STATUS_OPTIONS } from '@/lib/taxonomy';
 import { formatPriceSAR, statusBadge } from '@/lib/format';
 
-// ===================== ثوابت =====================
-const LISTINGS_COLLECTION = 'abhur_listings';
 const MAX_FILES = 30;
+const JEDDAH_BOUNDS = { north: 22.0, south: 21.0, east: 39.5, west: 39.0 };
+const DEFAULT_CENTER = { lat: 21.7628, lng: 39.0994 };
+const FORM_STEPS = [
+  { key: 'basic', label: 'البيانات الأساسية' },
+  { key: 'details', label: 'التفاصيل' },
+  { key: 'media', label: 'الصور والموقع' },
+  { key: 'review', label: 'المراجعة والنشر' },
+];
 
-// ===================== مكونات مساعدة =====================
 function Field({ label, children, hint }) {
   return (
     <div style={{ marginTop: 10 }}>
@@ -47,21 +43,9 @@ function Divider() {
 
 function toNum(v) {
   if (v == null || v === '') return null;
-  const n = Number(v);
+  const n = Number(String(v).trim());
   return Number.isFinite(n) ? n : null;
 }
-
-// ===================== خريطة اختيار الموقع (Google Maps) =====================
-// حدود جدة التقريبية
-const JEDDAH_BOUNDS = {
-  north: 22.0,
-  south: 21.0,
-  east: 39.5,
-  west: 39.0,
-};
-
-// افتراضي: شمال جدة (أبحر)
-const DEFAULT_CENTER = { lat: 21.7628, lng: 39.0994 };
 
 function isFiniteNum(n) {
   return typeof n === 'number' && Number.isFinite(n);
@@ -72,15 +56,9 @@ function round6(n) {
 }
 
 function inJeddahBounds(lat, lng) {
-  return (
-    lat <= JEDDAH_BOUNDS.north &&
-    lat >= JEDDAH_BOUNDS.south &&
-    lng <= JEDDAH_BOUNDS.east &&
-    lng >= JEDDAH_BOUNDS.west
-  );
+  return lat <= JEDDAH_BOUNDS.north && lat >= JEDDAH_BOUNDS.south && lng <= JEDDAH_BOUNDS.east && lng >= JEDDAH_BOUNDS.west;
 }
 
-// تحميل Google Maps (Singleton) بدون مكتبات إضافية
 let __gmapsPromise = null;
 function loadGoogleMaps(apiKey) {
   if (typeof window === 'undefined') return Promise.reject(new Error('No window'));
@@ -88,38 +66,28 @@ function loadGoogleMaps(apiKey) {
   if (__gmapsPromise) return __gmapsPromise;
 
   __gmapsPromise = new Promise((resolve, reject) => {
-    const scriptId = 'google-maps-js';
+    const scriptId = 'google-maps-js-add-page';
     const existing = document.getElementById(scriptId);
+
     if (existing) {
       const check = () => {
         if (window.google && window.google.maps) resolve(window.google.maps);
-        else setTimeout(check, 60);
+        else setTimeout(check, 80);
       };
       check();
       return;
     }
 
-    const cbName = `__gmaps_admin_cb_${Date.now()}`;
-    window[cbName] = () => {
-      try {
-        resolve(window.google.maps);
-      } catch (e) {
-        reject(e);
-      } finally {
-        try {
-          delete window[cbName];
-        } catch {}
-      }
-    };
-
     const script = document.createElement('script');
     script.id = scriptId;
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(
-      apiKey
-    )}&libraries=places&callback=${cbName}`;
     script.async = true;
     script.defer = true;
-    script.onerror = () => reject(new Error('تعذر تحميل سكربت Google Maps.'));
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&v=weekly&language=ar&region=SA`;
+    script.onload = () => {
+      if (window.google && window.google.maps) resolve(window.google.maps);
+      else reject(new Error('تم تحميل الخريطة لكن الكائن غير متوفر.'));
+    };
+    script.onerror = () => reject(new Error('تعذر تحميل الخريطة.'));
     document.head.appendChild(script);
   });
 
@@ -128,7 +96,6 @@ function loadGoogleMaps(apiKey) {
 
 function MapPicker({ lat, lng, onChange }) {
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
-
   const mapElRef = useRef(null);
   const mapRef = useRef(null);
   const markerRef = useRef(null);
@@ -139,28 +106,31 @@ function MapPicker({ lat, lng, onChange }) {
   const [err, setErr] = useState('');
   const [boundsMsg, setBoundsMsg] = useState('');
   const [geoErr, setGeoErr] = useState('');
+  const [mapType, setMapType] = useState('roadmap');
 
   const applyPos = useCallback(
     (lat0, lng0, { pan = true } = {}) => {
       if (!isFiniteNum(lat0) || !isFiniteNum(lng0)) return;
 
       if (!inJeddahBounds(lat0, lng0)) {
-        setBoundsMsg('اختر موقعًا داخل حدود جدة فقط.');
-        const back = lastValidRef.current || DEFAULT_CENTER;
+        setBoundsMsg('اختر موقعًا داخل جدة فقط.');
+        const fallback = lastValidRef.current || DEFAULT_CENTER;
         try {
-          markerRef.current?.setPosition?.(back);
-          mapRef.current?.panTo?.(back);
+          markerRef.current?.setPosition?.(fallback);
+          mapRef.current?.panTo?.(fallback);
         } catch {}
         return;
       }
 
+      const pos = { lat: round6(lat0), lng: round6(lng0) };
       setBoundsMsg('');
-      lastValidRef.current = { lat: lat0, lng: lng0 };
-      onChange?.({ lat: round6(lat0), lng: round6(lng0) });
+      lastValidRef.current = pos;
+      onChange?.(pos);
 
       try {
-        markerRef.current?.setPosition?.({ lat: lat0, lng: lng0 });
-        if (pan) mapRef.current?.panTo?.({ lat: lat0, lng: lng0 });
+        markerRef.current?.setPosition?.(pos);
+        if (pan) mapRef.current?.panTo?.(pos);
+        if ((mapRef.current?.getZoom?.() || 0) < 16) mapRef.current?.setZoom?.(16);
       } catch {}
     },
     [onChange]
@@ -170,23 +140,12 @@ function MapPicker({ lat, lng, onChange }) {
     let alive = true;
 
     async function init() {
-      setErr('');
-      setBoundsMsg('');
-      setGeoErr('');
-
       try {
-        if (!apiKey) throw new Error('تعذر تحميل الخريطة. تأكد من NEXT_PUBLIC_GOOGLE_MAPS_API_KEY.');
+        if (!apiKey) throw new Error('مفتاح الخريطة غير موجود.');
         const maps = await loadGoogleMaps(apiKey);
         if (!alive) return;
-
         const el = mapElRef.current;
         if (!el) return;
-
-        // لا تعيد تهيئة الخريطة إذا كانت موجودة
-        if (mapRef.current && markerRef.current) {
-          setReady(true);
-          return;
-        }
 
         const has = isFiniteNum(lat) && isFiniteNum(lng) && inJeddahBounds(lat, lng);
         const center = has ? { lat, lng } : DEFAULT_CENTER;
@@ -194,6 +153,7 @@ function MapPicker({ lat, lng, onChange }) {
         const map = new maps.Map(el, {
           center,
           zoom: has ? 16 : 13,
+          mapTypeId: mapType,
           mapTypeControl: false,
           fullscreenControl: false,
           streetViewControl: false,
@@ -211,43 +171,17 @@ function MapPicker({ lat, lng, onChange }) {
 
         mapRef.current = map;
         markerRef.current = marker;
-
-        // أحداث
-        listenersRef.current.push(
-          map.addListener('click', (e) => {
-            const lat1 = e?.latLng?.lat?.();
-            const lng1 = e?.latLng?.lng?.();
-            if (!isFiniteNum(lat1) || !isFiniteNum(lng1)) return;
-            applyPos(lat1, lng1);
-          })
-        );
+        lastValidRef.current = center;
 
         listenersRef.current.push(
+          map.addListener('click', (e) => applyPos(e?.latLng?.lat?.(), e?.latLng?.lng?.())),
           marker.addListener('dragend', () => {
             const pos = marker.getPosition();
-            const lat1 = pos?.lat?.();
-            const lng1 = pos?.lng?.();
-            if (!isFiniteNum(lat1) || !isFiniteNum(lng1)) return;
-            applyPos(lat1, lng1);
+            applyPos(pos?.lat?.(), pos?.lng?.());
           })
         );
 
-        // مزامنة أولية
-        if (has) {
-          applyPos(lat, lng, { pan: false });
-        } else {
-          // لا نحفظ أي إحداثيات إلا بعد اختيارك على الخريطة
-          lastValidRef.current = null;
-        }
-
         setReady(true);
-
-        setTimeout(() => {
-          try {
-            maps.event.trigger(map, 'resize');
-            map.setCenter(marker.getPosition());
-          } catch {}
-        }, 250);
       } catch (e) {
         if (!alive) return;
         setErr(String(e?.message || 'تعذر تحميل الخريطة.'));
@@ -269,46 +203,34 @@ function MapPicker({ lat, lng, onChange }) {
       markerRef.current = null;
       mapRef.current = null;
     };
-  }, [apiKey, applyPos, lat, lng]);
+  }, [apiKey, applyPos]);
 
-  // إذا تغيّرت الإحداثيات من الخارج حدّث الماركر
+  useEffect(() => {
+    if (!mapRef.current) return;
+    try {
+      mapRef.current.setMapTypeId(mapType);
+    } catch {}
+  }, [mapType]);
+
   useEffect(() => {
     if (!mapRef.current || !markerRef.current) return;
-    if (!isFiniteNum(lat) || !isFiniteNum(lng)) return;
-    if (!inJeddahBounds(lat, lng)) return;
-
+    if (!isFiniteNum(lat) || !isFiniteNum(lng) || !inJeddahBounds(lat, lng)) return;
     try {
-      const pos = markerRef.current.getPosition();
-      const same = pos && Math.abs(pos.lat() - lat) < 1e-7 && Math.abs(pos.lng() - lng) < 1e-7;
-      if (same) return;
-
       markerRef.current.setPosition({ lat, lng });
       mapRef.current.panTo({ lat, lng });
       lastValidRef.current = { lat, lng };
-      if ((mapRef.current.getZoom?.() || 0) < 16) mapRef.current.setZoom(16);
-      window.google?.maps?.event?.trigger?.(mapRef.current, 'resize');
     } catch {}
   }, [lat, lng]);
 
   const useMyLocation = useCallback(() => {
     setGeoErr('');
-    setBoundsMsg('');
-
     if (!navigator?.geolocation) {
       setGeoErr('المتصفح لا يدعم تحديد الموقع.');
       return;
     }
 
     navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const lat1 = pos?.coords?.latitude;
-        const lng1 = pos?.coords?.longitude;
-        if (!isFiniteNum(lat1) || !isFiniteNum(lng1)) {
-          setGeoErr('تعذر استخدام موقعك الحالي.');
-          return;
-        }
-        applyPos(lat1, lng1);
-      },
+      (pos) => applyPos(pos?.coords?.latitude, pos?.coords?.longitude),
       () => setGeoErr('تعذر الحصول على موقعك الحالي.'),
       { enableHighAccuracy: true, timeout: 12000 }
     );
@@ -316,13 +238,22 @@ function MapPicker({ lat, lng, onChange }) {
 
   return (
     <div>
-      <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+      <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <div className="muted" style={{ fontSize: 12 }}>
-          اضغط على الخريطة لتحديد الموقع أو اسحب الدبوس. (داخل جدة فقط)
+          اضغط على الخريطة أو اسحب الدبوس لتحديد الموقع.
         </div>
-        <button className="btn" type="button" onClick={useMyLocation} style={{ fontSize: 12, padding: '6px 10px' }}>
-          موقعي الحالي
-        </button>
+
+        <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+          <button className="btn" type="button" onClick={() => setMapType('roadmap')} style={{ fontSize: 12, padding: '6px 10px' }}>
+            عادي
+          </button>
+          <button className="btn" type="button" onClick={() => setMapType('hybrid')} style={{ fontSize: 12, padding: '6px 10px' }}>
+            قمر صناعي
+          </button>
+          <button className="btn" type="button" onClick={useMyLocation} style={{ fontSize: 12, padding: '6px 10px' }}>
+            موقعي الحالي
+          </button>
+        </div>
       </div>
 
       <div
@@ -332,16 +263,10 @@ function MapPicker({ lat, lng, onChange }) {
           borderRadius: 16,
           overflow: 'hidden',
           border: '1px solid rgba(214, 179, 91, 0.28)',
-          background: 'rgba(255, 255, 255, 0.03)',
+          background: '#f5f5f5',
         }}
       >
-        <div
-          ref={mapElRef}
-          style={{
-            width: '100%',
-            height: typeof window !== 'undefined' && window.innerWidth <= 768 ? 320 : 420,
-          }}
-        />
+        <div ref={mapElRef} style={{ width: '100%', height: typeof window !== 'undefined' && window.innerWidth <= 768 ? 320 : 420 }} />
 
         {!ready && !err ? (
           <div
@@ -353,8 +278,7 @@ function MapPicker({ lat, lng, onChange }) {
               alignItems: 'center',
               justifyContent: 'center',
               padding: 14,
-              textAlign: 'center',
-              background: 'rgba(0, 0, 0, 0.12)',
+              background: 'rgba(255,255,255,.7)',
               backdropFilter: 'blur(6px)',
               fontWeight: 800,
             }}
@@ -373,11 +297,9 @@ function MapPicker({ lat, lng, onChange }) {
               justifyContent: 'center',
               padding: 14,
               textAlign: 'center',
-              background: 'rgba(0, 0, 0, 0.12)',
-              backdropFilter: 'blur(6px)',
+              background: 'rgba(255,255,255,.78)',
               fontWeight: 800,
               color: '#b42318',
-              direction: 'rtl',
             }}
           >
             {err}
@@ -385,31 +307,20 @@ function MapPicker({ lat, lng, onChange }) {
         ) : null}
       </div>
 
-      {boundsMsg ? (
-        <div className="muted" style={{ marginTop: 8, color: '#b45f06', fontSize: 12, fontWeight: 900 }}>
-          {boundsMsg}
-        </div>
-      ) : null}
-
-      {geoErr ? (
-        <div className="muted" style={{ marginTop: 8, color: '#b42318', fontSize: 12 }}>
-          {geoErr}
-        </div>
-      ) : null}
+      {boundsMsg ? <div className="muted" style={{ marginTop: 8, color: '#b45f06', fontSize: 12, fontWeight: 900 }}>{boundsMsg}</div> : null}
+      {geoErr ? <div className="muted" style={{ marginTop: 8, color: '#b42318', fontSize: 12 }}>{geoErr}</div> : null}
     </div>
   );
 }
 
-// ===================== رفع الملفات =====================
 function useUploader(storage) {
-  const [queue, setQueue] = useState([]); // [{name, progress, url, refPath}]
+  const [queue, setQueue] = useState([]);
   const [uploading, setUploading] = useState(false);
 
   const removeAt = useCallback(
     async (idx) => {
       const item = queue[idx];
       if (!item) return;
-      // حذف من Storage إذا عنده refPath
       if (item.refPath) {
         try {
           await deleteObject(storageRef(storage, item.refPath));
@@ -424,11 +335,11 @@ function useUploader(storage) {
     async (files) => {
       if (!storage) return;
 
-      const arr = Array.from(files || []);
-      if (!arr.length) return;
+      const list = Array.from(files || []);
+      if (!list.length) return;
 
       const available = Math.max(0, MAX_FILES - queue.length);
-      const picked = arr.slice(0, available);
+      const picked = list.slice(0, available);
       if (!picked.length) return;
 
       setUploading(true);
@@ -437,11 +348,9 @@ function useUploader(storage) {
         const safeName = String(file.name || 'file').replace(/[^\w.\-]+/g, '_');
         const refPath = `abhur_uploads/${Date.now()}_${Math.random().toString(16).slice(2)}_${safeName}`;
         const refObj = storageRef(storage, refPath);
-
-        const qItem = { name: file.name || 'file', progress: 0, url: '', refPath };
-        setQueue((prev) => [...prev, qItem]);
-
         const myIndex = queue.length;
+
+        setQueue((prev) => [...prev, { name: file.name || 'file', progress: 0, url: '', refPath }]);
 
         await new Promise((resolve) => {
           const task = uploadBytesResumable(refObj, file);
@@ -449,9 +358,7 @@ function useUploader(storage) {
             'state_changed',
             (snap) => {
               const pct = snap.totalBytes ? Math.round((snap.bytesTransferred / snap.totalBytes) * 100) : 0;
-              setQueue((prev) =>
-                prev.map((x, i) => (i === myIndex ? { ...x, progress: pct } : x))
-              );
+              setQueue((prev) => prev.map((x, i) => (i === myIndex ? { ...x, progress: pct } : x)));
             },
             () => {
               setQueue((prev) => prev.filter((_, i) => i !== myIndex));
@@ -460,9 +367,7 @@ function useUploader(storage) {
             async () => {
               try {
                 const url = await getDownloadURL(task.snapshot.ref);
-                setQueue((prev) =>
-                  prev.map((x, i) => (i === myIndex ? { ...x, url, progress: 100 } : x))
-                );
+                setQueue((prev) => prev.map((x, i) => (i === myIndex ? { ...x, url, progress: 100 } : x)));
               } catch {
                 setQueue((prev) => prev.filter((_, i) => i !== myIndex));
               }
@@ -478,285 +383,280 @@ function useUploader(storage) {
   );
 
   const urls = useMemo(() => queue.map((q) => q.url).filter(Boolean), [queue]);
-
   return { queue, setQueue, uploading, addFiles, removeAt, urls };
 }
 
-// ===================== نموذج إنشاء/تعديل =====================
-function CreateEditForm({ editingId, form, setForm, onSave, onReset, busy, createdId, uploader }) {
-  const { queue, uploading, addFiles, removeAt } = uploader;
-
-  const pricePreview = form.price ? formatPriceSAR(Number(form.price)) : '';
-
+function StepHeader({ step, setStep }) {
   return (
-    <section className="card" style={{ padding: 14, marginTop: 12 }}>
-      <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
-        <div style={{ fontWeight: 950 }}>{editingId ? 'تعديل إعلان' : 'إضافة إعلان جديد'}</div>
-        <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
-          <button className="btn" type="button" onClick={onReset} disabled={busy || uploading}>
-            مسح
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 8, marginTop: 14 }}>
+      {FORM_STEPS.map((item, index) => {
+        const active = step === item.key;
+        const done = FORM_STEPS.findIndex((x) => x.key === step) > index;
+        return (
+          <button
+            key={item.key}
+            type="button"
+            className={active ? 'btn btnPrimary' : 'btn'}
+            onClick={() => setStep(item.key)}
+            style={{ width: '100%', padding: '10px 12px', fontWeight: 900, opacity: done ? 0.9 : 1 }}
+          >
+            {item.label}
           </button>
-          <button className="btn btnPrimary" type="button" onClick={onSave} disabled={busy || uploading}>
-            {busy ? 'جاري الحفظ…' : uploading ? 'انتظر اكتمال الرفع…' : editingId ? 'تحديث الإعلان' : 'نشر الإعلان'}
-          </button>
-        </div>
-      </div>
-
-      {createdId ? (
-        <div className="card" style={{ marginTop: 12, padding: 12, borderColor: 'rgba(16,185,129,.25)', background: 'rgba(16,185,129,.07)', fontWeight: 900 }}>
-          تم حفظ الإعلان. رقم الإعلان: <b>{createdId}</b>
-        </div>
-      ) : null}
-
-      <Field label="نوع الصفقة">
-        <div className="row" style={{ gap: 10, flexWrap: 'wrap' }}>
-          {DEAL_TYPES.map((d) => (
-            <label key={d.key} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <input
-                type="radio"
-                name="dealType"
-                checked={form.dealType === d.key}
-                onChange={() => setForm((p) => ({ ...p, dealType: d.key }))}
-              />
-              <span style={{ fontWeight: 900 }}>{d.label}</span>
-            </label>
-          ))}
-        </div>
-      </Field>
-
-      <Field label="نوع العقار">
-        <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
-          {PROPERTY_TYPES.map((t) => (
-            <button
-              key={t}
-              type="button"
-              className={form.propertyType === t ? 'btn btnPrimary' : 'btn'}
-              onClick={() => setForm((p) => ({ ...p, propertyType: t }))}
-            >
-              {t}
-            </button>
-          ))}
-        </div>
-      </Field>
-
-      <Field label="تصنيف (سكني/تجاري) - اختياري">
-        <select className="input" value={form.propertyClass} onChange={(e) => setForm((p) => ({ ...p, propertyClass: e.target.value }))}>
-          <option value="">بدون</option>
-          {PROPERTY_CLASSES.map((c) => (
-            <option key={c.key} value={c.key}>
-              {c.label}
-            </option>
-          ))}
-        </select>
-      </Field>
-
-      <Field label="عنوان الإعلان">
-        <input className="input" value={form.title} onChange={(e) => setForm((p) => ({ ...p, title: e.target.value }))} placeholder="مثال: أرض في الياقوت مخطط العمرية" />
-      </Field>
-
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-        <Field label="السعر (ريال)">
-          <input className="input" inputMode="numeric" value={form.price} onChange={(e) => setForm((p) => ({ ...p, price: e.target.value.replace(/[^\d]/g, '') }))} placeholder="مثال: 950000" />
-          {pricePreview ? <div className="muted" style={{ marginTop: 6, fontSize: 12 }}>المعاينة: {pricePreview}</div> : null}
-        </Field>
-
-        <Field label="المساحة (م²) - اختياري">
-          <input className="input" inputMode="numeric" value={form.area} onChange={(e) => setForm((p) => ({ ...p, area: e.target.value.replace(/[^\d]/g, '') }))} placeholder="مثال: 400" />
-        </Field>
-      </div>
-
-      <Field label="الحي">
-        <select className="input" value={form.neighborhood} onChange={(e) => setForm((p) => ({ ...p, neighborhood: e.target.value }))}>
-          <option value="">اختر الحي</option>
-          {NEIGHBORHOODS.map((n) => (
-            <option key={n} value={n}>
-              {n}
-            </option>
-          ))}
-        </select>
-      </Field>
-
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-        <Field label="المخطط (اختياري)">
-          <input className="input" value={form.plan} onChange={(e) => setForm((p) => ({ ...p, plan: e.target.value }))} placeholder="مثال: بايزيد" />
-        </Field>
-
-        <Field label="الجزء (اختياري)">
-          <input className="input" value={form.part} onChange={(e) => setForm((p) => ({ ...p, part: e.target.value }))} placeholder="مثال: ج / ..." />
-        </Field>
-      </div>
-
-      <Field label="حالة الإعلان">
-        <select className="input" value={form.status} onChange={(e) => setForm((p) => ({ ...p, status: e.target.value }))}>
-          {STATUS_OPTIONS.map((s) => (
-            <option key={s.key} value={s.key}>
-              {s.label}
-            </option>
-          ))}
-        </select>
-        <div style={{ marginTop: 6 }}>{statusBadge(form.status)}</div>
-      </Field>
-
-      <Field label="رقم ترخيص الإعلان (اختياري)">
-        <input className="input" value={form.licenseNumber} onChange={(e) => setForm((p) => ({ ...p, licenseNumber: e.target.value }))} placeholder="مثال: 1234567890" />
-      </Field>
-
-      <Field label="الوصف (اختياري)">
-        <textarea className="input" rows={4} value={form.description} onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))} style={{ resize: 'vertical' }} placeholder="اكتب تفاصيل إضافية…" />
-      </Field>
-
-      {/* رفع */}
-      <Divider />
-      <Field label="رفع صور/فيديو" hint={`حد أقصى ${MAX_FILES} ملف`}>
-        <label className="btn btnPrimary" style={{ cursor: 'pointer' }}>
-          اختر ملفات
-          <input type="file" multiple accept="image/*,video/*" onChange={(e) => addFiles(e.target.files)} style={{ display: 'none' }} />
-        </label>
-
-        {queue.length ? (
-          <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {queue.map((q, idx) => (
-              <div key={`${q.name}_${idx}`} className="card" style={{ padding: 12 }}>
-                <div className="row" style={{ justifyContent: 'space-between', gap: 10, alignItems: 'center' }}>
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontWeight: 900, overflow: 'hidden', textOverflow: 'ellipsis' }}>{q.name}</div>
-                    <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
-                      {q.url ? 'تم الرفع' : `جاري الرفع: ${q.progress || 0}%`}
-                    </div>
-                  </div>
-                  <button className="btn" type="button" onClick={() => removeAt(idx)} style={{ fontSize: 12 }}>
-                    حذف
-                  </button>
-                </div>
-
-                <div style={{ marginTop: 8, height: 10, borderRadius: 999, background: 'rgba(214,179,91,0.22)', overflow: 'hidden' }}>
-                  <div style={{ width: `${Math.min(100, q.progress || 0)}%`, height: '100%', background: 'linear-gradient(135deg, var(--primary), var(--primary2))', borderRadius: 999 }} />
-                </div>
-
-                {q.url ? (
-                  <div className="muted" style={{ marginTop: 8, fontSize: 12, wordBreak: 'break-all' }}>
-                    {q.url}
-                  </div>
-                ) : null}
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="muted" style={{ marginTop: 10, fontSize: 12 }}>
-            لم يتم اختيار ملفات.
-          </div>
-        )}
-      </Field>
-
-      {/* الموقع */}
-      <div>
-        <Divider />
-        <Field label="الموقع على الخريطة" hint="حدد الموقع من الخريطة (داخل جدة فقط).">
-          <MapPicker
-            lat={toNum(form.lat)}
-            lng={toNum(form.lng)}
-            onChange={({ lat, lng }) => setForm((p) => ({ ...p, lat: String(lat), lng: String(lng) }))}
-          />
-
-          <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 10 }}>
-            <div className="muted" style={{ fontSize: 12, fontWeight: 900 }}>
-              الإحداثيات المختارة:{' '}
-              <span style={{ color: 'var(--text)', fontWeight: 950 }}>
-                {form.lat ? form.lat : '—'} , {form.lng ? form.lng : '—'}
-              </span>
-            </div>
-
-            <button
-              className="btn"
-              type="button"
-              onClick={() => setForm((p) => ({ ...p, lat: '', lng: '' }))}
-              style={{ fontSize: 12, padding: '6px 10px' }}
-            >
-              مسح الموقع
-            </button>
-          </div>
-        </Field>
-      </div>
-    </section>
+        );
+      })}
+    </div>
   );
 }
 
-// ===================== إدارة العروض =====================
-function ManageListings({ list, loadingList, actionBusyId, onLoad, onDelete, onEdit }) {
-  const dangerBtnStyle = {
-    border: '1px solid rgba(220,38,38,.35)',
-    background: 'rgba(220,38,38,.08)',
-    color: '#b42318',
+function ReviewRow({ label, value }) {
+  return (
+    <div className="card" style={{ padding: 12 }}>
+      <div className="muted" style={{ fontSize: 12, marginBottom: 4 }}>{label}</div>
+      <div style={{ fontWeight: 900 }}>{value || '—'}</div>
+    </div>
+  );
+}
+
+function CreateListingForm({ form, setForm, onSave, onReset, busy, createdId, uploader, saveErr }) {
+  const [step, setStep] = useState('basic');
+  const { queue, uploading, addFiles, removeAt } = uploader;
+  const pricePreview = form.price ? formatPriceSAR(Number(form.price)) : '';
+
+  const stepIndex = FORM_STEPS.findIndex((s) => s.key === step);
+  const canGoNext = useMemo(() => {
+    if (step === 'basic') return !!String(form.title || '').trim() && !!String(form.neighborhood || '').trim();
+    if (step === 'details') return true;
+    if (step === 'media') return true;
+    return true;
+  }, [form, step]);
+
+  const nextStep = () => {
+    if (stepIndex >= FORM_STEPS.length - 1) return;
+    setStep(FORM_STEPS[stepIndex + 1].key);
+  };
+
+  const prevStep = () => {
+    if (stepIndex <= 0) return;
+    setStep(FORM_STEPS[stepIndex - 1].key);
   };
 
   return (
     <section className="card" style={{ padding: 14, marginTop: 12 }}>
       <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-        <div style={{ fontWeight: 950 }}>إدارة العروض</div>
-        <button className="btn" type="button" onClick={onLoad} disabled={loadingList}>
-          {loadingList ? 'تحميل…' : 'تحديث القائمة'}
-        </button>
+        <div>
+          <div style={{ fontWeight: 950 }}>إضافة إعلان جديد</div>
+          <div className="muted" style={{ marginTop: 4, fontSize: 12 }}>قسمنا النموذج إلى خطوات حتى يكون أوضح وأسهل.</div>
+        </div>
+
+        <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+          <button className="btn" type="button" onClick={onReset} disabled={busy || uploading}>مسح النموذج</button>
+          <Link href="/admin" className="btn">لوحة الأدمن</Link>
+        </div>
       </div>
 
-      <div className="muted" style={{ marginTop: 8, fontSize: 12 }}>
-        {list.length ? `عدد العروض: ${list.length}` : 'لا توجد عروض حالياً.'}
-      </div>
+      <StepHeader step={step} setStep={setStep} />
 
-      {list.length ? (
-        <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {list.map((it) => {
-            const id = it?.id || it?.docId || '';
-            const busy = actionBusyId === id;
-
-            return (
-              <div key={id} className="card" style={{ padding: 12 }}>
-                <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                  <div style={{ minWidth: 240 }}>
-                    <div style={{ fontWeight: 950 }}>{it.title || '—'}</div>
-                    <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
-                      {it.neighborhood ? `الحي: ${it.neighborhood}` : ''}{' '}
-                      {it.price != null ? `• السعر: ${formatPriceSAR(Number(it.price))}` : ''}
-                    </div>
-                  </div>
-
-                  <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
-                    <button className="btn" type="button" onClick={() => onEdit(id)} disabled={busy}>
-                      تعديل
-                    </button>
-                    <button className="btn" type="button" onClick={() => onDelete(it)} style={dangerBtnStyle} disabled={busy}>
-                      {busy ? '...' : 'حذف'}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+      {createdId ? (
+        <div className="card" style={{ marginTop: 12, padding: 12, borderColor: 'rgba(16,185,129,.25)', background: 'rgba(16,185,129,.07)' }}>
+          <div style={{ fontWeight: 900 }}>تم حفظ الإعلان بنجاح.</div>
+          <div className="muted" style={{ marginTop: 4, fontSize: 12 }}>رقم الإعلان: {createdId}</div>
+          <div className="row" style={{ gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+            <Link href={`/listing/${createdId}`} className="btn btnPrimary">عرض الإعلان</Link>
+            <button className="btn" type="button" onClick={onReset}>إضافة إعلان جديد</button>
+          </div>
         </div>
       ) : null}
+
+      {saveErr ? (
+        <div className="card" style={{ marginTop: 12, padding: 12, borderColor: 'rgba(220,38,38,.22)', background: 'rgba(220,38,38,.06)', fontWeight: 900 }}>
+          {saveErr}
+        </div>
+      ) : null}
+
+      {step === 'basic' ? (
+        <div style={{ marginTop: 12 }}>
+          <Field label="نوع الصفقة">
+            <div className="row" style={{ gap: 10, flexWrap: 'wrap' }}>
+              {DEAL_TYPES.map((d) => (
+                <label key={d.key} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <input type="radio" name="dealType" checked={form.dealType === d.key} onChange={() => setForm((p) => ({ ...p, dealType: d.key }))} />
+                  <span style={{ fontWeight: 900 }}>{d.label}</span>
+                </label>
+              ))}
+            </div>
+          </Field>
+
+          <Field label="نوع العقار">
+            <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+              {PROPERTY_TYPES.map((t) => (
+                <button key={t} type="button" className={form.propertyType === t ? 'btn btnPrimary' : 'btn'} onClick={() => setForm((p) => ({ ...p, propertyType: t }))}>
+                  {t}
+                </button>
+              ))}
+            </div>
+          </Field>
+
+          <Field label="عنوان الإعلان">
+            <input className="input" value={form.title} onChange={(e) => setForm((p) => ({ ...p, title: e.target.value }))} placeholder="مثال: أرض للبيع في حي الياقوت مخطط بايزيد" />
+          </Field>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <Field label="الحي">
+              <select className="input" value={form.neighborhood} onChange={(e) => setForm((p) => ({ ...p, neighborhood: e.target.value }))}>
+                <option value="">اختر الحي</option>
+                {NEIGHBORHOODS.map((n) => <option key={n} value={n}>{n}</option>)}
+              </select>
+            </Field>
+
+            <Field label="تصنيف العقار - اختياري">
+              <select className="input" value={form.propertyClass} onChange={(e) => setForm((p) => ({ ...p, propertyClass: e.target.value }))}>
+                <option value="">بدون</option>
+                {PROPERTY_CLASSES.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
+              </select>
+            </Field>
+          </div>
+        </div>
+      ) : null}
+
+      {step === 'details' ? (
+        <div style={{ marginTop: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <Field label={`السعر (${form.dealType === 'rent' ? 'سنوي' : 'ريال'})`}>
+              <input className="input" inputMode="numeric" value={form.price} onChange={(e) => setForm((p) => ({ ...p, price: e.target.value.replace(/[^\d]/g, '') }))} placeholder={form.dealType === 'rent' ? 'مثال: 20000' : 'مثال: 950000'} />
+              {pricePreview ? <div className="muted" style={{ marginTop: 6, fontSize: 12 }}>المعاينة: {pricePreview} {form.dealType === 'rent' ? 'سنوي' : ''}</div> : null}
+            </Field>
+
+            <Field label="المساحة (م²) - اختياري">
+              <input className="input" inputMode="numeric" value={form.area} onChange={(e) => setForm((p) => ({ ...p, area: e.target.value.replace(/[^\d]/g, '') }))} placeholder="مثال: 400" />
+            </Field>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <Field label="المخطط - اختياري">
+              <input className="input" value={form.plan} onChange={(e) => setForm((p) => ({ ...p, plan: e.target.value }))} placeholder="مثال: بايزيد" />
+            </Field>
+
+            <Field label="الجزء - اختياري">
+              <input className="input" value={form.part} onChange={(e) => setForm((p) => ({ ...p, part: e.target.value }))} placeholder="مثال: 1ط أو ج" />
+            </Field>
+          </div>
+
+          <Field label="حالة الإعلان">
+            <select className="input" value={form.status} onChange={(e) => setForm((p) => ({ ...p, status: e.target.value }))}>
+              {STATUS_OPTIONS.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+            </select>
+            <div style={{ marginTop: 6 }}>{statusBadge(form.status)}</div>
+          </Field>
+
+          <Field label="رقم الترخيص - اختياري">
+            <input className="input" value={form.licenseNumber} onChange={(e) => setForm((p) => ({ ...p, licenseNumber: e.target.value }))} placeholder="مثال: 1234567890" />
+          </Field>
+
+          <Field label="الوصف - اختياري" hint="يفضل كتابة أهم المميزات وقرب العقار من الطرق أو الخدمات.">
+            <textarea className="input" rows={5} value={form.description} onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))} style={{ resize: 'vertical' }} placeholder="مثال: أرض سكنية في حي الياقوت، قريبة من طريق رئيسي، مباشرة من المالك..." />
+          </Field>
+        </div>
+      ) : null}
+
+      {step === 'media' ? (
+        <div style={{ marginTop: 12 }}>
+          <Field label="رفع صور أو فيديو" hint={`حد أقصى ${MAX_FILES} ملف`}>
+            <label className="btn btnPrimary" style={{ cursor: 'pointer' }}>
+              اختر ملفات
+              <input type="file" multiple accept="image/*,video/*" onChange={(e) => addFiles(e.target.files)} style={{ display: 'none' }} />
+            </label>
+
+            {queue.length ? (
+              <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {queue.map((q, idx) => (
+                  <div key={`${q.name}_${idx}`} className="card" style={{ padding: 12 }}>
+                    <div className="row" style={{ justifyContent: 'space-between', gap: 10, alignItems: 'center' }}>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontWeight: 900, overflow: 'hidden', textOverflow: 'ellipsis' }}>{q.name}</div>
+                        <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>{q.url ? 'تم الرفع' : `جاري الرفع: ${q.progress || 0}%`}</div>
+                      </div>
+                      <button className="btn" type="button" onClick={() => removeAt(idx)} style={{ fontSize: 12 }}>حذف</button>
+                    </div>
+
+                    <div style={{ marginTop: 8, height: 10, borderRadius: 999, background: 'rgba(214,179,91,0.22)', overflow: 'hidden' }}>
+                      <div style={{ width: `${Math.min(100, q.progress || 0)}%`, height: '100%', background: 'linear-gradient(135deg, var(--primary), var(--primary2))', borderRadius: 999 }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="muted" style={{ marginTop: 10, fontSize: 12 }}>لم يتم اختيار ملفات بعد.</div>
+            )}
+          </Field>
+
+          <Divider />
+          <Field label="الموقع على الخريطة" hint="حدد الموقع بدقة ثم راجع الإحداثيات أسفل الخريطة.">
+            <MapPicker lat={toNum(form.lat)} lng={toNum(form.lng)} onChange={({ lat, lng }) => setForm((p) => ({ ...p, lat: String(lat), lng: String(lng) }))} />
+
+            <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 10 }}>
+              <div className="muted" style={{ fontSize: 12, fontWeight: 900 }}>
+                الإحداثيات: <span style={{ color: 'var(--text)', fontWeight: 950 }}>{form.lat || '—'} , {form.lng || '—'}</span>
+              </div>
+
+              <button className="btn" type="button" onClick={() => setForm((p) => ({ ...p, lat: '', lng: '' }))} style={{ fontSize: 12, padding: '6px 10px' }}>
+                مسح الموقع
+              </button>
+            </div>
+          </Field>
+        </div>
+      ) : null}
+
+      {step === 'review' ? (
+        <div style={{ marginTop: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <ReviewRow label="نوع الصفقة" value={form.dealType === 'rent' ? 'إيجار' : 'بيع'} />
+            <ReviewRow label="نوع العقار" value={form.propertyType} />
+            <ReviewRow label="العنوان" value={form.title} />
+            <ReviewRow label="الحي" value={form.neighborhood} />
+            <ReviewRow label="السعر" value={pricePreview ? `${pricePreview}${form.dealType === 'rent' ? ' سنوي' : ''}` : '—'} />
+            <ReviewRow label="المساحة" value={form.area ? `${form.area} م²` : '—'} />
+            <ReviewRow label="المخطط" value={form.plan} />
+            <ReviewRow label="الجزء" value={form.part} />
+            <ReviewRow label="عدد الملفات" value={queue.length ? String(queue.length) : '0'} />
+            <ReviewRow label="الموقع" value={form.lat && form.lng ? `${form.lat}, ${form.lng}` : 'غير محدد'} />
+          </div>
+
+          <Field label="الوصف النهائي">
+            <div className="card" style={{ padding: 12, minHeight: 90, lineHeight: 1.8 }}>{form.description || 'لا يوجد وصف.'}</div>
+          </Field>
+        </div>
+      ) : null}
+
+      <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 16 }}>
+        <button className="btn" type="button" onClick={prevStep} disabled={stepIndex === 0}>السابق</button>
+
+        <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+          {step !== 'review' ? (
+            <button className="btn btnPrimary" type="button" onClick={nextStep} disabled={!canGoNext}>التالي</button>
+          ) : (
+            <button className="btn btnPrimary" type="button" onClick={onSave} disabled={busy || uploading}>
+              {busy ? 'جاري الحفظ…' : uploading ? 'انتظر اكتمال الرفع…' : 'نشر الإعلان'}
+            </button>
+          )}
+        </div>
+      </div>
     </section>
   );
 }
 
-// ===================== الصفحة =====================
-export default function AdminPage() {
+export default function AddListingPage() {
   const fb = getFirebase();
   const auth = fb?.auth;
   const storage = fb?.storage;
-  const db = getFirestore();
 
   const [checking, setChecking] = useState(true);
   const [user, setUser] = useState(null);
-
   const [email, setEmail] = useState('');
   const [pass, setPass] = useState('');
   const [authBusy, setAuthBusy] = useState(false);
   const [authErr, setAuthErr] = useState('');
-
-  const [tab, setTab] = useState('create'); // create | manage
-
-  const [editingId, setEditingId] = useState('');
-  const [createdId, setCreatedId] = useState('');
   const [saving, setSaving] = useState(false);
+  const [createdId, setCreatedId] = useState('');
 
   const initialForm = useMemo(
     () => ({
@@ -780,12 +680,6 @@ export default function AdminPage() {
   );
 
   const [form, setForm] = useState(initialForm);
-
-  // list
-  const [list, setList] = useState([]);
-  const [loadingList, setLoadingList] = useState(false);
-  const [actionBusyId, setActionBusyId] = useState('');
-
   const uploader = useUploader(storage);
 
   useEffect(() => {
@@ -799,8 +693,8 @@ export default function AdminPage() {
   const isAdmin = isAdminUser(user);
 
   const resetForm = useCallback(() => {
-    setEditingId('');
     setCreatedId('');
+    setAuthErr('');
     setForm(initialForm);
     uploader.setQueue([]);
   }, [initialForm, uploader]);
@@ -831,61 +725,6 @@ export default function AdminPage() {
     }
   };
 
-  const loadList = useCallback(async () => {
-    setLoadingList(true);
-    try {
-      const rows = await fetchListings({ onlyPublic: false, includeLegacy: false, max: 500 });
-      setList(Array.isArray(rows) ? rows : []);
-    } catch {
-      setList([]);
-    } finally {
-      setLoadingList(false);
-    }
-  }, []);
-
-  const editListing = useCallback(
-    (id) => {
-      const it = (list || []).find((x) => x.id === id || x.docId === id);
-      if (!it) return;
-
-      setTab('create');
-      setCreatedId('');
-      setEditingId(id);
-
-      setForm((p) => ({
-        ...p,
-        dealType: it.dealType || 'sale',
-        propertyType: it.propertyType || 'أرض',
-        propertyClass: it.propertyClass || '',
-        title: it.title || '',
-        price: it.price != null ? String(it.price) : '',
-        area: it.area != null ? String(it.area) : '',
-        neighborhood: it.neighborhood || '',
-        plan: it.plan || '',
-        part: it.part || '',
-        status: it.status || 'available',
-        description: it.description || '',
-        licenseNumber: it.licenseNumber || '',
-        lat: it.lat != null ? String(it.lat) : '',
-        lng: it.lng != null ? String(it.lng) : '',
-        images: Array.isArray(it.images) ? it.images : [],
-      }));
-
-      // مزامنة الصور الحالية داخل queue (عرض فقط)
-      const imgs = Array.isArray(it.images) ? it.images : [];
-      uploader.setQueue(
-        imgs.map((url, i) => ({
-          id: `existing_${id}_${i}`,
-          name: `existing_${i + 1}`,
-          progress: 100,
-          url,
-          refPath: '',
-        }))
-      );
-    },
-    [list, uploader]
-  );
-
   const saveListing = useCallback(async () => {
     setSaving(true);
     setAuthErr('');
@@ -906,79 +745,37 @@ export default function AdminPage() {
         licenseNumber: String(form.licenseNumber || '').trim(),
         lat: toNum(form.lat),
         lng: toNum(form.lng),
-        images: uploader.urls.length ? uploader.urls : Array.isArray(form.images) ? form.images : [],
+        images: uploader.urls.length ? uploader.urls : [],
         updatedAt: new Date(),
       };
 
-      if (!payload.title) {
-        setAuthErr('اكتب عنوان الإعلان.');
-        setSaving(false);
-        return;
-      }
+      if (!payload.title) throw new Error('اكتب عنوان الإعلان.');
+      if (!payload.neighborhood) throw new Error('اختر الحي.');
 
-      if (!payload.neighborhood) {
-        setAuthErr('اختر الحي.');
-        setSaving(false);
-        return;
-      }
-
-      let id = editingId;
-      if (editingId) {
-        await adminUpdateListing(editingId, payload);
-      } else {
-        const created = await adminCreateListing(payload);
-        id = created?.id || created || '';
-      }
-
+      const created = await adminCreateListing(payload);
+      const id = created?.id || created || '';
       setCreatedId(id || 'تم');
-      setEditingId(id || editingId);
-
-      await loadList();
     } catch (e) {
       setAuthErr(String(e?.message || 'تعذر حفظ الإعلان.'));
     } finally {
       setSaving(false);
     }
-  }, [editingId, form, uploader.urls, loadList]);
-
-  const deleteListing = useCallback(
-    async (it) => {
-      const id = it?.id || it?.docId;
-      if (!id) return;
-
-      setActionBusyId(id);
-      try {
-        await deleteDoc(doc(db, LISTINGS_COLLECTION, id));
-        await loadList();
-      } catch {
-      } finally {
-        setActionBusyId('');
-      }
-    },
-    [db, loadList]
-  );
+  }, [form, uploader.urls]);
 
   if (checking) {
     return (
       <div className="container" style={{ paddingTop: 16 }}>
-        <section className="card" style={{ padding: 14 }}>
-          جاري التحقق…
-        </section>
+        <section className="card" style={{ padding: 14 }}>جاري التحقق…</section>
       </div>
     );
   }
 
   if (!user) {
     return (
-      <div className="container" style={{ paddingTop: 16 }}>
+      <div className="container" style={{ paddingTop: 16, paddingBottom: 24 }}>
         <section className="card" style={{ padding: 14 }}>
-          <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
-            <div style={{ fontWeight: 950 }}>لوحة الأدمن</div>
-          </div>
-
-          <div className="muted" style={{ marginTop: 8 }}>
-            سجل دخول الأدمن لإضافة/إدارة الإعلانات.
-          </div>
+          <div style={{ fontWeight: 950 }}>تسجيل الدخول لإضافة إعلان</div>
+          <div className="muted" style={{ marginTop: 8 }}>بعد تسجيل الدخول ستظهر لك صفحة إضافة الإعلان مباشرة.</div>
 
           <form onSubmit={login} style={{ marginTop: 12 }}>
             <Field label="البريد">
@@ -986,23 +783,13 @@ export default function AdminPage() {
             </Field>
 
             <Field label="كلمة المرور">
-              <input
-                className="input"
-                type="password"
-                value={pass}
-                onChange={(e) => setPass(e.target.value)}
-                autoComplete="current-password"
-              />
+              <input className="input" type="password" value={pass} onChange={(e) => setPass(e.target.value)} autoComplete="current-password" />
             </Field>
 
-            {authErr ? (
-              <div style={{ marginTop: 10, color: 'var(--danger)', fontWeight: 900 }}>
-                {authErr}
-              </div>
-            ) : null}
+            {authErr ? <div style={{ marginTop: 10, color: 'var(--danger)', fontWeight: 900 }}>{authErr}</div> : null}
 
             <button className="btn btnPrimary" style={{ marginTop: 12, width: '100%' }} disabled={authBusy}>
-              {authBusy ? '...' : 'دخول'}
+              {authBusy ? '...' : 'تسجيل دخول'}
             </button>
           </form>
         </section>
@@ -1012,17 +799,13 @@ export default function AdminPage() {
 
   if (!isAdmin) {
     return (
-      <div className="container" style={{ paddingTop: 16 }}>
+      <div className="container" style={{ paddingTop: 16, paddingBottom: 24 }}>
         <section className="card" style={{ padding: 14 }}>
           <div style={{ fontWeight: 950 }}>غير مصرح</div>
-          <div className="muted" style={{ marginTop: 8 }}>
-            هذا الحساب لا يملك صلاحية الأدمن.
-          </div>
-
-          <div className="row" style={{ gap: 10, marginTop: 12, flexWrap: 'wrap' }}>
-            <button className="btn" onClick={logout} disabled={authBusy}>
-              تسجيل خروج
-            </button>
+          <div className="muted" style={{ marginTop: 8 }}>هذا الحساب لا يملك صلاحية إضافة إعلانات.</div>
+          <div className="row" style={{ gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+            <button className="btn" onClick={logout} disabled={authBusy}>تسجيل خروج</button>
+            <Link href="/account" className="btn">الحساب</Link>
           </div>
         </section>
       </div>
@@ -1034,56 +817,27 @@ export default function AdminPage() {
       <section className="card" style={{ padding: 14 }}>
         <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontWeight: 950 }}>لوحة الأدمن</div>
-            <div className="muted" style={{ fontSize: 12, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {user.email}
-            </div>
+            <div style={{ fontWeight: 950 }}>إضافة إعلان</div>
+            <div className="muted" style={{ fontSize: 12, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis' }}>{user.email}</div>
           </div>
 
-          <div className="row" style={{ gap: 10, flexWrap: 'wrap' }}>
-            <button className="btn" onClick={logout} disabled={authBusy}>
-              خروج
-            </button>
+          <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+            <Link href="/admin" className="btn">لوحة الأدمن</Link>
+            <button className="btn" onClick={logout} disabled={authBusy}>خروج</button>
           </div>
-        </div>
-
-        {authErr ? (
-          <div className="card" style={{ marginTop: 12, padding: 12, borderColor: 'rgba(220,38,38,.22)', background: 'rgba(220,38,38,.06)', fontWeight: 900 }}>
-            {authErr}
-          </div>
-        ) : null}
-
-        <div className="row" style={{ gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
-          <button className={tab === 'create' ? 'btn btnPrimary' : 'btn'} type="button" onClick={() => setTab('create')}>
-            إضافة/تعديل
-          </button>
-          <button className={tab === 'manage' ? 'btn btnPrimary' : 'btn'} type="button" onClick={() => setTab('manage')}>
-            إدارة العروض
-          </button>
         </div>
       </section>
 
-      {tab === 'create' ? (
-        <CreateEditForm
-          editingId={editingId}
-          form={form}
-          setForm={setForm}
-          onSave={saveListing}
-          onReset={resetForm}
-          busy={saving}
-          createdId={createdId}
-          uploader={uploader}
-        />
-      ) : (
-        <ManageListings
-          list={list}
-          loadingList={loadingList}
-          actionBusyId={actionBusyId}
-          onLoad={loadList}
-          onDelete={deleteListing}
-          onEdit={editListing}
-        />
-      )}
+      <CreateListingForm
+        form={form}
+        setForm={setForm}
+        onSave={saveListing}
+        onReset={resetForm}
+        busy={saving}
+        createdId={createdId}
+        uploader={uploader}
+        saveErr={authErr}
+      />
     </div>
   );
 }
