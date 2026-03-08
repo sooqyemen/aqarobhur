@@ -42,9 +42,9 @@ export default function ChipsRow({ value, options = [], onChange, disabled = fal
                   ? '1px solid rgba(214,179,91,0.55)'
                   : '1px solid var(--border)',
                 background: active
-                  ? 'rgba(214,179,91,0.12)'
-                  : 'rgba(255,255,255,0.04)',
-                color: active ? '#f6f0df' : 'var(--text)',
+                  ? 'rgba(214,179,91,0.22)'
+                  : '#ffffff',
+                color: active ? '#1f2937' : 'var(--text)',
                 padding: '8px 12px',
                 borderRadius: 999,
                 fontWeight: 900,
@@ -52,6 +52,7 @@ export default function ChipsRow({ value, options = [], onChange, disabled = fal
                 transition: 'transform 120ms ease, background 120ms ease, border-color 120ms ease',
                 lineHeight: 1.2,
                 fontSize: 14,
+                boxShadow: active ? '0 1px 4px rgba(0,0,0,0.06)' : 'none',
               }}
               title={opt.label}
               aria-pressed={active ? 'true' : 'false'}
