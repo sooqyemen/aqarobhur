@@ -27,7 +27,8 @@ export default function Header() {
       { href: '/map', label: 'الخريطة' },
       { href: '/neighborhoods', label: 'الأحياء' },
       { href: '/request', label: 'أرسل طلبك' },
-      { href: '/account', label: 'الحساب' },
+      { href: '/add', label: 'إضافة إعلان', kind: 'primary' },
+      { href: '/account', label: 'تسجيل / دخول' },
     ],
     []
   );
@@ -96,6 +97,7 @@ export default function Header() {
 
   function isActive(href) {
     if (href === '/') return pathname === '/';
+    if (href === '/account') return pathname === '/account' || pathname?.startsWith('/admin');
     return pathname?.startsWith(href);
   }
 
@@ -171,7 +173,7 @@ export default function Header() {
               <Link
                 key={link.href}
                 href={link.href}
-                className={`navLink ${isActive(link.href) ? 'active' : ''}`}
+                className={`navLink ${link.kind === 'primary' ? 'navLinkPrimary' : ''} ${isActive(link.href) ? 'active' : ''}`}
               >
                 {link.label}
               </Link>
@@ -200,7 +202,12 @@ export default function Header() {
 
             <div className="drawerLinks">
               {links.map((l) => (
-                <Link key={l.href} href={l.href} className="drawerLink" onClick={() => setMenuOpen(false)}>
+                <Link
+                  key={l.href}
+                  href={l.href}
+                  className={`drawerLink ${l.kind === 'primary' ? 'drawerLinkPrimary' : ''}`}
+                  onClick={() => setMenuOpen(false)}
+                >
                   {l.label}
                 </Link>
               ))}
