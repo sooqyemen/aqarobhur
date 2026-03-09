@@ -295,19 +295,19 @@ textarea:focus {
 }
 
 /* =========================================
-   Header (منقول من Header.jsx لتقليل فلاش النصوص)
+   Header
 ========================================= */
 .hdr {
   position: sticky;
   top: 0;
   z-index: 50;
-  background: rgba(248, 250, 252, 0.85);
+  background: rgba(248, 250, 252, 0.88);
   backdrop-filter: blur(10px);
   border-bottom: 1px solid var(--border);
 }
 
 .hdr.scrolled {
-  background: rgba(248, 250, 252, 0.95);
+  background: rgba(248, 250, 252, 0.96);
 }
 
 .hdrInner {
@@ -323,8 +323,7 @@ textarea:focus {
 .hdr .menuBtn {
   display: none;
   border: 1px solid rgba(15, 23, 42, 0.12);
-  background: rgba(255, 255, 255, 0.65);
-  backdrop-filter: blur(10px);
+  background: rgba(255, 255, 255, 0.72);
   color: #0f172a;
   padding: 10px 14px;
   border-radius: 14px;
@@ -347,8 +346,7 @@ textarea:focus {
   flex: 0 0 auto;
   border-radius: 14px;
   border: 1px solid rgba(15, 23, 42, 0.12);
-  background: rgba(255, 255, 255, 0.7);
-  backdrop-filter: blur(10px);
+  background: rgba(255, 255, 255, 0.76);
   object-fit: contain;
   object-position: center;
 }
@@ -370,8 +368,7 @@ textarea:focus {
   justify-content: center;
   border-radius: 14px;
   border: 1px solid rgba(15, 23, 42, 0.12);
-  background: rgba(255, 255, 255, 0.7);
-  backdrop-filter: blur(10px);
+  background: rgba(255, 255, 255, 0.76);
   color: #0f172a;
   font-weight: 950;
   line-height: 1;
@@ -418,11 +415,11 @@ textarea:focus {
 }
 
 .navDesktop {
-  flex: 1 1 100%;
+  flex: 1 1 auto;
   display: flex;
   align-items: center;
   gap: 10px;
-  padding-top: 4px;
+  min-width: 0;
   overflow-x: auto;
   white-space: nowrap;
   -webkit-overflow-scrolling: touch;
@@ -441,28 +438,88 @@ textarea:focus {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  height: 38px;
-  padding: 0 14px;
+  height: 40px;
+  padding: 0 16px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.62);
+  background: #ffffff;
   border: 1px solid rgba(15, 23, 42, 0.12);
-  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.08);
-  backdrop-filter: blur(12px);
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.05);
   transition: transform 120ms ease, background 120ms ease, border-color 120ms ease;
+  flex: 0 0 auto;
 }
 
 .navLink:hover {
-  background: rgba(255, 255, 255, 0.78);
-  border-color: rgba(15, 23, 42, 0.16);
+  background: #f8fafc;
+  border-color: rgba(15, 23, 42, 0.18);
   transform: translateY(-1px);
 }
 
 .navLink.active {
-  background: rgba(255, 255, 255, 0.92);
+  background: rgba(214, 179, 91, 0.18);
   border-color: rgba(214, 179, 91, 0.55);
-  box-shadow:
-    0 10px 26px rgba(214, 179, 91, 0.14),
-    0 6px 18px rgba(15, 23, 42, 0.08);
+  color: #1f2937;
+  box-shadow: 0 8px 20px rgba(214, 179, 91, 0.14);
+}
+
+.navActions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+}
+
+.navLinkGhost {
+  text-decoration: none !important;
+  color: #0f172a;
+  font-weight: 900;
+  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 40px;
+  padding: 0 16px;
+  border-radius: 999px;
+  background: #ffffff;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.05);
+  transition: transform 120ms ease, background 120ms ease, border-color 120ms ease;
+  white-space: nowrap;
+}
+
+.navLinkGhost:hover {
+  background: #f8fafc;
+  border-color: rgba(15, 23, 42, 0.18);
+  transform: translateY(-1px);
+}
+
+.navLinkGhost.active {
+  background: rgba(214, 179, 91, 0.16);
+  border-color: rgba(214, 179, 91, 0.55);
+  color: #1f2937;
+}
+
+.navLinkPrimary {
+  text-decoration: none !important;
+  color: #1f2937;
+  font-weight: 950;
+  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 40px;
+  padding: 0 18px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--primary), var(--primary2));
+  border: 1px solid rgba(214, 179, 91, 0.45);
+  box-shadow: 0 10px 22px rgba(214, 179, 91, 0.2);
+  transition: transform 120ms ease, filter 120ms ease, box-shadow 120ms ease;
+  white-space: nowrap;
+}
+
+.navLinkPrimary:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.02);
+  box-shadow: 0 14px 28px rgba(214, 179, 91, 0.24);
 }
 
 .drawerRoot {
@@ -519,58 +576,97 @@ textarea:focus {
 }
 
 .drawerLinks {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 10px;
-  margin-top: 6px;
+  margin-top: 8px;
+}
+
+.drawerLink,
+.drawerAction,
+.drawerActionPrimary {
+  text-decoration: none !important;
+  min-height: 44px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  font-weight: 900;
 }
 
 .drawerLink {
-  text-decoration: none !important;
-  padding: 12px 12px;
-  border-radius: 14px;
-  border: 1px solid var(--border);
-  background: #fff;
-  font-weight: 900;
   color: #0f172a;
+  background: #fff;
+  border: 1px solid var(--border);
 }
 
-.drawerLink:hover {
-  border-color: var(--border2);
-  background: #f8fafc;
+.drawerAction {
+  color: #0f172a;
+  background: #fff;
+  border: 1px solid var(--border);
+}
+
+.drawerActionPrimary {
+  color: #1f2937;
+  background: linear-gradient(135deg, var(--primary), var(--primary2));
+  border: 1px solid rgba(214, 179, 91, 0.45);
 }
 
 .drawerHint {
-  margin-top: auto;
-  padding-top: 12px;
+  margin-top: 14px;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
 }
 
 @media (max-width: 900px) {
-  .navDesktop {
-    display: none;
-  }
-
-  .hdr .menuBtn {
-    display: inline-flex;
-  }
-
-  .hdr .search {
-    flex: 1 1 100%;
-    min-width: 0;
-  }
-}
-
-@media (max-width: 768px) {
   .hdrInner {
     gap: 10px;
   }
 
-  .hdr .brandText .sub {
+  .hdr .menuBtn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .hdr .search {
+    order: 3;
+    flex: 1 1 100%;
+  }
+
+  .navDesktop,
+  .navActions {
     display: none;
   }
 }
 
+@media (max-width: 640px) {
+  .hdrInner {
+    width: min(100%, calc(100% - 20px));
+    padding: 10px 0;
+  }
+
+  .hdr .brandText .title {
+    font-size: 15px;
+  }
+
+  .hdr .brandText .sub {
+    font-size: 12px;
+  }
+
+  .hdr .search {
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .hdr .search .input {
+    min-width: 0;
+  }
+
+  .hdr .search .btn {
+    flex: 0 0 auto;
+  }
+}
 /* =========================================
    شريط الأحياء في الرئيسية
 ========================================= */
