@@ -28,6 +28,17 @@ export default function Footer() {
                 <span className="logoSubtitle">شمال جدة</span>
               </div>
             </div>
+
+            <p
+              style={{
+                margin: '12px 0 0',
+                color: 'var(--muted)',
+                lineHeight: 1.9,
+                fontSize: 14,
+              }}
+            >
+              عقارات أبحر الشمالية | شمال جدة | أراضي للبيع | شقق للإيجار | فلل للبيع والإيجار
+            </p>
           </div>
 
           <div className="contactRow">
