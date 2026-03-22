@@ -40,6 +40,11 @@ function normalizeDealType(v) {
   return '';
 }
 
+function normalizeMapType(v) {
+  if (v === 'hybrid' || v === 'satellite' || v === 'roadmap') return v;
+  return 'hybrid';
+}
+
 /** Escape للنص داخل SVG */
 function escapeXml(s) {
   return String(s || '')
@@ -58,8 +63,7 @@ function escapeXml(s) {
 function buildPriceBadgeIcon(maps, priceText) {
   const text = String(priceText || '?');
 
-  // تقدير عرض مناسب حسب طول النص (تقريب)
-  const charW = 8; // متوسط عرض الحرف/الرقم
+  const charW = 8;
   const padX = 12;
   const h = 30;
   const minW = 56;
@@ -86,7 +90,6 @@ function buildPriceBadgeIcon(maps, priceText) {
   return {
     url,
     scaledSize: new maps.Size(w, h),
-    // نخلي نقطة المكان عند أسفل المنتصف (الـ badge يكون فوق الإحداثية)
     anchor: new maps.Point(Math.round(w / 2), h),
   };
 }
@@ -134,6 +137,7 @@ export default function MapClient() {
 
   const [neighborhood, setNeighborhood] = useState(searchParams.get('neighborhood') || '');
   const [dealType, setDealType] = useState(normalizeDealType(searchParams.get('dealType') || ''));
+  const [mapType, setMapType] = useState(normalizeMapType(searchParams.get('view') || 'hybrid'));
 
   const [mapReady, setMapReady] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -142,13 +146,14 @@ export default function MapClient() {
   const mapRef = useRef(null);
   const markersRef = useRef([]);
   const infoRef = useRef(null);
+  const lastBoundsRef = useRef(null);
 
   const prevHtmlOverflowRef = useRef('');
   const prevBodyOverflowRef = useRef('');
 
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
+  const defaultCenter = useMemo(() => ({ lat: 21.7628, lng: 39.0994 }), []);
 
-  // فلترة
   const filters = useMemo(() => {
     return {
       neighborhood: neighborhood || '',
@@ -168,7 +173,6 @@ export default function MapClient() {
     { value: 'rent', label: 'إيجار' },
   ];
 
-  // ✅ نقل تنسيقات style jsx إلى inline (لتقليل فلاش/تأخر التنسيق)
   const topBarStyle = {
     marginTop: 12,
     background: '#ffffff',
@@ -203,6 +207,22 @@ export default function MapClient() {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
+  };
+
+  const actionBtnBase = {
+    border: '1px solid var(--border)',
+    borderRadius: 12,
+    padding: '8px 12px',
+    background: '#f8fafc',
+    color: 'var(--text)',
+    fontWeight: 900,
+    cursor: 'pointer',
+    whiteSpace: 'nowrap',
+  };
+
+  const actionBtnActive = {
+    background: 'linear-gradient(135deg, var(--primary), var(--primary2))',
+    borderColor: 'rgba(214, 179, 91, 0.45)',
   };
 
   const barCenterStyle = { flex: 1, minWidth: 0 };
@@ -273,12 +293,37 @@ export default function MapClient() {
     }
   }
 
+  function fitMapToCurrentResults() {
+    const map = mapRef.current;
+    if (!map || !window.google?.maps) return;
+
+    if (lastBoundsRef.current) {
+      try {
+        map.fitBounds(lastBoundsRef.current, 60);
+        return;
+      } catch {}
+    }
+
+    try {
+      map.setCenter(defaultCenter);
+      map.setZoom(12);
+    } catch {}
+  }
+
+  function resetToAbhur() {
+    const map = mapRef.current;
+    if (!map) return;
+    try {
+      map.setCenter(defaultCenter);
+      map.setZoom(12);
+    } catch {}
+  }
+
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters]);
 
-  // تهيئة الخريطة مع إزالة جميع عناصر التحكم الافتراضية
   useEffect(() => {
     let alive = true;
 
@@ -291,12 +336,10 @@ export default function MapClient() {
         const mapDiv = mapDivRef.current;
         if (!mapDiv) return;
 
-        // افتراضي: شمال جدة (أبحر)
-        const center = { lat: 21.7628, lng: 39.0994 };
-
         const map = new maps.Map(mapDiv, {
-          center,
+          center: defaultCenter,
           zoom: 12,
+          mapTypeId: mapType,
           mapTypeControl: false,
           fullscreenControl: false,
           streetViewControl: false,
@@ -311,11 +354,10 @@ export default function MapClient() {
 
         setMapReady(true);
 
-        // تحديث المقاس بعد وقت قصير لتفادي مشكلة التحميل/الحجم
         setTimeout(() => {
           try {
             maps.event.trigger(map, 'resize');
-            map.setCenter(center);
+            map.setCenter(defaultCenter);
           } catch {}
         }, 250);
       } catch (e) {
@@ -330,9 +372,15 @@ export default function MapClient() {
     return () => {
       alive = false;
     };
-  }, [apiKey]);
+  }, [apiKey, defaultCenter]);
 
-  // تحديث الماركرز كلما تغيّرت النتائج
+  useEffect(() => {
+    if (!mapRef.current) return;
+    try {
+      mapRef.current.setMapTypeId(mapType);
+    } catch {}
+  }, [mapType]);
+
   useEffect(() => {
     if (!mapReady) return;
     if (!mapRef.current) return;
@@ -341,15 +389,14 @@ export default function MapClient() {
     const maps = window.google.maps;
     const map = mapRef.current;
 
-    // إزالة الماركرز السابقة
     markersRef.current.forEach((m) => {
       try {
         m.setMap(null);
       } catch {}
     });
     markersRef.current = [];
+    lastBoundsRef.current = null;
 
-    // إضافة ماركرز
     const bounds = new maps.LatLngBounds();
 
     mapItems.forEach((it) => {
@@ -361,8 +408,6 @@ export default function MapClient() {
       bounds.extend(pos);
 
       const priceText = formatPrice(it.price);
-
-      // ✅ مستطيل أخضر فيه السعر
       const icon = buildPriceBadgeIcon(maps, priceText);
 
       const marker = new maps.Marker({
@@ -370,7 +415,6 @@ export default function MapClient() {
         map,
         title: it.title || 'عرض',
         icon,
-        // هذا يساعد أحياناً على وضوح SVG على بعض المتصفحات
         optimized: true,
       });
 
@@ -403,14 +447,16 @@ export default function MapClient() {
 
     if (mapItems.length) {
       try {
+        lastBoundsRef.current = bounds;
         map.fitBounds(bounds, 60);
       } catch {}
+    } else {
+      resetToAbhur();
     }
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mapReady, mapItems]);
 
-  // قفل تمرير الصفحة عند ملء الشاشة + إضافة كلاس
   useEffect(() => {
     if (typeof document === 'undefined') return;
 
@@ -428,6 +474,7 @@ export default function MapClient() {
       setTimeout(() => {
         try {
           window.google?.maps?.event?.trigger(mapRef.current, 'resize');
+          fitMapToCurrentResults();
         } catch {}
       }, 200);
     } else {
@@ -438,6 +485,7 @@ export default function MapClient() {
       setTimeout(() => {
         try {
           window.google?.maps?.event?.trigger(mapRef.current, 'resize');
+          fitMapToCurrentResults();
         } catch {}
       }, 200);
     }
@@ -455,7 +503,7 @@ export default function MapClient() {
         الخريطة
       </h1>
       <div className="muted" style={{ marginTop: 6 }}>
-        اختر الحي أو نوع الصفقة، ثم استعرض العروض على الخريطة.
+        اختر الحي أو نوع الصفقة، ثم استعرض العروض على الخريطة. تم إرجاع وضع القمر الصناعي مع أزرار واضحة للتبديل.
       </div>
 
       {loading ? (
@@ -483,6 +531,28 @@ export default function MapClient() {
           <ChipsRow value={neighborhood} options={neighborhoodOptions} onChange={setNeighborhood} />
           <div style={{ marginTop: 8 }}>
             <ChipsRow value={dealType} options={dealTypeOptions} onChange={setDealType} />
+          </div>
+          <div style={{ marginTop: 8, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              style={{ ...actionBtnBase, ...(mapType === 'roadmap' ? actionBtnActive : null) }}
+              onClick={() => setMapType('roadmap')}
+            >
+              عادي
+            </button>
+            <button
+              type="button"
+              style={{ ...actionBtnBase, ...(mapType === 'hybrid' ? actionBtnActive : null) }}
+              onClick={() => setMapType('hybrid')}
+            >
+              قمر صناعي
+            </button>
+            <button type="button" style={actionBtnBase} onClick={fitMapToCurrentResults}>
+              تركيز على النتائج
+            </button>
+            <button type="button" style={actionBtnBase} onClick={resetToAbhur}>
+              الرجوع إلى أبحر
+            </button>
           </div>
         </div>
 
