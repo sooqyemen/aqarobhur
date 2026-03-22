@@ -3,6 +3,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import { onAuthStateChanged } from 'firebase/auth';
+
+import { getFirebase } from '@/lib/firebaseClient';
+import { isAdminUser } from '@/lib/admin';
 
 const LOGO_SOURCES = ['/logo-mark.svg?v=1', '/logo-icon-256.png?v=1', '/logo.svg?v=1'];
 
@@ -15,6 +19,8 @@ export default function Header() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [logoIndex, setLogoIndex] = useState(0);
   const [logoDead, setLogoDead] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [hasUser, setHasUser] = useState(false);
 
   const prevBodyOverflowRef = useRef('');
   const prevHtmlOverflowRef = useRef('');
@@ -30,13 +36,34 @@ export default function Header() {
     []
   );
 
-  const actionLinks = useMemo(
-    () => [
-      { href: '/add', label: 'إضافة إعلان', kind: 'primary' },
-      { href: '/account', label: 'تسجيل / دخول', kind: 'secondary' },
-    ],
-    []
-  );
+  useEffect(() => {
+    try {
+      const { auth } = getFirebase();
+      const unsub = onAuthStateChanged(auth, (user) => {
+        setHasUser(!!user);
+        setIsAdmin(!!user && isAdminUser(user));
+      });
+      return () => unsub();
+    } catch {
+      setHasUser(false);
+      setIsAdmin(false);
+      return undefined;
+    }
+  }, []);
+
+  const actionLinks = useMemo(() => {
+    if (isAdmin) {
+      return [{ href: '/admin', label: 'لوحة الأدمن', kind: 'primary' }];
+    }
+
+    return [
+      {
+        href: '/account',
+        label: hasUser ? 'الحساب' : 'تسجيل / دخول',
+        kind: 'secondary',
+      },
+    ];
+  }, [hasUser, isAdmin]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -101,7 +128,8 @@ export default function Header() {
 
   function isActive(href) {
     if (href === '/') return pathname === '/';
-    if (href === '/account') return pathname === '/account' || pathname === '/admin';
+    if (href === '/account') return pathname === '/account';
+    if (href === '/admin') return pathname === '/admin' || pathname?.startsWith('/admin/');
     return pathname?.startsWith(href);
   }
 

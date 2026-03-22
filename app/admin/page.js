@@ -994,7 +994,7 @@ export default function AdminPage() {
   const [authBusy, setAuthBusy] = useState(false);
   const [authErr, setAuthErr] = useState('');
 
-  const [tab, setTab] = useState('create'); // create | manage
+  const [tab, setTab] = useState('manage'); // create | manage
 
   const [editingId, setEditingId] = useState('');
   const [createdId, setCreatedId] = useState('');
@@ -1319,7 +1319,15 @@ export default function AdminPage() {
           </div>
 
           <div className="row" style={{ gap: 10, flexWrap: 'wrap' }}>
+            <Link href="/admin/new" className="btn btnPrimary">إضافة إعلان جديد</Link>
             <button className="btn" onClick={logout} disabled={authBusy}>خروج</button>
+          </div>
+        </div>
+
+        <div className="card" style={{ marginTop: 12, padding: 12, background: 'rgba(214,179,91,.08)', borderColor: 'rgba(214,179,91,.24)' }}>
+          <div style={{ fontWeight: 900 }}>تم فصل نموذج الإضافة عن لوحة الإدارة.</div>
+          <div className="muted" style={{ marginTop: 6, fontSize: 12 }}>
+            استخدم زر "إضافة إعلان جديد" للنشر الجديد، وهذه الصفحة أصبحت مخصصة أكثر لإدارة العروض الحالية.
           </div>
         </div>
 
@@ -1331,7 +1339,7 @@ export default function AdminPage() {
 
         <div className="row" style={{ gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
           <button className={tab === 'create' ? 'btn btnPrimary' : 'btn'} type="button" onClick={() => setTab('create')}>
-            إضافة/تعديل
+            النموذج القديم
           </button>
           <button className={tab === 'manage' ? 'btn btnPrimary' : 'btn'} type="button" onClick={() => setTab('manage')}>
             إدارة العروض
