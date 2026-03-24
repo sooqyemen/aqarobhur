@@ -1,113 +1,34 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
-import Link from 'next/link';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 
 import { buildWhatsAppLink } from '@/components/WhatsAppBar';
 import { fetchListingById } from '@/lib/listings';
-import { formatPriceSAR } from '@/lib/format';
+import { formatPriceSAR, statusBadge } from '@/lib/format';
 
-const MAP_SCRIPT_ID = 'aqarobhur-google-maps';
-
-function getStatusLabel(status, dealType) {
-  const s = String(status || 'available');
-  if (s === 'reserved') return 'محجوز';
-  if (s === 'sold') return dealType === 'rent' ? 'مؤجر' : 'مباع';
-  if (s === 'canceled' || s === 'hidden' || s === 'inactive') return 'غير متاح';
-  return 'متاح';
-}
-
-function getStatusStyles(status) {
-  const s = String(status || 'available');
-  if (s === 'reserved') {
-    return {
-      background: 'rgba(217, 119, 6, 0.10)',
-      color: '#92400e',
-      border: '1px solid rgba(217, 119, 6, 0.18)',
-    };
-  }
-  if (s === 'sold') {
-    return {
-      background: 'rgba(220, 38, 38, 0.08)',
-      color: '#b91c1c',
-      border: '1px solid rgba(220, 38, 38, 0.15)',
-    };
-  }
-  if (s === 'canceled' || s === 'hidden' || s === 'inactive') {
-    return {
-      background: 'rgba(71, 85, 105, 0.08)',
-      color: '#334155',
-      border: '1px solid rgba(71, 85, 105, 0.14)',
-    };
-  }
-  return {
-    background: 'rgba(22, 163, 74, 0.08)',
-    color: '#166534',
-    border: '1px solid rgba(22, 163, 74, 0.15)',
-  };
-}
-
-function getPriceSuffix(dealType) {
-  return dealType === 'rent' ? 'سنوي' : '';
-}
-
-function normalizeImages(images) {
-  if (!Array.isArray(images)) return [];
-  return images.filter(Boolean);
-}
-
-function loadGoogleMaps(apiKey) {
-  if (typeof window === 'undefined') return Promise.reject(new Error('window is undefined'));
-  if (!apiKey) return Promise.reject(new Error('missing-api-key'));
-  if (window.google?.maps) return Promise.resolve(window.google.maps);
-  if (window.__aqarobhurMapsPromise) return window.__aqarobhurMapsPromise;
-
-  window.__aqarobhurMapsPromise = new Promise((resolve, reject) => {
-    const existing = document.getElementById(MAP_SCRIPT_ID);
-
-    const onReady = () => {
-      if (window.google?.maps) resolve(window.google.maps);
-      else reject(new Error('google-maps-not-ready'));
-    };
-
-    if (existing) {
-      existing.addEventListener('load', onReady, { once: true });
-      existing.addEventListener('error', () => reject(new Error('google-maps-load-error')), { once: true });
-      return;
-    }
-
-    const script = document.createElement('script');
-    script.id = MAP_SCRIPT_ID;
-    script.async = true;
-    script.defer = true;
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}`;
-    script.onload = onReady;
-    script.onerror = () => reject(new Error('google-maps-load-error'));
-    document.head.appendChild(script);
-  });
-
-  return window.__aqarobhurMapsPromise;
-}
-
-function InfoCell({ label, value }) {
+function InfoItem({ label, value }) {
+  if (value === undefined || value === null || value === '') return null;
   return (
-    <div
-      style={{
-        border: '1px solid var(--border)',
-        borderRadius: 16,
-        padding: '14px 14px 12px',
-        background: '#fff',
-      }}
-    >
-      <div style={{ color: 'var(--muted)', fontSize: 13, marginBottom: 6 }}>{label}</div>
-      <div style={{ fontWeight: 900, fontSize: 15, lineHeight: 1.5 }}>{value || '—'}</div>
+    <div className="infoItem">
+      <div className="infoLabel">{label}</div>
+      <div className="infoValue">{value}</div>
     </div>
   );
 }
 
-export default function ListingDetailsPage({ params }) {
+function normalizeStatusLabel(item) {
+  const status = String(item?.status || 'available');
+  const isRent = String(item?.dealType || '').toLowerCase() === 'rent';
+  if (status === 'sold') return isRent ? 'مؤجر' : 'مباع';
+  if (status === 'reserved') return 'محجوز';
+  if (status === 'canceled' || status === 'hidden') return 'غير متاح';
+  return 'متاح';
+}
+
+export default function ListingDetails({ params }) {
   const routeParams = useParams();
+
   const raw = params?.id ?? routeParams?.id;
   const rawId = Array.isArray(raw) ? raw[0] : raw;
 
@@ -122,20 +43,15 @@ export default function ListingDetailsPage({ params }) {
   const [item, setItem] = useState(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
-  const [selectedImage, setSelectedImage] = useState('');
-  const [mapMode, setMapMode] = useState('roadmap');
-  const [mapErr, setMapErr] = useState('');
-  const mapRef = useRef(null);
-  const mapInstanceRef = useRef(null);
-  const markerRef = useRef(null);
+  const [activeImage, setActiveImage] = useState(0);
 
   useEffect(() => {
-    let active = true;
+    let live = true;
 
     if (rawId === undefined) {
       setLoading(false);
       return () => {
-        active = false;
+        live = false;
       };
     }
 
@@ -145,7 +61,7 @@ export default function ListingDetailsPage({ params }) {
         setErr('');
 
         if (!id) {
-          if (active) {
+          if (live) {
             setItem(null);
             setErr('رابط العرض غير صحيح.');
           }
@@ -153,461 +69,546 @@ export default function ListingDetailsPage({ params }) {
         }
 
         const data = await fetchListingById(id);
-        if (!active) return;
-
-        if (!data) {
-          setItem(null);
-          setSelectedImage('');
-          return;
+        if (live) {
+          setItem(data || null);
+          setActiveImage(0);
         }
-
-        const nextImages = normalizeImages(data.images);
-        setItem({ ...data, images: nextImages });
-        setSelectedImage(nextImages[0] || '');
-      } catch (error) {
-        if (!active) return;
-        const msg = String(error?.message || '');
-        if (msg.includes('Missing or insufficient permissions') || error?.code === 'permission-denied') {
-          setErr('لا توجد صلاحية لعرض هذا الإعلان الآن.');
-        } else {
-          setErr(msg || 'تعذر تحميل الإعلان حالياً.');
+      } catch (e) {
+        const msg = String(e?.message || '');
+        if (live) {
+          setItem(null);
+          if (msg.includes('Missing or insufficient permissions') || e?.code === 'permission-denied') {
+            setErr('لا توجد صلاحية لعرض هذا العرض الآن.');
+          } else {
+            setErr(msg || 'تعذر تحميل العرض حالياً.');
+          }
         }
       } finally {
-        if (active) setLoading(false);
+        if (live) setLoading(false);
       }
     })();
 
     return () => {
-      active = false;
+      live = false;
     };
-  }, [id, rawId]);
+  }, [rawId, id]);
 
-  useEffect(() => {
-    const images = normalizeImages(item?.images);
-    if (!images.length) {
-      setSelectedImage('');
-      return;
-    }
-    if (!selectedImage || !images.includes(selectedImage)) {
-      setSelectedImage(images[0]);
-    }
-  }, [item, selectedImage]);
+  const images = useMemo(() => {
+    if (!Array.isArray(item?.images)) return [];
+    return item.images.filter(Boolean);
+  }, [item]);
 
-  useEffect(() => {
-    let cancelled = false;
+  const selectedImage = images[activeImage] || images[0] || '';
 
-    async function initMap() {
-      if (!item) return;
-      if (!mapRef.current) return;
+  const whatsappHref = useMemo(() => {
+    const phone = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || '';
+    const text = item
+      ? [
+          'السلام عليكم، أبغى استفسار عن العرض:',
+          item.title || '',
+          `الحي: ${item.neighborhood || '—'}`,
+          `المخطط: ${item.plan || '—'}`,
+          `الجزء: ${item.part || '—'}`,
+          `السعر: ${formatPriceSAR(item.price)}`,
+        ].join('\n')
+      : 'السلام عليكم، أبغى استفسار عن عرض في عقار أبحر.';
+    return buildWhatsAppLink({ phone, text });
+  }, [item]);
 
-      const lat = Number(item.lat);
-      const lng = Number(item.lng);
-      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
-
-      const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
-      if (!apiKey) {
-        setMapErr('مفتاح خرائط Google غير مضاف في متغيرات البيئة.');
-        return;
-      }
-
-      try {
-        setMapErr('');
-        const maps = await loadGoogleMaps(apiKey);
-        if (cancelled || !mapRef.current) return;
-
-        const center = { lat, lng };
-
-        if (!mapInstanceRef.current) {
-          mapInstanceRef.current = new maps.Map(mapRef.current, {
-            center,
-            zoom: 15,
-            mapTypeId: mapMode,
-            fullscreenControl: true,
-            streetViewControl: false,
-            mapTypeControl: false,
-            clickableIcons: false,
-            gestureHandling: 'greedy',
-          });
-
-          markerRef.current = new maps.Marker({
-            position: center,
-            map: mapInstanceRef.current,
-            title: item.title || 'موقع العقار',
-          });
-        } else {
-          mapInstanceRef.current.setCenter(center);
-          mapInstanceRef.current.setMapTypeId(mapMode);
-          markerRef.current?.setPosition(center);
-        }
-      } catch (error) {
-        if (!cancelled) {
-          setMapErr('تعذر تحميل الخريطة داخل صفحة التفاصيل.');
-        }
-      }
-    }
-
-    initMap();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [item, mapMode]);
-
-  const images = useMemo(() => normalizeImages(item?.images), [item]);
-  const selected = selectedImage || images[0] || '';
-  const statusLabel = getStatusLabel(item?.status, item?.dealType);
-  const statusStyles = getStatusStyles(item?.status);
-  const priceSuffix = getPriceSuffix(item?.dealType);
-  const mapLink = useMemo(() => {
+  const mapHref = useMemo(() => {
     const lat = Number(item?.lat);
     const lng = Number(item?.lng);
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) return '';
     return `https://www.google.com/maps?q=${lat},${lng}`;
   }, [item]);
 
-  const whatsappHref = useMemo(() => {
-    const phone = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || '';
-    const text = item
-      ? [
-          'السلام عليكم، أرغب بالاستفسار عن هذا العرض:',
-          item.title || 'عرض عقاري',
-          `الحي: ${item.neighborhood || '—'}`,
-          `المخطط: ${item.plan || '—'}`,
-          `الجزء: ${item.part || '—'}`,
-          `السعر: ${formatPriceSAR(item.price)}`,
-        ].join('\n')
-      : 'السلام عليكم، أرغب بالاستفسار عن أحد العروض.';
-    return buildWhatsAppLink({ phone, text });
-  }, [item]);
-
-  const topMeta = [item?.neighborhood, item?.plan, item?.part].filter(Boolean).join(' • ');
+  const areaLabel = item?.area ? `${item.area} م²` : '';
+  const dealTypeLabel =
+    String(item?.dealType || '').toLowerCase() === 'rent'
+      ? 'إيجار'
+      : String(item?.dealType || '').toLowerCase() === 'sale'
+        ? 'بيع'
+        : '';
 
   return (
-    <div className="container" style={{ paddingTop: 10, paddingBottom: 22 }}>
+    <div className="container listingPageWrap">
       {loading ? (
-        <div className="card" style={{ padding: 18 }}>جاري تحميل تفاصيل الإعلان...</div>
+        <div className="card stateCard">جاري التحميل…</div>
       ) : err ? (
-        <div className="card" style={{ padding: 18 }}>{err}</div>
+        <div className="card stateCard">{err}</div>
       ) : !item ? (
-        <div className="card" style={{ padding: 18 }}>الإعلان غير موجود.</div>
+        <div className="card stateCard">العرض غير موجود.</div>
       ) : (
-        <div style={{ display: 'grid', gap: 16 }}>
-          <div
-            className="card"
-            style={{
-              padding: 18,
-              display: 'grid',
-              gap: 14,
-              background: 'linear-gradient(180deg, #ffffff, #fffdf7)',
-            }}
-          >
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'flex-start',
-                gap: 14,
-                flexWrap: 'wrap',
-              }}
-            >
-              <div style={{ minWidth: 0, flex: '1 1 340px' }}>
-                <div style={{ color: 'var(--muted)', fontSize: 14, marginBottom: 8 }}>
-                  {topMeta || 'تفاصيل العقار'}
+        <>
+          <section className="heroCard card">
+            <div className="heroMain">
+              <div className="heroText">
+                <div className="topRow">
+                  <div className="statusWrap">
+                    {statusBadge(item.status)}
+                    <span className="statusText">{normalizeStatusLabel(item)}</span>
+                  </div>
+                  {dealTypeLabel ? <span className="dealBadge">{dealTypeLabel}</span> : null}
                 </div>
-                <h1
-                  style={{
-                    margin: 0,
-                    fontSize: 'clamp(24px, 4vw, 32px)',
-                    lineHeight: 1.3,
-                    fontWeight: 950,
-                  }}
-                >
-                  {item.title || 'عرض عقاري'}
-                </h1>
+
+                <h1 className="pageTitle">{item.title || 'عرض عقاري'}</h1>
+
+                <div className="locationLine">
+                  {[item.neighborhood, item.plan, item.part].filter(Boolean).join(' • ') || '—'}
+                </div>
+
+                <div className="priceBlock">{formatPriceSAR(item.price)}</div>
+
+                <div className="quickFacts">
+                  <InfoItem label="النوع" value={item.propertyType} />
+                  <InfoItem label="المساحة" value={areaLabel} />
+                  <InfoItem label="الحي" value={item.neighborhood} />
+                  <InfoItem label="المخطط" value={item.plan} />
+                </div>
               </div>
 
-              <span
-                style={{
-                  ...statusStyles,
-                  borderRadius: 999,
-                  padding: '8px 14px',
-                  fontWeight: 900,
-                  fontSize: 14,
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {statusLabel}
-              </span>
-            </div>
-
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'flex-end',
-                gap: 16,
-                flexWrap: 'wrap',
-              }}
-            >
-              <div>
-                <div style={{ color: 'var(--muted)', fontSize: 13, marginBottom: 6 }}>السعر المطلوب</div>
-                <div style={{ fontSize: 'clamp(28px, 4.8vw, 38px)', fontWeight: 950, lineHeight: 1.1 }}>
-                  {formatPriceSAR(item.price)}
-                </div>
-                {priceSuffix ? (
-                  <div style={{ color: 'var(--muted)', marginTop: 6, fontWeight: 800 }}>{priceSuffix}</div>
-                ) : null}
-              </div>
-
-              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                <a className="btn btnPrimary" href={whatsappHref} target="_blank" rel="noreferrer">
+              <div className="heroActions">
+                <a className="btn btnPrimary actionBtn" href={whatsappHref} target="_blank" rel="noreferrer">
                   تواصل واتساب
                 </a>
-                {mapLink ? (
-                  <a className="btn" href={mapLink} target="_blank" rel="noreferrer">
+                {mapHref ? (
+                  <a className="btn actionBtn" href={mapHref} target="_blank" rel="noreferrer">
                     فتح الموقع
                   </a>
                 ) : null}
               </div>
             </div>
-          </div>
+          </section>
 
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'minmax(0, 1.45fr) minmax(300px, 0.95fr)',
-              gap: 16,
-            }}
-          >
-            <div style={{ display: 'grid', gap: 16 }}>
-              <div className="card" style={{ padding: 14 }}>
-                <div
-                  style={{
-                    position: 'relative',
-                    width: '100%',
-                    minHeight: 320,
-                    borderRadius: 18,
-                    overflow: 'hidden',
-                    background: '#f8fafc',
-                    border: '1px solid var(--border)',
-                  }}
-                >
-                  {selected ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={selected}
-                      alt={item.title || 'صورة العقار'}
-                      style={{ width: '100%', height: '100%', minHeight: 320, objectFit: 'cover', display: 'block' }}
-                    />
-                  ) : (
-                    <div
-                      style={{
-                        minHeight: 320,
-                        display: 'grid',
-                        placeItems: 'center',
-                        color: 'var(--muted)',
-                        fontWeight: 800,
-                      }}
-                    >
-                      لا توجد صور لهذا العرض
-                    </div>
-                  )}
-                </div>
+          <section className="contentGrid">
+            <div className="mainCol">
+              <div className="card galleryCard">
+                {selectedImage ? (
+                  <div className="mainImageWrap">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img className="mainImage" src={selectedImage} alt={item.title || 'صورة العرض'} />
+                  </div>
+                ) : (
+                  <div className="emptyMedia">لا توجد صور لهذا العرض.</div>
+                )}
 
                 {images.length > 1 ? (
-                  <div
-                    style={{
-                      display: 'grid',
-                      gridTemplateColumns: 'repeat(auto-fit, minmax(90px, 1fr))',
-                      gap: 10,
-                      marginTop: 12,
-                    }}
-                  >
-                    {images.map((src, index) => {
-                      const active = src === selected;
-                      return (
-                        <button
-                          key={`${src}-${index}`}
-                          type="button"
-                          onClick={() => setSelectedImage(src)}
-                          style={{
-                            padding: 0,
-                            borderRadius: 14,
-                            overflow: 'hidden',
-                            border: active ? '2px solid rgba(214, 179, 91, 0.8)' : '1px solid var(--border)',
-                            background: '#fff',
-                            cursor: 'pointer',
-                          }}
-                        >
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={src}
-                            alt={`صورة ${index + 1}`}
-                            style={{ width: '100%', height: 82, objectFit: 'cover', display: 'block' }}
-                          />
-                        </button>
-                      );
-                    })}
+                  <div className="thumbsRow">
+                    {images.map((src, idx) => (
+                      <button
+                        type="button"
+                        key={`${src}-${idx}`}
+                        className={`thumbBtn ${idx === activeImage ? 'active' : ''}`}
+                        onClick={() => setActiveImage(idx)}
+                        aria-label={`عرض الصورة ${idx + 1}`}
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={src} alt={`صورة ${idx + 1}`} className="thumbImage" />
+                      </button>
+                    ))}
                   </div>
                 ) : null}
               </div>
 
-              <div className="card" style={{ padding: 18 }}>
-                <div style={{ fontSize: 18, fontWeight: 950, marginBottom: 14 }}>المعلومات الأساسية</div>
-                <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
-                    gap: 12,
-                  }}
-                >
-                  <InfoCell label="نوع العقار" value={item.propertyType || '—'} />
-                  <InfoCell label="نوع التعامل" value={item.dealType === 'rent' ? 'إيجار' : 'بيع'} />
-                  <InfoCell label="المساحة" value={item.area ? `${item.area} م²` : '—'} />
-                  <InfoCell label="الحي" value={item.neighborhood || '—'} />
-                  <InfoCell label="المخطط" value={item.plan || '—'} />
-                  <InfoCell label="الجزء" value={item.part || '—'} />
+              <div className="card sectionCard">
+                <h2 className="sectionHeading">تفاصيل الإعلان</h2>
+                <div className="detailsGrid">
+                  <InfoItem label="حالة العرض" value={normalizeStatusLabel(item)} />
+                  <InfoItem label="نوع الصفقة" value={dealTypeLabel} />
+                  <InfoItem label="نوع العقار" value={item.propertyType} />
+                  <InfoItem label="المساحة" value={areaLabel} />
+                  <InfoItem label="الحي" value={item.neighborhood} />
+                  <InfoItem label="المخطط" value={item.plan} />
+                  <InfoItem label="الجزء" value={item.part} />
+                  <InfoItem label="رقم العرض" value={item.id || id} />
                 </div>
               </div>
 
-              <div className="card" style={{ padding: 18 }}>
-                <div style={{ fontSize: 18, fontWeight: 950, marginBottom: 12 }}>وصف العقار</div>
-                <div style={{ lineHeight: 2, whiteSpace: 'pre-wrap', color: 'var(--text)' }}>
-                  {item.description || 'لا يوجد وصف مضاف لهذا الإعلان حتى الآن.'}
-                </div>
+              <div className="card sectionCard">
+                <h2 className="sectionHeading">وصف العقار</h2>
+                <div className="descriptionText">{item.description || 'لا يوجد وصف مضاف لهذا العرض.'}</div>
               </div>
             </div>
 
-            <div style={{ display: 'grid', gap: 16, alignContent: 'start' }}>
-              <div className="card" style={{ padding: 18 }}>
-                <div style={{ fontSize: 18, fontWeight: 950, marginBottom: 14 }}>ملخص سريع</div>
-                <div style={{ display: 'grid', gap: 12 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-                    <span className="muted">حالة العرض</span>
-                    <strong>{statusLabel}</strong>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-                    <span className="muted">السعر</span>
+            <aside className="sideCol">
+              <div className="card sideCard">
+                <h2 className="sideHeading">ملخص سريع</h2>
+                <div className="sideList">
+                  <div className="sideRow">
+                    <span>السعر</span>
                     <strong>{formatPriceSAR(item.price)}</strong>
                   </div>
-                  {priceSuffix ? (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-                      <span className="muted">آلية السعر</span>
-                      <strong>{priceSuffix}</strong>
+                  <div className="sideRow">
+                    <span>الحالة</span>
+                    <strong>{normalizeStatusLabel(item)}</strong>
+                  </div>
+                  {item.propertyType ? (
+                    <div className="sideRow">
+                      <span>النوع</span>
+                      <strong>{item.propertyType}</strong>
                     </div>
                   ) : null}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-                    <span className="muted">نوع العقار</span>
-                    <strong>{item.propertyType || '—'}</strong>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-                    <span className="muted">الموقع</span>
-                    <strong>{item.neighborhood || '—'}</strong>
-                  </div>
+                  {areaLabel ? (
+                    <div className="sideRow">
+                      <span>المساحة</span>
+                      <strong>{areaLabel}</strong>
+                    </div>
+                  ) : null}
+                  {item.neighborhood ? (
+                    <div className="sideRow">
+                      <span>الحي</span>
+                      <strong>{item.neighborhood}</strong>
+                    </div>
+                  ) : null}
                 </div>
 
-                <div style={{ display: 'grid', gap: 10, marginTop: 16 }}>
-                  <a className="btn btnPrimary" href={whatsappHref} target="_blank" rel="noreferrer">
-                    إرسال استفسار عبر واتساب
+                <div className="stickyActions">
+                  <a className="btn btnPrimary actionBtn" href={whatsappHref} target="_blank" rel="noreferrer">
+                    تواصل واتساب
                   </a>
-                  <Link className="btn" href="/listings">
-                    العودة إلى كل العروض
-                  </Link>
+                  {mapHref ? (
+                    <a className="btn actionBtn" href={mapHref} target="_blank" rel="noreferrer">
+                      فتح الموقع على الخريطة
+                    </a>
+                  ) : null}
                 </div>
               </div>
-
-              <div className="card" style={{ padding: 18 }}>
-                <div
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    gap: 10,
-                    marginBottom: 12,
-                    flexWrap: 'wrap',
-                  }}
-                >
-                  <div style={{ fontSize: 18, fontWeight: 950 }}>الموقع على الخريطة</div>
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                    <button
-                      type="button"
-                      className="btn"
-                      onClick={() => setMapMode('roadmap')}
-                      style={{ background: mapMode === 'roadmap' ? '#fff8e8' : '#fff' }}
-                    >
-                      عادي
-                    </button>
-                    <button
-                      type="button"
-                      className="btn"
-                      onClick={() => setMapMode('satellite')}
-                      style={{ background: mapMode === 'satellite' ? '#fff8e8' : '#fff' }}
-                    >
-                      قمر صناعي
-                    </button>
-                  </div>
-                </div>
-
-                {Number.isFinite(Number(item.lat)) && Number.isFinite(Number(item.lng)) ? (
-                  <>
-                    <div
-                      ref={mapRef}
-                      style={{
-                        height: 340,
-                        width: '100%',
-                        borderRadius: 18,
-                        overflow: 'hidden',
-                        border: '1px solid var(--border)',
-                        background: '#f8fafc',
-                      }}
-                    />
-                    {mapErr ? (
-                      <div className="muted" style={{ marginTop: 10 }}>
-                        {mapErr}
-                      </div>
-                    ) : null}
-                    {mapLink ? (
-                      <a
-                        href={mapLink}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="btn"
-                        style={{ marginTop: 12, display: 'inline-flex' }}
-                      >
-                        فتح الموقع في خرائط Google
-                      </a>
-                    ) : null}
-                  </>
-                ) : (
-                  <div
-                    style={{
-                      minHeight: 180,
-                      borderRadius: 18,
-                      border: '1px dashed var(--border2)',
-                      display: 'grid',
-                      placeItems: 'center',
-                      color: 'var(--muted)',
-                      padding: 18,
-                      textAlign: 'center',
-                      background: '#fafafa',
-                    }}
-                  >
-                    لا توجد إحداثيات محفوظة لهذا الإعلان، لذلك لن تظهر الخريطة حتى يتم تحديد الموقع من لوحة الإضافة.
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          <style jsx>{`
-            @media (max-width: 980px) {
-              div[style*='grid-template-columns: minmax(0, 1.45fr) minmax(300px, 0.95fr)'] {
-                grid-template-columns: 1fr !important;
-              }
-            }
-          `}</style>
-        </div>
+            </aside>
+          </section>
+        </>
       )}
+
+      <style jsx>{`
+        .listingPageWrap {
+          padding-top: 16px;
+          padding-bottom: 8px;
+        }
+
+        .stateCard {
+          padding: 18px;
+        }
+
+        .heroCard {
+          padding: 18px;
+          margin-bottom: 14px;
+        }
+
+        .heroMain {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 18px;
+        }
+
+        .heroText {
+          min-width: 0;
+          flex: 1;
+        }
+
+        .topRow {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          flex-wrap: wrap;
+          margin-bottom: 10px;
+        }
+
+        .statusWrap {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+        }
+
+        .statusText,
+        .dealBadge {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          min-height: 32px;
+          padding: 0 12px;
+          border-radius: 999px;
+          border: 1px solid var(--border);
+          font-weight: 800;
+          font-size: 13px;
+          background: #fff;
+          color: var(--text);
+        }
+
+        .dealBadge {
+          background: var(--primary-light);
+          border-color: rgba(214, 179, 91, 0.2);
+        }
+
+        .pageTitle {
+          margin: 0;
+          font-size: clamp(22px, 3vw, 32px);
+          line-height: 1.35;
+          font-weight: 950;
+        }
+
+        .locationLine {
+          margin-top: 8px;
+          color: var(--muted);
+          line-height: 1.8;
+        }
+
+        .priceBlock {
+          margin-top: 14px;
+          font-size: clamp(24px, 3.2vw, 34px);
+          font-weight: 950;
+          color: #0f172a;
+        }
+
+        .quickFacts {
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 10px;
+          margin-top: 16px;
+        }
+
+        .heroActions {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+          width: 230px;
+          flex-shrink: 0;
+        }
+
+        .actionBtn {
+          width: 100%;
+          text-align: center;
+          text-decoration: none;
+        }
+
+        .contentGrid {
+          display: grid;
+          grid-template-columns: minmax(0, 1.6fr) minmax(280px, 0.9fr);
+          gap: 14px;
+          align-items: start;
+        }
+
+        .mainCol,
+        .sideCol {
+          min-width: 0;
+        }
+
+        .galleryCard,
+        .sectionCard,
+        .sideCard {
+          padding: 14px;
+          margin-bottom: 14px;
+        }
+
+        .mainImageWrap {
+          width: 100%;
+          border-radius: 18px;
+          overflow: hidden;
+          background: #f1f5f9;
+          border: 1px solid var(--border);
+          aspect-ratio: 16 / 10;
+        }
+
+        .mainImage {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+          display: block;
+        }
+
+        .emptyMedia {
+          min-height: 240px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          border-radius: 18px;
+          border: 1px dashed var(--border2);
+          background: #f8fafc;
+          color: var(--muted);
+          text-align: center;
+          padding: 18px;
+        }
+
+        .thumbsRow {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(78px, 1fr));
+          gap: 10px;
+          margin-top: 12px;
+        }
+
+        .thumbBtn {
+          border: 1px solid var(--border);
+          border-radius: 14px;
+          background: #fff;
+          padding: 0;
+          overflow: hidden;
+          cursor: pointer;
+          aspect-ratio: 1;
+        }
+
+        .thumbBtn.active {
+          border-color: rgba(214, 179, 91, 0.8);
+          box-shadow: 0 0 0 3px rgba(214, 179, 91, 0.18);
+        }
+
+        .thumbImage {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+          display: block;
+        }
+
+        .sectionHeading,
+        .sideHeading {
+          margin: 0 0 12px;
+          font-size: 18px;
+          font-weight: 900;
+        }
+
+        .detailsGrid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 10px;
+        }
+
+        .infoItem {
+          border: 1px solid var(--border);
+          border-radius: 16px;
+          padding: 12px;
+          background: #fff;
+          min-width: 0;
+        }
+
+        .infoLabel {
+          color: var(--muted);
+          font-size: 13px;
+          margin-bottom: 6px;
+        }
+
+        .infoValue {
+          font-weight: 850;
+          line-height: 1.65;
+          word-break: break-word;
+        }
+
+        .descriptionText {
+          white-space: pre-wrap;
+          line-height: 1.95;
+          color: var(--text);
+        }
+
+        .sideCard {
+          position: sticky;
+          top: 90px;
+        }
+
+        .sideList {
+          display: grid;
+          gap: 10px;
+        }
+
+        .sideRow {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 14px;
+          padding: 11px 0;
+          border-bottom: 1px solid var(--border);
+        }
+
+        .sideRow:last-child {
+          border-bottom: 0;
+        }
+
+        .stickyActions {
+          display: grid;
+          gap: 10px;
+          margin-top: 14px;
+        }
+
+        @media (max-width: 900px) {
+          .listingPageWrap {
+            padding-top: 10px;
+          }
+
+          .heroCard {
+            padding: 14px;
+          }
+
+          .heroMain {
+            flex-direction: column;
+          }
+
+          .heroActions {
+            width: 100%;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+          }
+
+          .quickFacts {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
+
+          .contentGrid {
+            grid-template-columns: 1fr;
+          }
+
+          .sideCard {
+            position: static;
+          }
+        }
+
+        @media (max-width: 640px) {
+          .listingPageWrap {
+            width: min(100%, calc(100% - 18px));
+          }
+
+          .heroCard,
+          .galleryCard,
+          .sectionCard,
+          .sideCard {
+            border-radius: 16px;
+            padding: 12px;
+          }
+
+          .pageTitle {
+            font-size: 21px;
+          }
+
+          .priceBlock {
+            font-size: 26px;
+            margin-top: 10px;
+          }
+
+          .quickFacts,
+          .detailsGrid {
+            grid-template-columns: 1fr;
+          }
+
+          .heroActions {
+            grid-template-columns: 1fr;
+          }
+
+          .mainImageWrap {
+            aspect-ratio: 4 / 3;
+            border-radius: 14px;
+          }
+
+          .thumbsRow {
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 8px;
+          }
+
+          .emptyMedia {
+            min-height: 180px;
+          }
+
+          .sideRow {
+            align-items: flex-start;
+            flex-direction: column;
+            gap: 6px;
+          }
+        }
+      `}</style>
     </div>
   );
 }
