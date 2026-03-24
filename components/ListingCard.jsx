@@ -10,9 +10,9 @@ function timeAgoLabel(createdAt) {
     const diff = Date.now() - d.getTime();
     const min = Math.floor(diff / 60000);
     if (min < 1) return 'الآن';
-    if (min < 60) return `قبل ${min} د`;
+    if (min < 60) return `قبل ${min} دقيقة`;
     const hr = Math.floor(min / 60);
-    if (hr < 24) return `قبل ${hr} س`;
+    if (hr < 24) return `قبل ${hr} ساعة`;
     const day = Math.floor(hr / 24);
     return `قبل ${day} يوم`;
   } catch {
@@ -20,124 +20,184 @@ function timeAgoLabel(createdAt) {
   }
 }
 
-function firstChar(name) {
-  const s = (name || '').trim();
-  return s ? s[0] : 'م';
+function getStatusLabel(status, dealType) {
+  const s = String(status || 'available');
+  if (s === 'reserved') return 'محجوز';
+  if (s === 'sold') return dealType === 'rent' ? 'مؤجر' : 'مباع';
+  if (s === 'canceled' || s === 'hidden' || s === 'inactive') return 'غير متاح';
+  return 'متاح';
 }
 
-function getStatusMeta(status, dealType) {
+function getStatusStyles(status) {
   const s = String(status || 'available');
-  const dt = String(dealType || 'sale');
-
-  if (s === 'sold') {
-    return { label: dt === 'rent' ? 'مؤجر' : 'مباع', className: 'sold' };
-  }
   if (s === 'reserved') {
-    return { label: 'محجوز', className: 'warn' };
+    return { background: 'rgba(217,119,6,.10)', color: '#92400e', border: '1px solid rgba(217,119,6,.16)' };
+  }
+  if (s === 'sold') {
+    return { background: 'rgba(220,38,38,.08)', color: '#b91c1c', border: '1px solid rgba(220,38,38,.16)' };
   }
   if (s === 'canceled' || s === 'hidden' || s === 'inactive') {
-    return { label: 'غير متاح', className: '' };
+    return { background: 'rgba(71,85,105,.08)', color: '#334155', border: '1px solid rgba(71,85,105,.15)' };
   }
-  return { label: 'متاح', className: 'ok' };
+  return { background: 'rgba(22,163,74,.08)', color: '#166534', border: '1px solid rgba(22,163,74,.15)' };
 }
 
-export default function ListingCard({ item }) {
+export default function ListingCard({ item, compact = false }) {
   if (!item) return null;
 
   const safeId = item?.id || item?.docId || item?.listingId || item?._id || '';
-
-  const {
-    title = 'عرض عقاري',
-    price,
-    neighborhood = '',
-    plan = '',
-    part = '',
-    city = '',
-    area,
-    dealType,
-    propertyType,
-    status = 'available',
-    images = [],
-    createdAt,
-    sellerName,
-    ownerName,
-    contactName,
-  } = item;
-
-  const isRent = dealType === 'rent';
-  const displayPrice = formatPriceSAR(price);
-  const statusMeta = getStatusMeta(status, dealType);
   const detailLink = safeId ? `/listing/${encodeURIComponent(String(safeId))}` : '#';
-  const mainImage = images?.[0] || null;
-  const hasMultipleImages = (images?.length || 0) > 1;
 
-  const locationText =
-    city ||
-    [neighborhood, plan, part].filter(Boolean).join(' • ') ||
-    neighborhood ||
-    'غير محدد';
+  const title = item?.title || 'عرض عقاري';
+  const displayPrice = formatPriceSAR(item?.price);
+  const isRent = item?.dealType === 'rent';
+  const statusLabel = getStatusLabel(item?.status, item?.dealType);
+  const locationBits = [item?.neighborhood, item?.plan, item?.part].filter(Boolean);
+  const locationText = locationBits.length ? locationBits.join(' • ') : item?.city || 'الموقع غير محدد';
+  const subText = [item?.propertyType, item?.area ? `${item.area} م²` : null].filter(Boolean).join(' • ');
+  const image = Array.isArray(item?.images) ? item.images[0] : '';
 
-  const timeText = timeAgoLabel(createdAt);
-  const userName = sellerName || ownerName || contactName || 'المالك';
-
-  const CardTag = safeId ? Link : 'div';
-  const cardProps = safeId
-    ? { href: detailLink, className: 'harajCard' }
-    : { className: 'harajCard disabled', role: 'article', 'aria-label': title };
+  const Wrapper = safeId ? Link : 'div';
+  const wrapperProps = safeId ? { href: detailLink } : {};
 
   return (
-    <CardTag {...cardProps}>
-      <div className="harajCardRow">
-        <div className="harajThumb" aria-hidden="true">
+    <Wrapper
+      {...wrapperProps}
+      style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}
+      aria-label={title}
+    >
+      <div
+        className="card"
+        style={{
+          overflow: 'hidden',
+          transition: 'transform 140ms ease, box-shadow 140ms ease',
+        }}
+      >
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: compact ? '160px minmax(0, 1fr)' : '220px minmax(0, 1fr)',
+            gap: 0,
+          }}
+        >
           <div
-            className="harajThumbImg"
-            style={
-              mainImage
-                ? { backgroundImage: `url(${mainImage})` }
-                : { backgroundImage: 'linear-gradient(135deg, rgba(214,179,91,0.18), rgba(255,255,255,0.06))' }
-            }
-          />
-          {hasMultipleImages && <div className="harajImgCount">+{images.length}</div>}
-        </div>
-
-        <div className="harajInfo">
-          <div className="harajTitle" title={title}>
-            {title}
+            style={{
+              minHeight: compact ? 150 : 190,
+              background: '#f8fafc',
+              borderInlineEnd: '1px solid var(--border)',
+              overflow: 'hidden',
+            }}
+          >
+            {image ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={image}
+                alt={title}
+                style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+              />
+            ) : (
+              <div
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  display: 'grid',
+                  placeItems: 'center',
+                  color: 'var(--muted)',
+                  fontWeight: 800,
+                }}
+              >
+                بدون صورة
+              </div>
+            )}
           </div>
 
-          <div className="harajPriceRow">
-            <div className="harajPrice">
-              {displayPrice}
-              {isRent && <span className="harajRent"> / سنوي</span>}
-            </div>
-            <div className="harajStatus">
-              <span className={`badge ${statusMeta.className}`.trim()}>{statusMeta.label}</span>
-            </div>
-          </div>
+          <div style={{ padding: compact ? 14 : 16, display: 'grid', gap: 10 }}>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'flex-start',
+                gap: 10,
+                flexWrap: 'wrap',
+              }}
+            >
+              <div style={{ minWidth: 0, flex: '1 1 280px' }}>
+                <div
+                  style={{
+                    fontSize: compact ? 17 : 18,
+                    lineHeight: 1.5,
+                    fontWeight: 900,
+                    marginBottom: 6,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    display: '-webkit-box',
+                    WebkitBoxOrient: 'vertical',
+                    WebkitLineClamp: 2,
+                  }}
+                >
+                  {title}
+                </div>
 
-          <div className="harajMeta">
-            <div className="harajMetaItem" title={locationText}>
-              <span className="harajTxt">{locationText}</span>
-            </div>
-            <div className="harajMetaItem">
-              <span className="harajTxt">{timeText}</span>
-            </div>
-          </div>
+                <div style={{ color: 'var(--muted)', fontSize: 14, lineHeight: 1.6 }}>{locationText}</div>
+              </div>
 
-          <div className="harajBottom">
-            <div className="harajUser">
-              <span className="harajAvatar">{firstChar(userName)}</span>
-              <span className="harajUserName">{userName}</span>
+              <span
+                style={{
+                  ...getStatusStyles(item?.status),
+                  borderRadius: 999,
+                  padding: '6px 12px',
+                  fontSize: 13,
+                  fontWeight: 900,
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {statusLabel}
+              </span>
             </div>
-          </div>
 
-          {(propertyType || area) && (
-            <div className="harajSub">
-              {[propertyType, area ? `${area} م²` : null].filter(Boolean).join(' • ')}
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                gap: 10,
+                flexWrap: 'wrap',
+              }}
+            >
+              <div style={{ fontWeight: 950, fontSize: compact ? 22 : 24 }}>
+                {displayPrice}
+                {isRent ? <span style={{ fontSize: 13, color: 'var(--muted)', fontWeight: 800 }}> سنوي</span> : null}
+              </div>
+
+              <div style={{ color: 'var(--muted)', fontSize: 13 }}>{timeAgoLabel(item?.createdAt)}</div>
             </div>
-          )}
+
+            {subText ? <div style={{ color: 'var(--text)', fontSize: 14, lineHeight: 1.7 }}>{subText}</div> : null}
+          </div>
         </div>
       </div>
-    </CardTag>
+
+      <style jsx>{`
+        a:hover > div,
+        div[aria-label]:hover > div {
+          transform: translateY(-1px);
+          box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
+        }
+
+        @media (max-width: 720px) {
+          a > div > div,
+          div[aria-label] > div > div {
+            grid-template-columns: 1fr !important;
+          }
+
+          a > div > div > div:first-child,
+          div[aria-label] > div > div > div:first-child {
+            min-height: 210px !important;
+            border-inline-end: 0 !important;
+            border-bottom: 1px solid var(--border);
+          }
+        }
+      `}</style>
+    </Wrapper>
   );
 }
