@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { formatPriceSAR, statusBadge } from '@/lib/format';
+import { formatPriceSAR } from '@/lib/format';
 
 function timeAgoLabel(createdAt) {
   try {
@@ -25,10 +25,25 @@ function firstChar(name) {
   return s ? s[0] : 'م';
 }
 
-export default function ListingCard({ item, compact = false }) {
+function getStatusMeta(status, dealType) {
+  const s = String(status || 'available');
+  const dt = String(dealType || 'sale');
+
+  if (s === 'sold') {
+    return { label: dt === 'rent' ? 'مؤجر' : 'مباع', className: 'sold' };
+  }
+  if (s === 'reserved') {
+    return { label: 'محجوز', className: 'warn' };
+  }
+  if (s === 'canceled' || s === 'hidden' || s === 'inactive') {
+    return { label: 'غير متاح', className: '' };
+  }
+  return { label: 'متاح', className: 'ok' };
+}
+
+export default function ListingCard({ item }) {
   if (!item) return null;
 
-  // ✅ تأمين الـID (عشان ما يطلع /unknown)
   const safeId = item?.id || item?.docId || item?.listingId || item?._id || '';
 
   const {
@@ -43,7 +58,6 @@ export default function ListingCard({ item, compact = false }) {
     propertyType,
     status = 'available',
     images = [],
-    direct = false,
     createdAt,
     sellerName,
     ownerName,
@@ -52,22 +66,18 @@ export default function ListingCard({ item, compact = false }) {
 
   const isRent = dealType === 'rent';
   const displayPrice = formatPriceSAR(price);
-
-  // ✅ لا نفتح رابط إذا ما فيه ID صحيح
+  const statusMeta = getStatusMeta(status, dealType);
   const detailLink = safeId ? `/listing/${encodeURIComponent(String(safeId))}` : '#';
-
-  // ✅ بدون placeholder file لتجنب 404
   const mainImage = images?.[0] || null;
   const hasMultipleImages = (images?.length || 0) > 1;
 
   const locationText =
     city ||
-    neighborhood ||
     [neighborhood, plan, part].filter(Boolean).join(' • ') ||
+    neighborhood ||
     'غير محدد';
 
   const timeText = timeAgoLabel(createdAt);
-
   const userName = sellerName || ownerName || contactName || 'المالك';
 
   const CardTag = safeId ? Link : 'div';
@@ -98,18 +108,18 @@ export default function ListingCard({ item, compact = false }) {
           <div className="harajPriceRow">
             <div className="harajPrice">
               {displayPrice}
-              {isRent && <span className="harajRent"> / شهري</span>}
+              {isRent && <span className="harajRent"> / سنوي</span>}
             </div>
-            <div className="harajStatus">{statusBadge(status)}</div>
+            <div className="harajStatus">
+              <span className={`badge ${statusMeta.className}`.trim()}>{statusMeta.label}</span>
+            </div>
           </div>
 
           <div className="harajMeta">
             <div className="harajMetaItem" title={locationText}>
-              <span className="harajIco">📍</span>
               <span className="harajTxt">{locationText}</span>
             </div>
             <div className="harajMetaItem">
-              <span className="harajIco">🕒</span>
               <span className="harajTxt">{timeText}</span>
             </div>
           </div>
@@ -119,8 +129,6 @@ export default function ListingCard({ item, compact = false }) {
               <span className="harajAvatar">{firstChar(userName)}</span>
               <span className="harajUserName">{userName}</span>
             </div>
-
-            {direct && <span className="harajDirect">مباشر</span>}
           </div>
 
           {(propertyType || area) && (
