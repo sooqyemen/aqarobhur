@@ -213,6 +213,14 @@ export default function Header() {
             ))}
           </div>
 
+          <Link
+            href={isAdmin ? '/admin' : '/account'}
+            className={`mobileAccountBtn ${isActive(isAdmin ? '/admin' : '/account') ? 'active' : ''}`}
+            aria-label={isAdmin ? 'لوحة الأدمن' : hasUser ? 'الحساب' : 'تسجيل الدخول'}
+          >
+            {isAdmin ? 'الأدمن' : hasUser ? 'الحساب' : 'الدخول'}
+          </Link>
+
           <div
             style={{
               gridColumn: '1 / -1',
