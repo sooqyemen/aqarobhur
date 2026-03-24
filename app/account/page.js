@@ -72,9 +72,12 @@ export default function AccountPage() {
           </div>
 
           {isAdmin ? (
-            <div style={{ marginTop: 12 }}>
+            <div style={{ marginTop: 12, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
               <Link href="/admin" className="btn btnPrimary">
-                الدخول إلى لوحة الأدمن
+                لوحة التحكم
+              </Link>
+              <Link href="/admin/new" className="btn">
+                إضافة إعلان
               </Link>
             </div>
           ) : null}

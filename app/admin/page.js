@@ -10,14 +10,15 @@
 
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { getFirebase } from '@/lib/firebaseClient';
-import { signInWithEmailAndPassword, onAuthStateChanged, signOut } from 'firebase/auth';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { ref as storageRef, uploadBytesResumable, getDownloadURL, deleteObject } from 'firebase/storage';
 import { doc, deleteDoc, getFirestore } from 'firebase/firestore';
 
 import { isAdminUser } from '@/lib/admin';
-import { adminCreateListing, adminUpdateListing, fetchListings } from '@/lib/listings';
+import { adminCreateListing, adminUpdateListing, deleteRequestAdmin, fetchListings, fetchRequestsAdmin, updateRequestAdmin } from '@/lib/listings';
 import { DEAL_TYPES, NEIGHBORHOODS, PROPERTY_TYPES, STATUS_OPTIONS, PROPERTY_CLASSES } from '@/lib/taxonomy';
 import { formatPriceSAR, statusBadge } from '@/lib/format';
+import Link from 'next/link';
 
 // ===================== Constants =====================
 const LISTINGS_COLLECTION = 'abhur_listings';
@@ -128,6 +129,17 @@ function Field({ label, children, hint }) {
 }
 function Divider() {
   return <div style={{ height: 1, background: 'var(--border)', margin: '14px 0' }} />;
+}
+
+const REQUEST_STATUS_OPTIONS = [
+  { key: 'new', label: 'جديد' },
+  { key: 'contacted', label: 'تم التواصل' },
+  { key: 'closed', label: 'مغلق' },
+];
+
+function requestStatusLabel(status) {
+  const key = String(status || 'new');
+  return REQUEST_STATUS_OPTIONS.find((it) => it.key === key)?.label || 'جديد';
 }
 
 // ===================== Google Maps loader (singleton) =====================
@@ -979,6 +991,102 @@ function ManageListings({ list, loadingList, actionBusyId, onLoad, onDelete, onE
   );
 }
 
+
+function ManageRequests({ list, loading, actionBusyId, onLoad, onStatusChange, onDelete }) {
+  const dangerBtnStyle = {
+    border: '1px solid rgba(220,38,38,.35)',
+    background: 'rgba(220,38,38,.08)',
+    color: '#b42318',
+  };
+
+  return (
+    <section className="card" style={{ padding: 14, marginTop: 12 }}>
+      <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <div style={{ fontWeight: 950 }}>طلبات العملاء</div>
+        <button className="btn" type="button" onClick={onLoad} disabled={loading}>
+          {loading ? 'تحميل…' : 'تحديث الطلبات'}
+        </button>
+      </div>
+
+      <div className="muted" style={{ marginTop: 8, fontSize: 12 }}>
+        {list.length ? `عدد الطلبات: ${list.length}` : 'لا توجد طلبات حالياً.'}
+      </div>
+
+      {list.length ? (
+        <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {list.map((it) => {
+            const id = it?.id || '';
+            const busy = actionBusyId === `req_${id}`;
+            const budgetText =
+              it.budgetMin && it.budgetMax
+                ? `${formatPriceSAR(Number(it.budgetMin))} - ${formatPriceSAR(Number(it.budgetMax))}`
+                : it.budgetMin
+                  ? `من ${formatPriceSAR(Number(it.budgetMin))}`
+                  : it.budgetMax
+                    ? `حتى ${formatPriceSAR(Number(it.budgetMax))}`
+                    : 'غير محددة';
+
+            return (
+              <div key={id} className="card" style={{ padding: 12 }}>
+                <div className="row" style={{ justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
+                  <div style={{ flex: 1, minWidth: 250 }}>
+                    <div style={{ fontWeight: 950 }}>
+                      {it.name || 'بدون اسم'}
+                      {it.phone ? ` - ${it.phone}` : ''}
+                    </div>
+                    <div className="muted" style={{ fontSize: 12, marginTop: 6, lineHeight: 1.8 }}>
+                      نوع الطلب: {it.dealType === 'rent' ? 'إيجار' : 'شراء'}
+                      {' • '}
+                      نوع العقار: {it.propertyType || 'غير محدد'}
+                      {' • '}
+                      الحي: {it.neighborhood || 'غير محدد'}
+                      {' • '}
+                      الميزانية: {budgetText}
+                    </div>
+                    {it.note ? (
+                      <div style={{ marginTop: 8, fontSize: 13, lineHeight: 1.8 }}>{it.note}</div>
+                    ) : null}
+                  </div>
+
+                  <div style={{ minWidth: 220, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <div className="muted" style={{ fontSize: 12 }}>
+                      الحالة الحالية: <b style={{ color: 'var(--text)' }}>{requestStatusLabel(it.status)}</b>
+                    </div>
+                    <select
+                      className="input"
+                      value={it.status || 'new'}
+                      onChange={(e) => onStatusChange(it, e.target.value)}
+                      disabled={busy}
+                    >
+                      {REQUEST_STATUS_OPTIONS.map((opt) => (
+                        <option key={opt.key} value={opt.key}>{opt.label}</option>
+                      ))}
+                    </select>
+                    {it.phone ? (
+                      <a
+                        className="btn"
+                        href={`https://wa.me/${String(it.phone).replace(/\D/g, '')}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{ textDecoration: 'none', textAlign: 'center' }}
+                      >
+                        واتساب
+                      </a>
+                    ) : null}
+                    <button className="btn" type="button" onClick={() => onDelete(it)} style={dangerBtnStyle} disabled={busy}>
+                      {busy ? '...' : 'حذف الطلب'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 // ===================== Page =====================
 export default function AdminPage() {
   const fb = getFirebase();
@@ -989,12 +1097,10 @@ export default function AdminPage() {
   const [checking, setChecking] = useState(true);
   const [user, setUser] = useState(null);
 
-  const [email, setEmail] = useState('');
-  const [pass, setPass] = useState('');
   const [authBusy, setAuthBusy] = useState(false);
   const [authErr, setAuthErr] = useState('');
 
-  const [tab, setTab] = useState('manage'); // create | manage
+  const [tab, setTab] = useState('manage'); // create | manage | requests
 
   const [editingId, setEditingId] = useState('');
   const [createdId, setCreatedId] = useState('');
@@ -1026,6 +1132,8 @@ export default function AdminPage() {
   const [list, setList] = useState([]);
   const [loadingList, setLoadingList] = useState(false);
   const [actionBusyId, setActionBusyId] = useState('');
+  const [requests, setRequests] = useState([]);
+  const [loadingRequests, setLoadingRequests] = useState(false);
 
   const uploader = useUploader(storage);
 
@@ -1051,19 +1159,6 @@ export default function AdminPage() {
     uploader.setQueue([]);
   }, [initialForm, uploader]);
 
-  const login = async (e) => {
-    e.preventDefault();
-    setAuthErr('');
-    setAuthBusy(true);
-    try {
-      await signInWithEmailAndPassword(auth, email, pass);
-      setPass('');
-    } catch {
-      setAuthErr('بيانات الدخول غير صحيحة.');
-    } finally {
-      setAuthBusy(false);
-    }
-  };
 
   const logout = async () => {
     setAuthErr('');
@@ -1092,6 +1187,50 @@ export default function AdminPage() {
       }
     } finally {
       setLoadingList(false);
+    }
+  }, []);
+
+  const loadRequests = useCallback(async () => {
+    setLoadingRequests(true);
+    try {
+      const rows = await fetchRequestsAdmin({ max: 300 });
+      setRequests(Array.isArray(rows) ? rows : []);
+    } catch (e) {
+      setAuthErr(String(e?.message || 'تعذر تحميل الطلبات.'));
+      setRequests([]);
+    } finally {
+      setLoadingRequests(false);
+    }
+  }, []);
+
+  const changeRequestStatus = useCallback(async (it, status) => {
+    const id = it?.id;
+    if (!id) return;
+    setActionBusyId(`req_${id}`);
+    setAuthErr('');
+    try {
+      await updateRequestAdmin(id, { status });
+      setRequests((prev) => prev.map((row) => (row.id === id ? { ...row, status } : row)));
+    } catch (e) {
+      setAuthErr(String(e?.message || 'تعذر تحديث حالة الطلب.'));
+    } finally {
+      setActionBusyId('');
+    }
+  }, []);
+
+  const removeRequest = useCallback(async (it) => {
+    const id = it?.id;
+    if (!id) return;
+    if (!confirm(`تأكيد حذف الطلب؟\n\n${it?.name || it?.phone || id}`)) return;
+    setActionBusyId(`req_${id}`);
+    setAuthErr('');
+    try {
+      await deleteRequestAdmin(id);
+      setRequests((prev) => prev.filter((row) => row.id !== id));
+    } catch (e) {
+      setAuthErr(String(e?.message || 'تعذر حذف الطلب.'));
+    } finally {
+      setActionBusyId('');
     }
   }, []);
 
@@ -1248,6 +1387,12 @@ export default function AdminPage() {
     },
     [db, storage, loadList]
   );
+  useEffect(() => {
+    if (!isAdmin) return;
+    if (tab === 'manage' && !list.length && !loadingList) loadList();
+    if (tab === 'requests' && !requests.length && !loadingRequests) loadRequests();
+  }, [isAdmin, tab, list.length, loadingList, requests.length, loadingRequests, loadList, loadRequests]);
+
 
   if (checking) {
     return (
@@ -1261,34 +1406,16 @@ export default function AdminPage() {
     return (
       <div className="container" style={{ paddingTop: 16 }}>
         <section className="card" style={{ padding: 14 }}>
-          <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
-            <div style={{ fontWeight: 950 }}>لوحة الأدمن</div>
-          </div>
-
+          <div style={{ fontWeight: 950 }}>لوحة الأدمن</div>
           <div className="muted" style={{ marginTop: 8 }}>
-            سجل دخول الأدمن لإضافة/إدارة الإعلانات.
+            صفحة الإدارة لا تظهر إلا بعد تسجيل الدخول بحساب الأدمن.
           </div>
-
-          <form onSubmit={login} style={{ marginTop: 12 }}>
-            <Field label="البريد">
-              <input className="input" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
-            </Field>
-
-            <Field label="كلمة المرور">
-              <input className="input" type="password" value={pass} onChange={(e) => setPass(e.target.value)} autoComplete="current-password" />
-            </Field>
-
-            {authErr ? <div style={{ marginTop: 10, color: 'var(--danger)', fontWeight: 900 }}>{authErr}</div> : null}
-
-            <button className="btn btnPrimary" style={{ marginTop: 12, width: '100%' }} disabled={authBusy}>
-              {authBusy ? '...' : 'دخول'}
-            </button>
-          </form>
+          <div style={{ marginTop: 12 }}>
+            <Link href="/account" className="btn btnPrimary">
+              الذهاب إلى صفحة تسجيل الدخول
+            </Link>
+          </div>
         </section>
-
-        <style jsx>{`
-          .btnPrimary { background: var(--primary); border-color: transparent; }
-        `}</style>
       </div>
     );
   }
@@ -1300,6 +1427,7 @@ export default function AdminPage() {
           <div style={{ fontWeight: 950 }}>غير مصرح</div>
           <div className="muted" style={{ marginTop: 8 }}>هذا الحساب لا يملك صلاحية الأدمن.</div>
           <div className="row" style={{ gap: 10, marginTop: 12, flexWrap: 'wrap' }}>
+            <Link href="/account" className="btn">الحساب</Link>
             <button className="btn" onClick={logout} disabled={authBusy}>تسجيل خروج</button>
           </div>
         </section>
@@ -1327,7 +1455,7 @@ export default function AdminPage() {
         <div className="card" style={{ marginTop: 12, padding: 12, background: 'rgba(214,179,91,.08)', borderColor: 'rgba(214,179,91,.24)' }}>
           <div style={{ fontWeight: 900 }}>تم فصل نموذج الإضافة عن لوحة الإدارة.</div>
           <div className="muted" style={{ marginTop: 6, fontSize: 12 }}>
-            استخدم زر "إضافة إعلان جديد" للنشر الجديد، وهذه الصفحة أصبحت مخصصة أكثر لإدارة العروض الحالية.
+            استخدم زر "إضافة إعلان جديد" للنشر الجديد، وهذه الصفحة مخصصة الآن لإدارة الإعلانات والطلبات، بينما إضافة إعلان جديد بقيت في صفحة مستقلة.
           </div>
         </div>
 
@@ -1338,11 +1466,16 @@ export default function AdminPage() {
         ) : null}
 
         <div className="row" style={{ gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
-          <button className={tab === 'create' ? 'btn btnPrimary' : 'btn'} type="button" onClick={() => setTab('create')}>
-            النموذج القديم
-          </button>
+          {editingId ? (
+            <button className={tab === 'create' ? 'btn btnPrimary' : 'btn'} type="button" onClick={() => setTab('create')}>
+              تعديل الإعلان
+            </button>
+          ) : null}
           <button className={tab === 'manage' ? 'btn btnPrimary' : 'btn'} type="button" onClick={() => setTab('manage')}>
             إدارة العروض
+          </button>
+          <button className={tab === 'requests' ? 'btn btnPrimary' : 'btn'} type="button" onClick={() => setTab('requests')}>
+            الطلبات
           </button>
         </div>
       </section>
@@ -1357,6 +1490,15 @@ export default function AdminPage() {
           busy={saving}
           createdId={createdId}
           uploader={uploader}
+        />
+      ) : tab === 'requests' ? (
+        <ManageRequests
+          list={requests}
+          loading={loadingRequests}
+          actionBusyId={actionBusyId}
+          onLoad={loadRequests}
+          onStatusChange={changeRequestStatus}
+          onDelete={removeRequest}
         />
       ) : (
         <ManageListings
