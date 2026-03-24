@@ -1,13 +1,14 @@
 'use client';
 
 import Link from 'next/link';
-import { formatPriceSAR, statusBadge } from '@/lib/format';
+import { formatPriceSAR } from '@/lib/format';
 
-function firstNonEmpty(...values) {
-  for (const v of values) {
-    if (typeof v === 'string' && v.trim()) return v.trim();
-  }
-  return '';
+function getStatusLabel(status, dealType) {
+  const s = String(status || 'available');
+  if (s === 'reserved') return 'محجوز';
+  if (s === 'sold') return dealType === 'rent' ? 'مؤجر' : 'مباع';
+  if (s === 'canceled' || s === 'hidden') return 'غير متاح';
+  return 'متاح';
 }
 
 export default function ListingCard({ item }) {
@@ -28,52 +29,46 @@ export default function ListingCard({ item }) {
     images = [],
   } = item;
 
-  const isRent = dealType === 'rent';
-  const displayPrice = formatPriceSAR(price);
   const detailLink = safeId ? `/listing/${encodeURIComponent(String(safeId))}` : '#';
-  const mainImage = images?.[0] || '';
-  const locationText = firstNonEmpty(
-    [city, neighborhood].filter(Boolean).join(' - '),
-    [neighborhood, plan, part].filter(Boolean).join(' - '),
-    city,
-    neighborhood,
-    'الموقع غير محدد'
-  );
-
-  const metaBits = [propertyType, area ? `${area} م²` : null].filter(Boolean);
+  const mainImage = images?.[0] || null;
+  const displayPrice = formatPriceSAR(price);
+  const statusLabel = getStatusLabel(status, dealType);
+  const locationText = city || [neighborhood, plan, part].filter(Boolean).join(' • ') || 'غير محدد';
+  const metaText = [propertyType, area ? `${area} م²` : null].filter(Boolean).join(' • ');
 
   const CardTag = safeId ? Link : 'div';
   const cardProps = safeId
-    ? { href: detailLink, className: 'listingCard' }
-    : { className: 'listingCard disabled', role: 'article', 'aria-label': title };
+    ? { href: detailLink, className: 'listingCardSimple' }
+    : { className: 'listingCardSimple', role: 'article', 'aria-label': title };
 
   return (
     <CardTag {...cardProps}>
-      <div className="listingCardMediaWrap">
-        {mainImage ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={mainImage} alt={title} className="listingCardMedia" loading="lazy" />
-        ) : (
-          <div className="listingCardMedia listingCardMediaPlaceholder" aria-hidden="true">
-            <span>لا توجد صورة</span>
-          </div>
-        )}
-        {!!(images?.length > 1) && <span className="listingCardCount">{images.length} صور</span>}
-        <span className="listingCardStatus">{statusBadge(status)}</span>
-      </div>
-
-      <div className="listingCardBody">
-        <div className="listingCardTop">
-          <h3 className="listingCardTitle">{title}</h3>
-          <div className="listingCardPrice">
-            {displayPrice}
-            {isRent ? <span className="listingCardPriceHint"> / سنوي</span> : null}
-          </div>
+      <div className="listingCardInner">
+        <div className="listingCardThumb" aria-hidden="true">
+          {mainImage ? (
+            <div className="listingCardThumbImg" style={{ backgroundImage: `url(${mainImage})` }} />
+          ) : (
+            <div className="listingCardThumbFallback">بدون صورة</div>
+          )}
         </div>
 
-        <div className="listingCardLocation">{locationText}</div>
+        <div className="listingCardBody">
+          <div className="listingCardTop">
+            <h3 className="listingCardTitle" title={title}>{title}</h3>
+            <span className={`listingCardStatus ${status === 'reserved' ? 'warn' : status === 'sold' ? 'sold' : 'ok'}`}>
+              {statusLabel}
+            </span>
+          </div>
 
-        {metaBits.length ? <div className="listingCardMeta">{metaBits.join(' • ')}</div> : null}
+          <div className="listingCardPrice">
+            {displayPrice}
+            {dealType === 'rent' ? <span className="listingCardRent"> سنوي</span> : null}
+          </div>
+
+          <div className="listingCardLocation" title={locationText}>{locationText}</div>
+
+          {metaText ? <div className="listingCardMeta">{metaText}</div> : null}
+        </div>
       </div>
     </CardTag>
   );
