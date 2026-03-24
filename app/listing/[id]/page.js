@@ -1,71 +1,284 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
 
+import ListingCard from '@/components/ListingCard';
 import { buildWhatsAppLink } from '@/components/WhatsAppBar';
-import { fetchListingById } from '@/lib/listings';
-import { formatPriceSAR, statusBadge } from '@/lib/format';
+import { formatPriceSAR } from '@/lib/format';
+import { fetchListingById, fetchListings } from '@/lib/listings';
 
-let __detailMapPromise = null;
-function loadGoogleMaps(apiKey) {
-  if (typeof window === 'undefined') return Promise.reject(new Error('No window'));
-  if (window.google && window.google.maps) return Promise.resolve(window.google.maps);
-  if (__detailMapPromise) return __detailMapPromise;
+function getSafeString(value) {
+  return String(value || '').trim();
+}
 
-  __detailMapPromise = new Promise((resolve, reject) => {
-    const cbName = `__detail_gmaps_cb_${Date.now()}`;
-    window[cbName] = () => {
-      try {
+function getStatusMeta(item) {
+  const status = String(item?.status || 'available');
+  const dealType = String(item?.dealType || 'sale');
+
+  if (status === 'reserved') {
+    return { label: 'محجوز', className: 'warn' };
+  }
+  if (status === 'sold') {
+    return { label: dealType === 'rent' ? 'مؤجر' : 'مباع', className: 'danger' };
+  }
+  if (status === 'canceled' || status === 'hidden' || status === 'inactive') {
+    return { label: 'غير متاح', className: 'muted' };
+  }
+  return { label: 'متاح', className: 'ok' };
+}
+
+function getDealTypeLabel(value) {
+  return value === 'rent' ? 'إيجار' : 'بيع';
+}
+
+function getMapUrl(lat, lng) {
+  return `https://www.google.com/maps?q=${lat},${lng}`;
+}
+
+function waitForGoogleMaps() {
+  return new Promise((resolve, reject) => {
+    const startedAt = Date.now();
+
+    const tick = () => {
+      if (typeof window !== 'undefined' && window.google?.maps) {
         resolve(window.google.maps);
-      } catch (e) {
-        reject(e);
-      } finally {
-        try {
-          delete window[cbName];
-        } catch {}
+        return;
       }
+      if (Date.now() - startedAt > 12000) {
+        reject(new Error('تعذر تحميل خرائط Google.'));
+        return;
+      }
+      window.setTimeout(tick, 120);
     };
 
-    const old = document.querySelector('script[data-aqarobhur-gmaps="1"]');
-    if (old) {
-      const started = Date.now();
-      const timer = window.setInterval(() => {
-        if (window.google && window.google.maps) {
-          window.clearInterval(timer);
-          resolve(window.google.maps);
-          return;
-        }
-        if (Date.now() - started > 15000) {
-          window.clearInterval(timer);
-          reject(new Error('تعذر تحميل سكربت Google Maps.'));
-        }
-      }, 120);
-      old.addEventListener('error', () => {
-        window.clearInterval(timer);
-        reject(new Error('تعذر تحميل سكربت Google Maps.'));
-      }, { once: true });
-      return;
-    }
+    tick();
+  });
+}
 
+function loadGoogleMaps() {
+  if (typeof window === 'undefined') {
+    return Promise.reject(new Error('يجب تشغيل الصفحة داخل المتصفح.'));
+  }
+
+  if (window.google?.maps) {
+    return Promise.resolve(window.google.maps);
+  }
+
+  if (window.__aqarobhurMapsPromise) {
+    return window.__aqarobhurMapsPromise;
+  }
+
+  const key = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+  if (!key) {
+    return Promise.reject(new Error('مفتاح خرائط Google غير موجود.'));
+  }
+
+  const existing = document.querySelector('script[data-aqarobhur-google-maps="1"]');
+  if (existing) {
+    window.__aqarobhurMapsPromise = waitForGoogleMaps();
+    return window.__aqarobhurMapsPromise;
+  }
+
+  window.__aqarobhurMapsPromise = new Promise((resolve, reject) => {
     const script = document.createElement('script');
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&callback=${cbName}`;
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}&v=weekly&language=ar&region=SA`;
     script.async = true;
     script.defer = true;
-    script.setAttribute('data-aqarobhur-gmaps', '1');
-    script.onerror = () => reject(new Error('تعذر تحميل سكربت Google Maps.'));
+    script.setAttribute('data-aqarobhur-google-maps', '1');
+    script.onload = () => {
+      waitForGoogleMaps().then(resolve).catch(reject);
+    };
+    script.onerror = () => reject(new Error('تعذر تحميل خرائط Google.'));
     document.head.appendChild(script);
   });
 
-  return __detailMapPromise;
+  return window.__aqarobhurMapsPromise;
+}
+
+function useIsSmallScreen() {
+  const [isSmall, setIsSmall] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return undefined;
+
+    const mq = window.matchMedia('(max-width: 980px)');
+    const apply = () => setIsSmall(!!mq.matches);
+    apply();
+
+    if (typeof mq.addEventListener === 'function') {
+      mq.addEventListener('change', apply);
+      return () => mq.removeEventListener('change', apply);
+    }
+
+    mq.addListener?.(apply);
+    return () => mq.removeListener?.(apply);
+  }, []);
+
+  return isSmall;
+}
+
+function ImageGallery({ images, title }) {
+  const safeImages = useMemo(() => {
+    if (!Array.isArray(images)) return [];
+    return images.filter(Boolean);
+  }, [images]);
+
+  const [active, setActive] = useState(0);
+
+  useEffect(() => {
+    setActive(0);
+  }, [safeImages.length]);
+
+  if (!safeImages.length) {
+    return (
+      <div className="detailsCard detailsGalleryEmpty">
+        <div className="detailsSectionTitle">الصور</div>
+        <div className="detailsEmptyBox">لا توجد صور مضافة لهذا العرض.</div>
+      </div>
+    );
+  }
+
+  const mainImage = safeImages[active] || safeImages[0];
+
+  return (
+    <div className="detailsCard detailsGalleryCard">
+      <div className="detailsSectionTitle">الصور</div>
+
+      <div className="detailsMainImageWrap">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img className="detailsMainImage" src={mainImage} alt={title || 'صورة العقار'} />
+      </div>
+
+      {safeImages.length > 1 ? (
+        <div className="detailsThumbs" aria-label="صور العرض">
+          {safeImages.map((src, idx) => (
+            <button
+              key={`${src}-${idx}`}
+              type="button"
+              className={`detailsThumbBtn ${idx === active ? 'active' : ''}`}
+              onClick={() => setActive(idx)}
+              aria-label={`عرض الصورة ${idx + 1}`}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img className="detailsThumbImg" src={src} alt={`صورة ${idx + 1}`} />
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function DetailsMap({ item }) {
+  const mapRef = useRef(null);
+  const mapInstanceRef = useRef(null);
+  const markerRef = useRef(null);
+  const [mapType, setMapType] = useState('roadmap');
+  const [mapErr, setMapErr] = useState('');
+  const lat = Number(item?.lat);
+  const lng = Number(item?.lng);
+  const hasCoords = Number.isFinite(lat) && Number.isFinite(lng);
+
+  useEffect(() => {
+    let canceled = false;
+
+    if (!hasCoords || !mapRef.current) return undefined;
+
+    loadGoogleMaps()
+      .then((maps) => {
+        if (canceled || !mapRef.current) return;
+
+        const center = { lat, lng };
+
+        if (!mapInstanceRef.current) {
+          mapInstanceRef.current = new maps.Map(mapRef.current, {
+            center,
+            zoom: 15,
+            mapTypeId: mapType,
+            streetViewControl: false,
+            fullscreenControl: false,
+            mapTypeControl: false,
+            clickableIcons: false,
+            gestureHandling: 'greedy',
+          });
+
+          markerRef.current = new maps.Marker({
+            position: center,
+            map: mapInstanceRef.current,
+            title: item?.title || 'موقع العقار',
+          });
+        } else {
+          mapInstanceRef.current.setCenter(center);
+          mapInstanceRef.current.setMapTypeId(mapType);
+          markerRef.current?.setPosition(center);
+        }
+
+        setMapErr('');
+      })
+      .catch((error) => {
+        if (!canceled) setMapErr(String(error?.message || 'تعذر تحميل الخريطة.'));
+      });
+
+    return () => {
+      canceled = true;
+    };
+  }, [hasCoords, item?.title, lat, lng, mapType]);
+
+  if (!hasCoords) {
+    return (
+      <div className="detailsCard detailsMapCard">
+        <div className="detailsSectionHead">
+          <div className="detailsSectionTitle">الموقع</div>
+        </div>
+        <div className="detailsEmptyBox">هذا الإعلان لا يحتوي على إحداثيات محفوظة لعرض الخريطة.</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="detailsCard detailsMapCard">
+      <div className="detailsSectionHead">
+        <div className="detailsSectionTitle">الموقع</div>
+
+        <div className="detailsMapActions">
+          <button
+            type="button"
+            className={`detailsMapSwitch ${mapType === 'roadmap' ? 'active' : ''}`}
+            onClick={() => setMapType('roadmap')}
+          >
+            عادي
+          </button>
+          <button
+            type="button"
+            className={`detailsMapSwitch ${mapType === 'satellite' ? 'active' : ''}`}
+            onClick={() => setMapType('satellite')}
+          >
+            قمر صناعي
+          </button>
+          <a
+            className="detailsMapLink"
+            href={getMapUrl(lat, lng)}
+            target="_blank"
+            rel="noreferrer"
+          >
+            فتح في خرائط Google
+          </a>
+        </div>
+      </div>
+
+      {mapErr ? <div className="detailsMapError">{mapErr}</div> : null}
+      <div ref={mapRef} className="detailsMapCanvas" />
+    </div>
+  );
 }
 
 export default function ListingDetails({ params }) {
   const routeParams = useParams();
-
-  // بعض الأحيان params ما توصل في صفحات الـ client، فنأخذها من useParams()
   const raw = params?.id ?? routeParams?.id;
   const rawId = Array.isArray(raw) ? raw[0] : raw;
+  const isSmall = useIsSmallScreen();
 
   const id = useMemo(() => {
     try {
@@ -78,39 +291,13 @@ export default function ListingDetails({ params }) {
   const [item, setItem] = useState(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
-  const [isSmall, setIsSmall] = useState(false);
-  const [mapReady, setMapReady] = useState(false);
-  const [mapErr, setMapErr] = useState('');
-  const [mapType, setMapType] = useState('hybrid');
-
-  const mapDivRef = useRef(null);
-  const mapRef = useRef(null);
-  const markerRef = useRef(null);
-
-  const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
-
-  const lat = Number(item?.lat);
-  const lng = Number(item?.lng);
-  const hasCoords = Number.isFinite(lat) && Number.isFinite(lng);
-
-  useEffect(() => {
-    if (typeof window === 'undefined' || !window.matchMedia) return;
-    const mq = window.matchMedia('(max-width: 900px)');
-    const apply = () => setIsSmall(!!mq.matches);
-    apply();
-
-    if (typeof mq.addEventListener === 'function') {
-      mq.addEventListener('change', apply);
-      return () => mq.removeEventListener('change', apply);
-    }
-    mq.addListener?.(apply);
-    return () => mq.removeListener?.(apply);
-  }, []);
+  const [shareDone, setShareDone] = useState(false);
+  const [similar, setSimilar] = useState([]);
+  const [similarLoading, setSimilarLoading] = useState(false);
 
   useEffect(() => {
     let live = true;
 
-    // انتظر حتى تتوفر قيمة الـ id (لتفادي false negative)
     if (rawId === undefined) {
       setLoading(false);
       return () => {
@@ -122,25 +309,23 @@ export default function ListingDetails({ params }) {
       try {
         setLoading(true);
         setErr('');
+        setItem(null);
 
         if (!id) {
-          if (live) {
-            setItem(null);
-            setErr('رابط العرض غير صحيح.');
-          }
+          if (live) setErr('رابط العرض غير صحيح.');
           return;
         }
 
         const data = await fetchListingById(id);
         if (live) setItem(data || null);
-      } catch (e) {
-        const msg = String(e?.message || '');
+      } catch (error) {
+        const msg = String(error?.message || '');
         if (live) {
           setItem(null);
-          if (msg.includes('Missing or insufficient permissions') || e?.code === 'permission-denied') {
-            setErr('لا توجد صلاحية لعرض هذا العرض الآن.');
+          if (msg.includes('Missing or insufficient permissions') || error?.code === 'permission-denied') {
+            setErr('لا توجد صلاحية لعرض هذا الإعلان الآن.');
           } else {
-            setErr(msg || 'تعذر تحميل العرض حالياً.');
+            setErr(msg || 'تعذر تحميل الإعلان حاليًا.');
           }
         }
       } finally {
@@ -154,309 +339,613 @@ export default function ListingDetails({ params }) {
   }, [rawId, id]);
 
   useEffect(() => {
-    let alive = true;
+    let live = true;
 
-    async function initMap() {
-      if (!hasCoords) {
-        setMapReady(false);
-        setMapErr('');
-        return;
-      }
-
-      if (!apiKey) {
-        setMapReady(false);
-        setMapErr('مفتاح Google Maps غير مضاف في البيئة.');
-        return;
-      }
-
-      try {
-        setMapErr('');
-        const maps = await loadGoogleMaps(apiKey);
-        if (!alive) return;
-
-        const host = mapDivRef.current;
-        if (!host) return;
-
-        const center = { lat, lng };
-
-        if (!mapRef.current) {
-          mapRef.current = new maps.Map(host, {
-            center,
-            zoom: 16,
-            mapTypeId: mapType,
-            mapTypeControl: false,
-            fullscreenControl: false,
-            streetViewControl: false,
-            rotateControl: false,
-            scaleControl: false,
-            clickableIcons: false,
-            gestureHandling: 'greedy',
-          });
-        } else {
-          mapRef.current.setCenter(center);
-          mapRef.current.setZoom(16);
-          mapRef.current.setMapTypeId(mapType);
-        }
-
-        if (markerRef.current) {
-          try {
-            markerRef.current.setMap(null);
-          } catch {}
-        }
-
-        markerRef.current = new maps.Marker({
-          position: center,
-          map: mapRef.current,
-          title: item?.title || 'موقع العقار',
-        });
-
-        setMapReady(true);
-
-        setTimeout(() => {
-          try {
-            maps.event.trigger(mapRef.current, 'resize');
-            mapRef.current.setCenter(center);
-          } catch {}
-        }, 250);
-      } catch (e) {
-        if (!alive) return;
-        setMapReady(false);
-        setMapErr(String(e?.message || 'تعذر تحميل الخريطة.'));
-      }
+    if (!item?.id || !item?.neighborhood) {
+      setSimilar([]);
+      return () => {
+        live = false;
+      };
     }
 
-    initMap();
+    (async () => {
+      try {
+        setSimilarLoading(true);
+        const rows = await fetchListings({
+          filters: { neighborhood: item.neighborhood },
+          onlyPublic: true,
+          max: 40,
+        });
+
+        if (!live) return;
+
+        const next = (Array.isArray(rows) ? rows : [])
+          .filter((row) => row?.id && row.id !== item.id)
+          .slice(0, 4);
+
+        setSimilar(next);
+      } catch {
+        if (live) setSimilar([]);
+      } finally {
+        if (live) setSimilarLoading(false);
+      }
+    })();
 
     return () => {
-      alive = false;
+      live = false;
     };
-  }, [apiKey, hasCoords, lat, lng, item?.title, mapType]);
+  }, [item?.id, item?.neighborhood]);
+
+  const statusMeta = useMemo(() => getStatusMeta(item), [item]);
+
+  const pageUrl = useMemo(() => {
+    if (typeof window === 'undefined') return '';
+    return window.location.href;
+  }, [id]);
 
   const whatsappHref = useMemo(() => {
     const phone = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || '';
     const text = item
       ? [
-          'السلام عليكم، أبغى استفسار عن العرض:',
-          item.title || '',
+          'السلام عليكم، أرغب في الاستفسار عن هذا العرض:',
+          item.title || 'عرض عقاري',
           `الحي: ${item.neighborhood || '—'}`,
           `المخطط: ${item.plan || '—'}`,
           `الجزء: ${item.part || '—'}`,
           `السعر: ${formatPriceSAR(item.price)}`,
-        ].join('\n')
-      : 'السلام عليكم، أبغى استفسار عن عرض في عقار أبحر.';
+          pageUrl || '',
+        ]
+          .filter(Boolean)
+          .join('\n')
+      : 'السلام عليكم، أريد الاستفسار عن عرض في عقار أبحر.';
+
     return buildWhatsAppLink({ phone, text });
-  }, [item]);
+  }, [item, pageUrl]);
 
-  const wrapStyle = {
-    display: 'grid',
-    gridTemplateColumns: isSmall ? '1fr' : '1fr 1fr',
-    gap: 12,
-    marginTop: 12,
-  };
+  const facts = useMemo(() => {
+    if (!item) return [];
 
-  const cardPad = { padding: 14 };
-  const mapHostStyle = {
-    position: 'relative',
-    width: '100%',
-    height: 340,
-    minHeight: 340,
-    borderRadius: 16,
-    overflow: 'hidden',
-    border: '1px solid var(--border)',
-    background: '#f1f5f9',
-  };
+    return [
+      { label: 'حالة العرض', value: statusMeta.label },
+      { label: 'نوع الصفقة', value: getDealTypeLabel(item.dealType) },
+      { label: 'نوع العقار', value: getSafeString(item.propertyType) || '—' },
+      { label: 'المساحة', value: item.area ? `${item.area} م²` : '—' },
+      { label: 'الحي', value: getSafeString(item.neighborhood) || '—' },
+      { label: 'المخطط', value: getSafeString(item.plan) || '—' },
+      { label: 'الجزء', value: getSafeString(item.part) || '—' },
+      { label: 'المرجع', value: getSafeString(item.id) || '—' },
+    ];
+  }, [item, statusMeta.label]);
+
+  const locationLine = [item?.neighborhood, item?.plan, item?.part].filter(Boolean).join(' • ');
+
+  async function handleShare() {
+    try {
+      const title = item?.title || 'عرض عقاري';
+      const text = `${title} - ${formatPriceSAR(item?.price)}`;
+      const url = pageUrl || (typeof window !== 'undefined' ? window.location.href : '');
+
+      if (navigator.share) {
+        await navigator.share({ title, text, url });
+      } else if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(url);
+        setShareDone(true);
+        window.setTimeout(() => setShareDone(false), 1800);
+      }
+    } catch {
+      // تجاهل إلغاء المستخدم للمشاركة
+    }
+  }
 
   return (
-    <div className="container" style={{ paddingTop: 16 }}>
-      {loading ? (
-        <div className="card" style={cardPad}>
-          جاري التحميل…
-        </div>
-      ) : err ? (
-        <div className="card" style={cardPad}>
-          {err}
-        </div>
-      ) : !item ? (
-        <div className="card" style={cardPad}>
-          العرض غير موجود.
-        </div>
-      ) : (
-        <>
-          <div style={wrapStyle}>
-            {/* تفاصيل */}
-            <div className="card" style={cardPad}>
-              <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
-                <h1 style={{ margin: 0, fontSize: 20, fontWeight: 950, lineHeight: 1.25 }}>
-                  {item.title || 'عرض عقاري'}
-                </h1>
-                <div>{statusBadge(item.status)}</div>
+    <>
+      <div className="container detailsPageWrap">
+        {loading ? (
+          <div className="detailsCard detailsStateCard">جاري تحميل تفاصيل الإعلان…</div>
+        ) : err ? (
+          <div className="detailsCard detailsStateCard">{err}</div>
+        ) : !item ? (
+          <div className="detailsCard detailsStateCard">العرض غير موجود.</div>
+        ) : (
+          <>
+            <section className="detailsHero detailsCard">
+              <div className="detailsHeroTop">
+                <div className="detailsHeroText">
+                  <div className="detailsHeroKicker">تفاصيل الإعلان</div>
+                  <h1 className="detailsHeroTitle">{item.title || 'عرض عقاري'}</h1>
+                  <div className="detailsHeroMeta">{locationLine || 'الموقع غير محدد'}</div>
+                </div>
+
+                <div className={`detailsStatusBadge ${statusMeta.className}`}>{statusMeta.label}</div>
               </div>
 
-              <div className="muted" style={{ marginTop: 8 }}>
-                {(item.neighborhood || '—') + ' • ' + (item.plan || '—') + ' • ' + (item.part || '—')}
-              </div>
-
-              <div
-                className="row"
-                style={{
-                  marginTop: 12,
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  flexWrap: 'wrap',
-                  gap: 10,
-                }}
-              >
-                <div style={{ fontSize: 22, fontWeight: 950 }}>{formatPriceSAR(item.price)}</div>
-
-                <a className="btn btnPrimary" href={whatsappHref} target="_blank" rel="noreferrer">
-                  تواصل واتساب
-                </a>
-              </div>
-
-              {item.area ? (
-                <div className="muted" style={{ marginTop: 10 }}>
-                  المساحة: {item.area} م²
+              <div className="detailsHeroBottom">
+                <div>
+                  <div className="detailsPriceLabel">السعر</div>
+                  <div className="detailsPriceValue">{formatPriceSAR(item.price)}</div>
                 </div>
-              ) : null}
 
-              {item.propertyType ? (
-                <div className="muted" style={{ marginTop: 6 }}>
-                  النوع: {item.propertyType}
-                </div>
-              ) : null}
-
-              {item.description ? (
-                <div style={{ marginTop: 12, whiteSpace: 'pre-wrap', lineHeight: 1.9 }}>
-                  {item.description}
-                </div>
-              ) : (
-                <div className="muted" style={{ marginTop: 12 }}>
-                  لا يوجد وصف.
-                </div>
-              )}
-            </div>
-
-            {/* الصور */}
-            <div className="card" style={cardPad}>
-              {Array.isArray(item.images) && item.images.length ? (
-                <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: isSmall ? '1fr' : '1fr 1fr',
-                    gap: 10,
-                  }}
-                >
-                  {item.images.map((src, idx) => (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      key={`${src}-${idx}`}
-                      src={src}
-                      alt={`صورة ${idx + 1}`}
-                      loading="lazy"
-                      style={{
-                        width: '100%',
-                        height: 220,
-                        objectFit: 'cover',
-                        borderRadius: 12,
-                        border: '1px solid var(--border)',
-                        background: '#f1f5f9',
-                        display: 'block',
-                      }}
-                    />
-                  ))}
-                </div>
-              ) : (
-                <div className="muted">لا توجد صور.</div>
-              )}
-            </div>
-          </div>
-
-          <div className="card" style={{ ...cardPad, marginTop: 12 }}>
-            <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-              <div>
-                <div style={{ fontWeight: 950, fontSize: 18 }}>الموقع على الخريطة</div>
-                <div className="muted" style={{ marginTop: 4 }}>
-                  {hasCoords ? `الإحداثيات: ${lat.toFixed(6)}, ${lng.toFixed(6)}` : 'هذا الإعلان لا يحتوي على إحداثيات محفوظة.'}
-                </div>
-              </div>
-
-              {hasCoords ? (
-                <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
-                  <button
-                    type="button"
-                    className="btn"
-                    onClick={() => setMapType('roadmap')}
-                    style={mapType === 'roadmap' ? { fontWeight: 950 } : undefined}
-                  >
-                    عادي
-                  </button>
-                  <button
-                    type="button"
-                    className="btn"
-                    onClick={() => setMapType('hybrid')}
-                    style={mapType === 'hybrid' ? { fontWeight: 950 } : undefined}
-                  >
-                    قمر صناعي
-                  </button>
-                  <a
-                    className="btn btnPrimary"
-                    href={`https://www.google.com/maps?q=${lat},${lng}`}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    فتح في خرائط Google
+                <div className="detailsHeroButtons">
+                  <a className="btn btnPrimary" href={whatsappHref} target="_blank" rel="noreferrer">
+                    تواصل واتساب
                   </a>
+                  <button type="button" className="btn" onClick={handleShare}>
+                    {shareDone ? 'تم نسخ الرابط' : 'مشاركة'}
+                  </button>
+                  <Link className="btn" href="/request">
+                    أرسل طلب مشابه
+                  </Link>
                 </div>
-              ) : null}
-            </div>
+              </div>
+            </section>
 
-            <div style={{ marginTop: 12 }}>
-              {!hasCoords ? (
-                <div className="muted">أضف lat و lng لهذا الإعلان من لوحة الإضافة/التعديل حتى تظهر الخريطة هنا.</div>
-              ) : (
-                <div style={mapHostStyle}>
-                  <div ref={mapDivRef} style={{ width: '100%', height: '100%' }} />
-                  {!mapReady && !mapErr ? (
-                    <div
-                      style={{
-                        position: 'absolute',
-                        inset: 0,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        background: 'rgba(255,255,255,0.82)',
-                        backdropFilter: 'blur(4px)',
-                        fontWeight: 900,
-                        zIndex: 2,
-                      }}
-                    >
-                      جاري تحميل الخريطة…
+            <div className={`detailsLayout ${isSmall ? 'isSmall' : ''}`}>
+              <div className="detailsMainCol">
+                <ImageGallery images={item.images} title={item.title} />
+
+                <section className="detailsCard detailsSpecsCard">
+                  <div className="detailsSectionTitle">معلومات سريعة</div>
+                  <div className="detailsFactsGrid">
+                    {facts.map((fact) => (
+                      <div key={fact.label} className="detailsFactItem">
+                        <div className="detailsFactLabel">{fact.label}</div>
+                        <div className="detailsFactValue">{fact.value}</div>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+
+                <section className="detailsCard detailsDescriptionCard">
+                  <div className="detailsSectionTitle">وصف العقار</div>
+                  <div className="detailsDescriptionText">
+                    {getSafeString(item.description) || 'لا يوجد وصف مضاف لهذا الإعلان حتى الآن.'}
+                  </div>
+                </section>
+
+                <DetailsMap item={item} />
+
+                <section className="detailsCard detailsSimilarCard">
+                  <div className="detailsSectionHead">
+                    <div className="detailsSectionTitle">عروض مشابهة</div>
+                    {item.neighborhood ? (
+                      <Link href={`/listings?neighborhood=${encodeURIComponent(item.neighborhood)}`} className="detailsTextLink">
+                        عرض المزيد
+                      </Link>
+                    ) : null}
+                  </div>
+
+                  {similarLoading ? (
+                    <div className="detailsInlineState">جاري تحميل العروض المشابهة…</div>
+                  ) : similar.length ? (
+                    <div className="detailsSimilarGrid">
+                      {similar.map((row) => (
+                        <ListingCard key={row.id} item={row} />
+                      ))}
                     </div>
-                  ) : null}
-                  {mapErr ? (
-                    <div
-                      style={{
-                        position: 'absolute',
-                        inset: 0,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        background: 'rgba(255,255,255,0.92)',
-                        padding: 16,
-                        textAlign: 'center',
-                        lineHeight: 1.8,
-                        zIndex: 3,
-                      }}
-                    >
-                      {mapErr}
-                    </div>
-                  ) : null}
-                </div>
-              )}
+                  ) : (
+                    <div className="detailsInlineState">لا توجد عروض مشابهة متاحة حاليًا.</div>
+                  )}
+                </section>
+              </div>
+
+              <aside className="detailsSideCol">
+                <section className="detailsCard detailsSidebarCard">
+                  <div className="detailsSidebarTitle">ملخص الإعلان</div>
+                  <div className="detailsSidebarPrice">{formatPriceSAR(item.price)}</div>
+                  <div className="detailsSidebarLocation">{locationLine || 'الموقع غير محدد'}</div>
+
+                  <div className="detailsSidebarList">
+                    {facts.slice(0, 6).map((fact) => (
+                      <div key={fact.label} className="detailsSidebarRow">
+                        <span>{fact.label}</span>
+                        <strong>{fact.value}</strong>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="detailsSidebarActions">
+                    <a className="btn btnPrimary" href={whatsappHref} target="_blank" rel="noreferrer">
+                      تواصل واتساب
+                    </a>
+                    {Number.isFinite(Number(item.lat)) && Number.isFinite(Number(item.lng)) ? (
+                      <a
+                        className="btn"
+                        href={getMapUrl(Number(item.lat), Number(item.lng))}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        فتح الموقع
+                      </a>
+                    ) : null}
+                  </div>
+                </section>
+              </aside>
             </div>
-          </div>
-        </>
-      )}
-    </div>
+          </>
+        )}
+      </div>
+
+      <style jsx>{`
+        .detailsPageWrap {
+          padding-top: 16px;
+          padding-bottom: 8px;
+        }
+
+        .detailsCard {
+          background: var(--card);
+          border: 1px solid var(--border);
+          border-radius: 22px;
+          box-shadow: var(--shadow);
+        }
+
+        .detailsStateCard {
+          padding: 20px;
+        }
+
+        .detailsHero {
+          padding: 22px;
+          margin-bottom: 16px;
+          overflow: hidden;
+          background:
+            linear-gradient(180deg, rgba(214, 179, 91, 0.1), rgba(214, 179, 91, 0.03)),
+            var(--card);
+        }
+
+        .detailsHeroTop {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 16px;
+        }
+
+        .detailsHeroKicker {
+          color: var(--muted);
+          font-size: 13px;
+          margin-bottom: 8px;
+        }
+
+        .detailsHeroTitle {
+          margin: 0;
+          font-size: clamp(24px, 3vw, 34px);
+          line-height: 1.25;
+          font-weight: 950;
+        }
+
+        .detailsHeroMeta {
+          margin-top: 10px;
+          color: var(--muted);
+          font-size: 15px;
+        }
+
+        .detailsStatusBadge {
+          flex: 0 0 auto;
+          min-width: 92px;
+          text-align: center;
+          padding: 10px 14px;
+          border-radius: 999px;
+          font-weight: 900;
+          border: 1px solid transparent;
+          background: #f8fafc;
+        }
+
+        .detailsStatusBadge.ok {
+          color: #166534;
+          background: rgba(22, 163, 74, 0.1);
+          border-color: rgba(22, 163, 74, 0.18);
+        }
+
+        .detailsStatusBadge.warn {
+          color: #92400e;
+          background: rgba(245, 158, 11, 0.12);
+          border-color: rgba(245, 158, 11, 0.2);
+        }
+
+        .detailsStatusBadge.danger {
+          color: #991b1b;
+          background: rgba(220, 38, 38, 0.1);
+          border-color: rgba(220, 38, 38, 0.18);
+        }
+
+        .detailsStatusBadge.muted {
+          color: #334155;
+          background: rgba(148, 163, 184, 0.16);
+          border-color: rgba(148, 163, 184, 0.24);
+        }
+
+        .detailsHeroBottom {
+          margin-top: 20px;
+          display: flex;
+          align-items: end;
+          justify-content: space-between;
+          gap: 18px;
+          flex-wrap: wrap;
+        }
+
+        .detailsPriceLabel {
+          color: var(--muted);
+          font-size: 13px;
+          margin-bottom: 4px;
+        }
+
+        .detailsPriceValue {
+          font-size: clamp(26px, 3vw, 38px);
+          line-height: 1.2;
+          font-weight: 950;
+        }
+
+        .detailsHeroButtons {
+          display: flex;
+          gap: 10px;
+          flex-wrap: wrap;
+        }
+
+        .detailsLayout {
+          display: grid;
+          grid-template-columns: minmax(0, 1.5fr) minmax(300px, 0.72fr);
+          gap: 16px;
+          align-items: start;
+        }
+
+        .detailsLayout.isSmall {
+          grid-template-columns: 1fr;
+        }
+
+        .detailsMainCol,
+        .detailsSideCol {
+          display: grid;
+          gap: 16px;
+        }
+
+        .detailsSidebarCard {
+          padding: 18px;
+          position: sticky;
+          top: 16px;
+        }
+
+        .detailsSidebarTitle {
+          font-size: 18px;
+          font-weight: 900;
+          margin-bottom: 14px;
+        }
+
+        .detailsSidebarPrice {
+          font-size: 30px;
+          font-weight: 950;
+          line-height: 1.2;
+        }
+
+        .detailsSidebarLocation {
+          color: var(--muted);
+          margin-top: 8px;
+          line-height: 1.8;
+        }
+
+        .detailsSidebarList {
+          display: grid;
+          gap: 10px;
+          margin-top: 18px;
+        }
+
+        .detailsSidebarRow {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 16px;
+          padding: 12px 0;
+          border-bottom: 1px solid var(--border);
+          color: var(--muted);
+        }
+
+        .detailsSidebarRow strong {
+          color: var(--text);
+          font-weight: 900;
+          text-align: left;
+        }
+
+        .detailsSidebarActions {
+          display: grid;
+          gap: 10px;
+          margin-top: 18px;
+        }
+
+        .detailsSectionTitle {
+          font-size: 18px;
+          font-weight: 950;
+          margin-bottom: 14px;
+        }
+
+        .detailsSectionHead {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          flex-wrap: wrap;
+          margin-bottom: 14px;
+        }
+
+        .detailsTextLink {
+          color: var(--muted);
+          text-decoration: none;
+          font-weight: 800;
+        }
+
+        .detailsGalleryCard,
+        .detailsSpecsCard,
+        .detailsDescriptionCard,
+        .detailsMapCard,
+        .detailsSimilarCard {
+          padding: 18px;
+        }
+
+        .detailsMainImageWrap {
+          border-radius: 18px;
+          overflow: hidden;
+          border: 1px solid var(--border);
+          background: #f8fafc;
+        }
+
+        .detailsMainImage {
+          width: 100%;
+          height: min(58vw, 500px);
+          min-height: 300px;
+          display: block;
+          object-fit: cover;
+          background: #f8fafc;
+        }
+
+        .detailsThumbs {
+          margin-top: 12px;
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(82px, 1fr));
+          gap: 10px;
+        }
+
+        .detailsThumbBtn {
+          padding: 0;
+          border: 1px solid var(--border);
+          border-radius: 14px;
+          overflow: hidden;
+          background: #fff;
+          cursor: pointer;
+        }
+
+        .detailsThumbBtn.active {
+          border-color: rgba(214, 179, 91, 0.85);
+          box-shadow: 0 0 0 3px rgba(214, 179, 91, 0.15);
+        }
+
+        .detailsThumbImg {
+          width: 100%;
+          height: 82px;
+          object-fit: cover;
+          display: block;
+        }
+
+        .detailsEmptyBox {
+          border: 1px dashed var(--border2);
+          border-radius: 18px;
+          background: #f8fafc;
+          color: var(--muted);
+          padding: 20px;
+          line-height: 1.9;
+        }
+
+        .detailsFactsGrid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+          gap: 12px;
+        }
+
+        .detailsFactItem {
+          border: 1px solid var(--border);
+          border-radius: 18px;
+          padding: 14px;
+          background: linear-gradient(180deg, #fff, #fcfcfd);
+        }
+
+        .detailsFactLabel {
+          color: var(--muted);
+          font-size: 13px;
+          margin-bottom: 8px;
+        }
+
+        .detailsFactValue {
+          font-size: 16px;
+          font-weight: 900;
+          line-height: 1.5;
+        }
+
+        .detailsDescriptionText {
+          white-space: pre-wrap;
+          line-height: 2;
+          color: var(--text);
+          font-size: 15px;
+        }
+
+        .detailsMapActions {
+          display: flex;
+          gap: 8px;
+          flex-wrap: wrap;
+          align-items: center;
+        }
+
+        .detailsMapSwitch,
+        .detailsMapLink {
+          border: 1px solid var(--border);
+          background: #fff;
+          color: var(--text);
+          padding: 9px 12px;
+          border-radius: 12px;
+          font-weight: 800;
+          text-decoration: none;
+          cursor: pointer;
+        }
+
+        .detailsMapSwitch.active {
+          background: linear-gradient(135deg, var(--primary), var(--primary2));
+          border-color: transparent;
+        }
+
+        .detailsMapError {
+          color: #991b1b;
+          margin-bottom: 10px;
+          font-size: 14px;
+        }
+
+        .detailsMapCanvas {
+          width: 100%;
+          height: 360px;
+          border-radius: 18px;
+          border: 1px solid var(--border);
+          overflow: hidden;
+          background: #f1f5f9;
+        }
+
+        .detailsSimilarGrid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 12px;
+        }
+
+        .detailsInlineState {
+          color: var(--muted);
+          line-height: 1.8;
+        }
+
+        @media (max-width: 980px) {
+          .detailsSidebarCard {
+            position: static;
+          }
+        }
+
+        @media (max-width: 720px) {
+          .detailsHero {
+            padding: 18px;
+          }
+
+          .detailsHeroTop {
+            flex-direction: column;
+            align-items: stretch;
+          }
+
+          .detailsStatusBadge {
+            width: fit-content;
+          }
+
+          .detailsMainImage {
+            height: 300px;
+            min-height: 300px;
+          }
+
+          .detailsMapCanvas {
+            height: 300px;
+          }
+
+          .detailsSimilarGrid {
+            grid-template-columns: 1fr;
+          }
+        }
+      `}</style>
+    </>
   );
 }
