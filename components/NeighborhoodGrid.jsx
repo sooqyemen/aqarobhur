@@ -28,21 +28,19 @@ export default function NeighborhoodGrid({ title = 'الأحياء', showViewAll
         ) : null}
       </div>
 
-      <div className="nbViewport">
-        <div className="nbRow" role="list" aria-label="شريط الأحياء">
-          {items.map((n) => (
-            <button
-              key={n.key}
-              type="button"
-              className="nbChip"
-              onClick={() => go(n.label)}
-              role="listitem"
-              title={n.label}
-            >
-              {n.label}
-            </button>
-          ))}
-        </div>
+      <div className="nbRow" role="list" aria-label="شريط الأحياء">
+        {items.map((n) => (
+          <button
+            key={n.key}
+            type="button"
+            className="nbChip"
+            onClick={() => go(n.label)}
+            role="listitem"
+            title={n.label}
+          >
+            {n.label}
+          </button>
+        ))}
       </div>
     </section>
   );
