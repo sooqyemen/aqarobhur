@@ -51,20 +51,6 @@ export default function Header() {
     }
   }, []);
 
-  const actionLinks = useMemo(() => {
-    if (isAdmin) {
-      return [{ href: '/admin', label: 'لوحة الأدمن', kind: 'primary' }];
-    }
-
-    return [
-      {
-        href: '/account',
-        label: hasUser ? 'الحساب' : 'تسجيل / دخول',
-        kind: 'secondary',
-      },
-    ];
-  }, [hasUser, isAdmin]);
-
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
@@ -120,9 +106,26 @@ export default function Header() {
     setMenuOpen(false);
   }, [pathname]);
 
+  const actionLinks = useMemo(() => {
+    if (isAdmin) {
+      return [
+        { href: '/account', label: 'الحساب', kind: 'ghost' },
+        { href: '/admin', label: 'لوحة الأدمن', kind: 'primary' },
+      ];
+    }
+
+    return [
+      {
+        href: '/account',
+        label: hasUser ? 'الحساب' : 'تسجيل الدخول',
+        kind: 'ghost',
+      },
+    ];
+  }, [hasUser, isAdmin]);
+
   function onSearch(e) {
     e.preventDefault();
-    const value = (q || '').trim();
+    const value = String(q || '').trim();
     router.push(value ? `/listings?q=${encodeURIComponent(value)}` : '/listings');
   }
 
@@ -167,7 +170,15 @@ export default function Header() {
   return (
     <>
       <header className={`hdr ${isScrolled ? 'scrolled' : ''}`} dir="rtl">
-        <div className="hdrInner">
+        <div
+          className="hdrInner"
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'auto minmax(0, 1fr) auto',
+            alignItems: 'center',
+            rowGap: 12,
+          }}
+        >
           <button
             className="menuBtn"
             type="button"
@@ -182,45 +193,59 @@ export default function Header() {
             <Logo variant="lg" />
             <div className="brandText">
               <div className="title">عقار أبحر</div>
-              <div className="sub">شمال جدة</div>
+              <div className="sub">عروض أبحر الشمالية وشمال جدة</div>
             </div>
           </Link>
 
-          <form className="search" onSubmit={onSearch} role="search">
-            <input
-              className="input"
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="ابحث عن حي / مخطط / جزء…"
-              aria-label="بحث"
-            />
-            <button className="btn btnPrimary" type="submit">
-              بحث
-            </button>
-          </form>
-
-          <nav className="navDesktop" aria-label="روابط الموقع">
-            {navLinks.map((link) => (
-              <Link
-                key={link.href}
-                href={link.href}
-                className={`navLink ${isActive(link.href) ? 'active' : ''}`}
-              >
-                {link.label}
-              </Link>
-            ))}
-          </nav>
-
-          <div className="headerActions" aria-label="إجراءات الحساب">
+          <div className="navActions" aria-label="إجراءات الحساب">
             {actionLinks.map((link) => (
               <Link
                 key={link.href}
                 href={link.href}
-                className={`headerAction ${link.kind} ${isActive(link.href) ? 'active' : ''}`}
+                className={
+                  link.kind === 'primary'
+                    ? 'navLinkPrimary'
+                    : `navLinkGhost ${isActive(link.href) ? 'active' : ''}`
+                }
               >
                 {link.label}
               </Link>
             ))}
+          </div>
+
+          <div
+            style={{
+              gridColumn: '1 / -1',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12,
+              flexWrap: 'wrap',
+            }}
+          >
+            <nav className="navDesktop" aria-label="روابط الموقع" style={{ flex: '1 1 460px' }}>
+              {navLinks.map((link) => (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className={`navLink ${isActive(link.href) ? 'active' : ''}`}
+                >
+                  {link.label}
+                </Link>
+              ))}
+            </nav>
+
+            <form className="search" onSubmit={onSearch} role="search" style={{ flex: '1 1 340px' }}>
+              <input
+                className="input"
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="ابحث عن حي، مخطط، جزء أو نوع عقار"
+                aria-label="بحث"
+              />
+              <button className="btn btnPrimary" type="submit">
+                بحث
+              </button>
+            </form>
           </div>
         </div>
       </header>
@@ -234,7 +259,7 @@ export default function Header() {
                 <Logo variant="sm" />
                 <div>
                   <div className="drawerTitle">عقار أبحر</div>
-                  <div className="drawerSub">القائمة</div>
+                  <div className="drawerSub">الوصول السريع</div>
                 </div>
               </div>
 
@@ -243,28 +268,50 @@ export default function Header() {
               </button>
             </div>
 
-            <div className="drawerActions">
-              {actionLinks.map((l) => (
-                <Link
-                  key={l.href}
-                  href={l.href}
-                  className={`drawerAction ${l.kind}`}
-                  onClick={() => setMenuOpen(false)}
-                >
-                  {l.label}
-                </Link>
-              ))}
-            </div>
+            <form className="search" onSubmit={onSearch} role="search" style={{ marginBottom: 14 }}>
+              <input
+                className="input"
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="ابحث في العروض"
+                aria-label="بحث"
+              />
+              <button className="btn btnPrimary" type="submit">
+                بحث
+              </button>
+            </form>
 
             <div className="drawerLinks">
-              {navLinks.map((l) => (
-                <Link key={l.href} href={l.href} className="drawerLink" onClick={() => setMenuOpen(false)}>
-                  {l.label}
+              {navLinks.map((link) => (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className="drawerLink"
+                  style={
+                    isActive(link.href)
+                      ? {
+                          background: 'rgba(214, 179, 91, 0.14)',
+                          borderColor: 'rgba(214, 179, 91, 0.45)',
+                        }
+                      : undefined
+                  }
+                >
+                  {link.label}
+                </Link>
+              ))}
+
+              {actionLinks.map((link) => (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className={link.kind === 'primary' ? 'drawerActionPrimary' : 'drawerAction'}
+                >
+                  {link.label}
                 </Link>
               ))}
             </div>
 
-            <div className="drawerHint">استخدم البحث للوصول السريع للعروض.</div>
+            <div className="drawerHint">يمكنك الوصول للعروض أو إرسال طلبك مباشرة من الجوال.</div>
           </aside>
         </div>
       ) : null}
