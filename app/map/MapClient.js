@@ -319,9 +319,7 @@ export default function MapClient() {
     }
 
     mapClickListenerRef.current = map.addListener('click', () => {
-      if (!isFullscreen) {
-        setIsFullscreen(true);
-      }
+      if (!isFullscreen) setIsFullscreen(true);
     });
 
     return () => {
@@ -359,28 +357,10 @@ export default function MapClient() {
       const pos = { lat, lng };
       bounds.extend(pos);
 
-      const priceText = formatPrice(it.price);
-
       const marker = new maps.Marker({
         position: pos,
         map,
         title: it.title || 'عرض',
-        label: {
-          text: priceText,
-          color: '#ffffff',
-          fontSize: '11px',
-          fontWeight: '900',
-        },
-        icon: {
-          path: 'M -28 -16 H 28 A 16 16 0 0 1 28 16 H -28 A 16 16 0 0 1 -28 -16 Z',
-          fillColor: '#16a34a',
-          fillOpacity: 1,
-          strokeColor: '#ffffff',
-          strokeWeight: 2,
-          scale: 1,
-          anchor: new maps.Point(0, 0),
-          labelOrigin: new maps.Point(0, 4),
-        },
         optimized: false,
         zIndex: 1000,
       });
@@ -388,18 +368,21 @@ export default function MapClient() {
       marker.addListener('click', () => {
         try {
           const title = escapeHtml(it.title || 'عرض');
-          const n = escapeHtml(it.neighborhood || '');
+          const neighborhoodText = escapeHtml(it.neighborhood || '');
+          const planText = escapeHtml(it.plan || '');
+          const partText = escapeHtml(it.part || '');
+          const priceText = escapeHtml(formatPrice(it.price));
           const link = `/listing/${encodeURIComponent(String(it.id || it.docId || ''))}`;
 
+          const meta = [neighborhoodText, planText, partText].filter(Boolean).join(' • ');
+
           const html = `
-            <div style="direction:rtl; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; min-width:220px">
+            <div style="direction:rtl; font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial; min-width:220px">
               <div style="font-weight:900; margin:0 0 6px">${title}</div>
-              <div style="color:#475569; font-weight:700; font-size:12px; margin:0 0 8px">
-                ${n ? `الحي: ${n}` : ''}
-              </div>
-              <a href="${link}" style="display:inline-block; padding:8px 12px; border-radius:12px; text-decoration:none;
-                 background: linear-gradient(135deg, var(--primary), var(--primary2)); color:#1f2937; font-weight:900;">
-                 فتح التفاصيل
+              <div style="color:#0f172a; font-weight:900; margin:0 0 8px">${priceText}</div>
+              <div style="color:#475569; font-weight:700; font-size:12px; margin:0 0 10px">${meta || ''}</div>
+              <a href="${link}" style="display:inline-block; padding:8px 12px; border-radius:12px; text-decoration:none; background:linear-gradient(135deg, var(--primary), var(--primary2)); color:#1f2937; font-weight:900;">
+                فتح التفاصيل
               </a>
             </div>
           `;
