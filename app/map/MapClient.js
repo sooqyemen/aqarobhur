@@ -18,7 +18,6 @@ function escapeHtml(s) {
     .replaceAll("'", '&#039;');
 }
 
-/** تنسيق السعر بالعربية (مثل: 1.4 مليون, 650 ألف) */
 function formatPrice(price) {
   if (price == null) return '?';
   const num = Number(price);
@@ -40,7 +39,6 @@ function normalizeDealType(v) {
   return '';
 }
 
-/** Escape للنص داخل SVG */
 function escapeXml(s) {
   return String(s || '')
     .replaceAll('&', '&amp;')
@@ -50,16 +48,10 @@ function escapeXml(s) {
     .replaceAll("'", '&#39;');
 }
 
-/**
- * ✅ إنشاء أيقونة SVG مستطيلة خضراء تعرض السعر داخلها
- * - بدون دبوس
- * - العرض يتكيّف تقريبياً حسب طول النص
- */
 function buildPriceBadgeIcon(maps, priceText) {
   const text = String(priceText || '?');
 
-  // تقدير عرض مناسب حسب طول النص (تقريب)
-  const charW = 8; // متوسط عرض الحرف/الرقم
+  const charW = 8;
   const padX = 12;
   const h = 30;
   const minW = 56;
@@ -86,7 +78,6 @@ function buildPriceBadgeIcon(maps, priceText) {
   return {
     url,
     scaledSize: new maps.Size(w, h),
-    // نخلي نقطة المكان عند أسفل المنتصف (الـ badge يكون فوق الإحداثية)
     anchor: new maps.Point(Math.round(w / 2), h),
   };
 }
@@ -100,10 +91,12 @@ function loadGoogleMaps(apiKey) {
 
   __gmapsPromise = new Promise((resolve, reject) => {
     const cbName = `__gmaps_cb_${Date.now()}`;
+
     window[cbName] = () => {
       try {
         resolve(window.google.maps);
       } catch (e) {
+        __gmapsPromise = null;
         reject(e);
       } finally {
         try {
@@ -118,7 +111,10 @@ function loadGoogleMaps(apiKey) {
     )}&libraries=places&callback=${cbName}`;
     script.async = true;
     script.defer = true;
-    script.onerror = () => reject(new Error('تعذر تحميل سكربت Google Maps.'));
+    script.onerror = () => {
+      __gmapsPromise = null;
+      reject(new Error('تعذر تحميل سكربت Google Maps.'));
+    };
     document.head.appendChild(script);
   });
 
@@ -137,18 +133,19 @@ export default function MapClient() {
 
   const [mapReady, setMapReady] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isSatellite, setIsSatellite] = useState(false);
 
   const mapDivRef = useRef(null);
   const mapRef = useRef(null);
   const markersRef = useRef([]);
   const infoRef = useRef(null);
+  const mapClickListenerRef = useRef(null);
 
   const prevHtmlOverflowRef = useRef('');
   const prevBodyOverflowRef = useRef('');
 
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
 
-  // فلترة
   const filters = useMemo(() => {
     return {
       neighborhood: neighborhood || '',
@@ -168,7 +165,6 @@ export default function MapClient() {
     { value: 'rent', label: 'إيجار' },
   ];
 
-  // ✅ نقل تنسيقات style jsx إلى inline (لتقليل فلاش/تأخر التنسيق)
   const topBarStyle = {
     marginTop: 12,
     background: '#ffffff',
@@ -190,7 +186,7 @@ export default function MapClient() {
       : null),
   };
 
-  const xBtnStyle = {
+  const closeBtnStyle = {
     width: 44,
     height: 44,
     borderRadius: 14,
@@ -203,6 +199,7 @@ export default function MapClient() {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
+    flex: '0 0 44px',
   };
 
   const barCenterStyle = { flex: 1, minWidth: 0 };
@@ -235,15 +232,19 @@ export default function MapClient() {
     backdropFilter: 'blur(4px)',
   };
 
-  const mapTapFsStyle = {
+  const satelliteBtnStyle = {
     position: 'absolute',
-    inset: 0,
-    border: 0,
-    padding: 0,
-    margin: 0,
-    background: 'transparent',
-    cursor: 'zoom-in',
-    zIndex: 6,
+    right: 'calc(12px + env(safe-area-inset-right))',
+    bottom: isFullscreen ? 'calc(12px + env(safe-area-inset-bottom))' : 12,
+    zIndex: isFullscreen ? 1000002 : 8,
+    border: '1px solid var(--border)',
+    background: '#ffffff',
+    color: 'var(--text)',
+    borderRadius: 14,
+    padding: '10px 14px',
+    fontWeight: 900,
+    cursor: 'pointer',
+    boxShadow: '0 10px 24px rgba(15, 23, 42, 0.12)',
   };
 
   const mapItems = useMemo(() => {
@@ -257,13 +258,15 @@ export default function MapClient() {
   async function load() {
     setErr('');
     setLoading(true);
+
     try {
       const data = await fetchListings({
         onlyPublic: true,
         filters,
-        includeLegacy: false,
+        includeLegacy: true,
         max: 500,
       });
+
       setItems(Array.isArray(data) ? data : []);
     } catch (e) {
       setErr(String(e?.message || 'حصل خطأ أثناء جلب العروض.'));
@@ -278,25 +281,27 @@ export default function MapClient() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters]);
 
-  // تهيئة الخريطة مع إزالة جميع عناصر التحكم الافتراضية
   useEffect(() => {
     let alive = true;
 
     async function initMap() {
       try {
-        if (!apiKey) throw new Error('تعذر تحميل خريطة Google. تأكد من المفتاح وتفعيل Google Maps JavaScript API.');
+        if (!apiKey) {
+          throw new Error('تعذر تحميل خريطة Google. تأكد من المفتاح وتفعيل Google Maps JavaScript API.');
+        }
+
         const maps = await loadGoogleMaps(apiKey);
         if (!alive) return;
 
         const mapDiv = mapDivRef.current;
         if (!mapDiv) return;
 
-        // افتراضي: شمال جدة (أبحر)
         const center = { lat: 21.7628, lng: 39.0994 };
 
         const map = new maps.Map(mapDiv, {
           center,
           zoom: 12,
+          mapTypeId: maps.MapTypeId.ROADMAP,
           mapTypeControl: false,
           fullscreenControl: false,
           streetViewControl: false,
@@ -308,10 +313,8 @@ export default function MapClient() {
 
         mapRef.current = map;
         infoRef.current = new maps.InfoWindow();
-
         setMapReady(true);
 
-        // تحديث المقاس بعد وقت قصير لتفادي مشكلة التحميل/الحجم
         setTimeout(() => {
           try {
             maps.event.trigger(map, 'resize');
@@ -332,7 +335,16 @@ export default function MapClient() {
     };
   }, [apiKey]);
 
-  // تحديث الماركرز كلما تغيّرت النتائج
+  useEffect(() => {
+    if (!mapReady) return;
+    if (!mapRef.current) return;
+    if (!window.google || !window.google.maps) return;
+
+    const maps = window.google.maps;
+    const map = mapRef.current;
+    map.setMapTypeId(isSatellite ? maps.MapTypeId.SATELLITE : maps.MapTypeId.ROADMAP);
+  }, [mapReady, isSatellite]);
+
   useEffect(() => {
     if (!mapReady) return;
     if (!mapRef.current) return;
@@ -341,7 +353,37 @@ export default function MapClient() {
     const maps = window.google.maps;
     const map = mapRef.current;
 
-    // إزالة الماركرز السابقة
+    if (mapClickListenerRef.current) {
+      try {
+        maps.event.removeListener(mapClickListenerRef.current);
+      } catch {}
+      mapClickListenerRef.current = null;
+    }
+
+    mapClickListenerRef.current = map.addListener('click', () => {
+      if (!isFullscreen) {
+        setIsFullscreen(true);
+      }
+    });
+
+    return () => {
+      if (mapClickListenerRef.current) {
+        try {
+          maps.event.removeListener(mapClickListenerRef.current);
+        } catch {}
+        mapClickListenerRef.current = null;
+      }
+    };
+  }, [mapReady, isFullscreen]);
+
+  useEffect(() => {
+    if (!mapReady) return;
+    if (!mapRef.current) return;
+    if (!window.google || !window.google.maps) return;
+
+    const maps = window.google.maps;
+    const map = mapRef.current;
+
     markersRef.current.forEach((m) => {
       try {
         m.setMap(null);
@@ -349,7 +391,6 @@ export default function MapClient() {
     });
     markersRef.current = [];
 
-    // إضافة ماركرز
     const bounds = new maps.LatLngBounds();
 
     mapItems.forEach((it) => {
@@ -361,8 +402,6 @@ export default function MapClient() {
       bounds.extend(pos);
 
       const priceText = formatPrice(it.price);
-
-      // ✅ مستطيل أخضر فيه السعر
       const icon = buildPriceBadgeIcon(maps, priceText);
 
       const marker = new maps.Marker({
@@ -370,7 +409,6 @@ export default function MapClient() {
         map,
         title: it.title || 'عرض',
         icon,
-        // هذا يساعد أحياناً على وضوح SVG على بعض المتصفحات
         optimized: true,
       });
 
@@ -410,7 +448,6 @@ export default function MapClient() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mapReady, mapItems]);
 
-  // قفل تمرير الصفحة عند ملء الشاشة + إضافة كلاس
   useEffect(() => {
     if (typeof document === 'undefined') return;
 
@@ -424,36 +461,34 @@ export default function MapClient() {
       html.style.overflow = 'hidden';
       body.style.overflow = 'hidden';
       body.classList.add('isMapFullscreen');
-
-      setTimeout(() => {
-        try {
-          window.google?.maps?.event?.trigger(mapRef.current, 'resize');
-        } catch {}
-      }, 200);
     } else {
       html.style.overflow = prevHtmlOverflowRef.current;
       body.style.overflow = prevBodyOverflowRef.current;
       body.classList.remove('isMapFullscreen');
-
-      setTimeout(() => {
-        try {
-          window.google?.maps?.event?.trigger(mapRef.current, 'resize');
-        } catch {}
-      }, 200);
     }
 
+    const t = setTimeout(() => {
+      try {
+        window.google?.maps?.event?.trigger(mapRef.current, 'resize');
+      } catch {}
+    }, 200);
+
     return () => {
+      clearTimeout(t);
       html.style.overflow = prevHtmlOverflowRef.current;
       body.style.overflow = prevBodyOverflowRef.current;
       body.classList.remove('isMapFullscreen');
     };
   }, [isFullscreen]);
 
+  const hasItemsWithoutCoords = items.length > 0 && mapItems.length === 0;
+
   return (
     <div className="container">
       <h1 className="h1" style={{ marginTop: 14, marginBottom: 0 }}>
         الخريطة
       </h1>
+
       <div className="muted" style={{ marginTop: 6 }}>
         اختر الحي أو نوع الصفقة، ثم استعرض العروض على الخريطة.
       </div>
@@ -470,14 +505,30 @@ export default function MapClient() {
         </section>
       ) : null}
 
+      {!loading && !err ? (
+        <section className="card" style={{ marginTop: 12, padding: 12 }}>
+          <div className="muted" style={{ fontWeight: 800 }}>
+            العروض المحمّلة: {items.length} — الظاهرة على الخريطة: {mapItems.length}
+          </div>
+          {hasItemsWithoutCoords ? (
+            <div style={{ marginTop: 8, color: 'var(--muted)' }}>
+              تم جلب عروض لكن لا تحتوي على إحداثيات صالحة لعرضها على الخريطة.
+            </div>
+          ) : null}
+        </section>
+      ) : null}
+
       <div style={topBarStyle}>
-        <button
-          style={xBtnStyle}
-          onClick={() => (isFullscreen ? setIsFullscreen(false) : window.history.back())}
-          aria-label="إغلاق"
-        >
-          ✕
-        </button>
+        {isFullscreen ? (
+          <button
+            type="button"
+            style={closeBtnStyle}
+            onClick={() => setIsFullscreen(false)}
+            aria-label="إغلاق وضع ملء الشاشة"
+          >
+            ✕
+          </button>
+        ) : null}
 
         <div style={barCenterStyle}>
           <ChipsRow value={neighborhood} options={neighborhoodOptions} onChange={setNeighborhood} />
@@ -485,8 +536,6 @@ export default function MapClient() {
             <ChipsRow value={dealType} options={dealTypeOptions} onChange={setDealType} />
           </div>
         </div>
-
-        <div style={{ width: 44 }} />
       </div>
 
       <div style={mapHostStyle}>
@@ -494,13 +543,15 @@ export default function MapClient() {
 
         {!mapReady ? <div style={mapLoadingStyle}>جاري تحميل الخريطة…</div> : null}
 
-        {!isFullscreen ? (
+        {mapReady ? (
           <button
             type="button"
-            style={mapTapFsStyle}
-            onClick={() => setIsFullscreen(true)}
-            aria-label="فتح الخريطة ملء الشاشة"
-          />
+            style={satelliteBtnStyle}
+            onClick={() => setIsSatellite((v) => !v)}
+            aria-label={isSatellite ? 'العودة إلى الخريطة العادية' : 'تفعيل القمر الصناعي'}
+          >
+            {isSatellite ? 'خريطة' : 'قمر صناعي'}
+          </button>
         ) : null}
       </div>
 
