@@ -39,50 +39,8 @@ function normalizeDealType(v) {
   return '';
 }
 
-function escapeXml(s) {
-  return String(s || '')
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#39;');
-}
-
-function buildPriceBadgeIcon(maps, priceText) {
-  const text = String(priceText || '?');
-
-  const charW = 8;
-  const padX = 12;
-  const h = 30;
-  const minW = 56;
-  const maxW = 160;
-  const w = Math.max(minW, Math.min(maxW, text.length * charW + padX * 2));
-
-  const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
-      <rect x="1" y="1" width="${w - 2}" height="${h - 2}" rx="12"
-        fill="#16a34a" stroke="rgba(255,255,255,0.95)" stroke-width="2"/>
-      <text x="${w / 2}" y="${h / 2 + 5}"
-        text-anchor="middle"
-        font-family="system-ui, -apple-system, Segoe UI, Roboto, Arial"
-        font-size="13"
-        font-weight="900"
-        fill="#ffffff"
-        direction="rtl"
-        unicode-bidi="plaintext">${escapeXml(text)}</text>
-    </svg>
-  `.trim();
-
-  const url = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
-
-  return {
-    url,
-    scaledSize: new maps.Size(w, h),
-    anchor: new maps.Point(Math.round(w / 2), h),
-  };
-}
-
 let __gmapsPromise = null;
+
 function loadGoogleMaps(apiKey) {
   if (typeof window === 'undefined') return Promise.reject(new Error('No window'));
   if (window.google && window.google.maps) return Promise.resolve(window.google.maps);
@@ -402,14 +360,29 @@ export default function MapClient() {
       bounds.extend(pos);
 
       const priceText = formatPrice(it.price);
-      const icon = buildPriceBadgeIcon(maps, priceText);
 
       const marker = new maps.Marker({
         position: pos,
         map,
         title: it.title || 'عرض',
-        icon,
-        optimized: true,
+        label: {
+          text: priceText,
+          color: '#ffffff',
+          fontSize: '11px',
+          fontWeight: '900',
+        },
+        icon: {
+          path: 'M -28 -16 H 28 A 16 16 0 0 1 28 16 H -28 A 16 16 0 0 1 -28 -16 Z',
+          fillColor: '#16a34a',
+          fillOpacity: 1,
+          strokeColor: '#ffffff',
+          strokeWeight: 2,
+          scale: 1,
+          anchor: new maps.Point(0, 0),
+          labelOrigin: new maps.Point(0, 4),
+        },
+        optimized: false,
+        zIndex: 1000,
       });
 
       marker.addListener('click', () => {
@@ -508,7 +481,7 @@ export default function MapClient() {
       {!loading && !err ? (
         <section className="card" style={{ marginTop: 12, padding: 12 }}>
           <div className="muted" style={{ fontWeight: 800 }}>
-            العروض المحمّلة: {items.length} — الظاهرة على الخريطة: {mapItems.length}
+            العروض المحملة: {items.length} — الظاهرة على الخريطة: {mapItems.length}
           </div>
           {hasItemsWithoutCoords ? (
             <div style={{ marginTop: 8, color: 'var(--muted)' }}>
