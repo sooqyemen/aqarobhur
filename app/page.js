@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState, Suspense } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 
@@ -49,30 +49,26 @@ export default function HomePage() {
 
   useEffect(() => {
     let alive = true;
-    (async () => {
+    const loadListings = async () => {
       try {
+        setLoading(true);
         const res = await fetchLatestListings(12);
         if (!alive) return;
         setItems(res || []);
-      } catch {
+      } catch (error) {
         if (!alive) return;
         setErr('تعذر تحميل أحدث العروض.');
       } finally {
         if (alive) setLoading(false);
       }
-    })();
+    };
+    
+    loadListings();
 
     return () => {
       alive = false;
     };
   }, []);
-
-  const safeItems = useMemo(() => {
-    return (items || []).map((it, index) => ({
-      __key: it?.id || it?.docId || `idx-${index}`,
-      ...it,
-    }));
-  }, [items]);
 
   return (
     <div className="container">
@@ -80,37 +76,54 @@ export default function HomePage() {
       <NeighborhoodGrid />
 
       {/* ✅ اختصارات سريعة */}
-      <Suspense fallback={null}>
+      <Suspense fallback={<div className="quickBarHome" style={{ opacity: 0.5 }}>جاري التحميل...</div>}>
         <QuickLinks />
       </Suspense>
 
-      <div className="row" style={{ justifyContent: 'space-between', marginTop: 8 }}>
-        <div className="sectionTitle" style={{ margin: 0 }}>
+      <div 
+        className="row" 
+        style={{ 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          alignItems: 'center', 
+          marginTop: '24px', 
+          marginBottom: '16px' 
+        }}
+      >
+        <h2 className="sectionTitle" style={{ margin: 0, fontSize: '1.25rem' }}>
           أحدث العروض
-        </div>
+        </h2>
         <Link href="/listings" className="btn">
           تصفح الكل
         </Link>
       </div>
 
-      {err ? (
-        <div className="card" style={{ padding: 14, marginTop: 12 }}>
+      {err && (
+        <div className="card" style={{ padding: 14, marginTop: 12, color: '#d32f2f', backgroundColor: '#fee' }}>
           {err}
         </div>
-      ) : null}
+      )}
 
       {loading ? (
         <div className="card" style={{ padding: 14, marginTop: 12 }}>
-          جاري التحميل…
+          جاري تحميل العروض…
         </div>
-      ) : safeItems.length === 0 ? (
+      ) : items.length === 0 ? (
         <div className="card" style={{ padding: 14, marginTop: 12 }}>
           لا توجد عروض حتى الآن.
         </div>
       ) : (
-        <div style={{ marginTop: 12, display: 'grid', gap: 12 }}>
-          {safeItems.map((it) => (
-            <ListingCard key={it.__key} item={it} />
+        <div 
+          style={{ 
+            marginTop: 12, 
+            display: 'grid', 
+            gap: '16px',
+            // هذا السطر يضمن تجاوب العروض مع جميع الشاشات (جوال، تابلت، كمبيوتر)
+            gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))'
+          }}
+        >
+          {items.map((it, index) => (
+            <ListingCard key={it.id || it.docId || `idx-${index}`} item={it} />
           ))}
         </div>
       )}
