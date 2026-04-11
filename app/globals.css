@@ -37,6 +37,11 @@ body {
   background: linear-gradient(180deg, var(--bg), var(--bg2));
   color: var(--text);
   font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  
+  /* تحسين جودة عرض الخطوط العربية */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 
   /* ✅ منع التمرير الأفقي على مستوى الصفحة */
   overflow-x: hidden;
@@ -630,10 +635,6 @@ textarea:focus {
   padding-bottom: 10px;
   white-space: nowrap;
   scrollbar-width: none;
-
-  /* ✅ منع التجاوز */
-  max-width: 100%;
-  box-sizing: border-box;
 }
 
 .nbStrip .nbRow::-webkit-scrollbar {
@@ -686,7 +687,6 @@ textarea:focus {
 }
 
 .harajCardRow {
-  /* تم إزالة direction: ltr; */
   display: flex;
   gap: 12px;
   align-items: stretch;
@@ -695,10 +695,6 @@ textarea:focus {
   border-radius: 14px;
   padding: 12px;
   box-shadow: var(--shadow, 0 6px 16px rgba(0, 0, 0, 0.06));
-
-  /* ✅ منع التجاوز */
-  max-width: 100%;
-  box-sizing: border-box;
 }
 
 .harajThumb {
@@ -733,7 +729,6 @@ textarea:focus {
 }
 
 .harajInfo {
-  direction: rtl;
   flex: 1;
   min-width: 0;
   display: flex;
@@ -867,7 +862,7 @@ textarea:focus {
 }
 
 /* =========================================
-   Footer (مُقيد بـ .footer لمنع التعارض)
+   Footer
 ========================================= */
 .footer {
   background: var(--bg2);
