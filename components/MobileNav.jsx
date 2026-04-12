@@ -2,130 +2,68 @@
 
 import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
+import { MAIN_NAV_LINKS } from '@/lib/navigation';
 
-// شريط الجوال السفلي (نص فقط)
-// - بدون رموز
-// - يخفي نفسه عند ملء شاشة الخريطة
-// - بدون <style jsx> لتقليل فلاش التنسيق
 export default function MobileNav() {
   const pathname = usePathname() || '/';
   const router = useRouter();
-
   const [hiddenByFullscreen, setHiddenByFullscreen] = useState(false);
   const [isDesktop, setIsDesktop] = useState(false);
 
   useEffect(() => {
-    // إخفاء الشريط إذا كانت الخريطة في وضع ملء الشاشة
     const tick = () => {
-      try {
-        setHiddenByFullscreen(document.body.classList.contains('isMapFullscreen'));
-      } catch {
-        setHiddenByFullscreen(false);
-      }
+      try { setHiddenByFullscreen(document.body.classList.contains('isMapFullscreen')); } 
+      catch { setHiddenByFullscreen(false); }
     };
-
     tick();
     const id = setInterval(tick, 200);
     return () => clearInterval(id);
   }, []);
 
   useEffect(() => {
-    // بديل media query بدون style jsx
     if (typeof window === 'undefined' || !window.matchMedia) return;
-
     const mq = window.matchMedia('(min-width: 900px)');
     const apply = () => setIsDesktop(!!mq.matches);
-
     apply();
-
-    if (typeof mq.addEventListener === 'function') {
-      mq.addEventListener('change', apply);
-      return () => mq.removeEventListener('change', apply);
-    }
-
-    // Safari القديم
-    mq.addListener?.(apply);
-    return () => mq.removeListener?.(apply);
+    mq.addEventListener('change', apply);
+    return () => mq.removeEventListener('change', apply);
   }, []);
 
-  const items = [
-    { href: '/', label: 'الرئيسية' },
-    { href: '/neighborhoods', label: 'الأحياء' },
-    { href: '/map', label: 'الخريطة' },
-    { href: '/request', label: 'أرسل طلبك' },
-  ];
+  // نتأكد من وجود الروابط قبل الفلترة لتجنب الأخطاء
+  const items = (MAIN_NAV_LINKS || []).filter(link => link.mobileBottom);
 
-  const isActive = (href) => {
-    if (href === '/') return pathname === '/';
-    return pathname.startsWith(href);
-  };
+  const isActive = (href) => href === '/' ? pathname === '/' : pathname.startsWith(href);
 
   if (isDesktop) return null;
 
   return (
-    <nav
-      aria-label="قائمة الجوال"
-      style={{
-        position: 'fixed',
-        left: 0,
-        right: 0,
-        bottom: 0,
-        zIndex: 1000,
-        padding: '10px 12px 14px',
-        transition: 'transform 180ms ease, opacity 180ms ease',
-        transform: hiddenByFullscreen ? 'translateY(120%)' : 'translateY(0)',
-        opacity: hiddenByFullscreen ? 0 : 1,
-        pointerEvents: hiddenByFullscreen ? 'none' : 'auto',
-      }}
-    >
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
-          gap: 10,
-          background: 'rgba(255,255,255,0.94)',
-          border: '1px solid var(--border)',
-          borderRadius: 16,
-          padding: 10,
-          backdropFilter: 'blur(16px)',
-          boxShadow: '0 -8px 24px rgba(15, 23, 42, 0.10)',
-        }}
-      >
-        {items.map((it) => {
-          const active = isActive(it.href);
-          const isPrimary = it.href === '/request';
-
-          return (
-            <button
-              key={it.href}
-              type="button"
-              onClick={() => router.push(it.href)}
-              aria-current={active ? 'page' : undefined}
-              style={{
-                border: active
-                  ? '1px solid rgba(214,179,91,0.55)'
-                  : '1px solid var(--border)',
-                background: isPrimary
-                  ? 'linear-gradient(135deg, var(--primary), var(--primary2))'
-                  : active
-                    ? 'rgba(214,179,91,0.12)'
-                    : '#ffffff',
-                color: isPrimary ? '#1f2937' : 'var(--text)',
-                borderRadius: 14,
-                padding: '10px 8px',
-                fontWeight: 950,
-                fontSize: 13,
-                cursor: 'pointer',
-                whiteSpace: 'nowrap',
-                lineHeight: 1.2,
-              }}
-              title={it.label}
-            >
-              {it.label}
-            </button>
-          );
-        })}
-      </div>
-    </nav>
+    <>
+      <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined" rel="stylesheet" />
+      <nav className={`mobileBottomNav ${hiddenByFullscreen ? 'hidden' : ''}`}>
+        <div className="navContainer">
+          {items.map((it) => {
+            const active = isActive(it.href);
+            return (
+              <button key={it.href} type="button" className={`navItem ${active ? 'active' : ''}`} onClick={() => router.push(it.href)}>
+                <span className="material-icons-outlined icon">{it.icon}</span>
+                <span className="label">{it.shortLabel}</span>
+              </button>
+            );
+          })}
+        </div>
+      </nav>
+      <style jsx>{`
+        .mobileBottomNav { position: fixed; bottom: 20px; left: 15px; right: 15px; z-index: 5000; transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s; }
+        .mobileBottomNav.hidden { transform: translateY(150%); opacity: 0; pointer-events: none; }
+        .navContainer { display: grid; grid-template-columns: repeat(${items.length || 1}, 1fr); background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(15px); border: 1px solid rgba(255, 255, 255, 0.3); border-radius: 24px; padding: 8px 5px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.15); }
+        .navItem { display: flex; flex-direction: column; align-items: center; gap: 4px; background: none; border: none; color: #64748b; padding: 8px 0; cursor: pointer; transition: all 0.2s; position: relative; }
+        .icon { font-size: 24px; transition: transform 0.2s; }
+        .label { font-size: 10px; font-weight: 800; }
+        .navItem.active { color: var(--primary); }
+        .navItem.active .icon { transform: translateY(-2px); font-variation-settings: 'FILL' 1; }
+        .navItem.active::after { content: ''; position: absolute; bottom: 2px; width: 4px; height: 4px; background: var(--primary); border-radius: 50%; }
+        @media (max-width: 350px) { .label { font-size: 9px; } }
+      `}</style>
+    </>
   );
 }
