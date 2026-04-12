@@ -85,6 +85,7 @@ export default function AdminDashboardPage() {
       <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined" rel="stylesheet" />
       
       <AdminGuard title="نظرة عامة">
+        {/* نستخدم الـ AdminShell الذي لا يحتوي على أي أزرار تسجيل خروج */}
         <AdminShell
           title="مرحباً بك في عقار أبحر 👋"
           description="ملخص سريع لأداء المنصة والطلبات المعلقة التي تحتاج لانتباهك."
