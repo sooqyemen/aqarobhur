@@ -5,7 +5,14 @@ import Link from 'next/link';
 import AdminGuard from '@/components/admin/AdminGuard';
 import AdminShell from '@/components/admin/AdminShell';
 import { formatPriceSAR, statusBadge } from '@/lib/format'; 
-import { fetchListings, getListingMedia } from '@/lib/listings';
+import { fetchListings } from '@/lib/listings';
+
+// الدالة التي كانت مفقودة (تمت إضافتها هنا)
+function getListingMedia(item) {
+  if (Array.isArray(item?.imagesMeta) && item.imagesMeta.length > 0) return item.imagesMeta;
+  if (Array.isArray(item?.images) && item.images.length > 0) return item.images.map(url => ({ url, kind: 'image' }));
+  return [];
+}
 
 function isVideo(entry) {
   const url = String(entry?.url || '').toLowerCase();
