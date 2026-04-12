@@ -5,8 +5,8 @@ function MapLoading() {
   return (
     <div className="container" style={{ paddingTop: 16 }}>
       <section className="card" style={{ padding: 14 }}>
-        <div style={{ fontWeight: 900, marginBottom: 6 }}>جاري التحميل…</div>
-        <div className="muted">يتم تجهيز الخريطة والفلترة.</div>
+        <div style={{ fontWeight: 900, marginBottom: 6, color: 'var(--primary)' }}>جاري التحميل…</div>
+        <div style={{ color: 'var(--muted)', fontSize: 14 }}>يتم تجهيز الخريطة والفلترة الذكية.</div>
       </section>
     </div>
   );
