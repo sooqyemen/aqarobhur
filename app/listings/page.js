@@ -26,14 +26,14 @@ function parseQuery() {
 
 function chipStyle(active) {
   return {
-    border: active ? '1px solid rgba(214, 179, 91, 0.40)' : '1px solid var(--border)',
-    background: active ? 'rgba(214, 179, 91, 0.12)' : '#fff',
+    border: active ? '1px solid rgba(15, 118, 110, 0.40)' : '1px solid var(--border)',
+    background: active ? 'rgba(15, 118, 110, 0.12)' : '#fff',
     borderRadius: 999,
     padding: '9px 13px',
     cursor: 'pointer',
     fontWeight: 900,
     fontSize: 13,
-    color: active ? '#8a6500' : 'var(--text)',
+    color: active ? 'var(--primary)' : 'var(--text)',
   };
 }
 
@@ -73,6 +73,7 @@ export default function ListingsPage() {
 
   useEffect(() => {
     let active = true;
+
     (async () => {
       try {
         setLoading(true);
@@ -111,13 +112,7 @@ export default function ListingsPage() {
 
   return (
     <div className="container" style={{ paddingTop: 8, paddingBottom: 18 }}>
-      <div
-        className="card"
-        style={{
-          padding: 16,
-          background: 'linear-gradient(180deg, #ffffff, #fffdf8)',
-        }}
-      >
+      <div className="card" style={{ padding: 16 }}>
         <div
           style={{
             display: 'flex',
@@ -145,18 +140,11 @@ export default function ListingsPage() {
             }}
           >
             <div style={{ color: 'var(--muted)', fontSize: 13, marginBottom: 8 }}>عدد النتائج</div>
-            <div style={{ fontWeight: 950, fontSize: 28 }}>{loading ? '...' : items.length}</div>
+            <div style={{ fontWeight: 950, fontSize: 28, color: 'var(--primary)' }}>{loading ? '...' : items.length}</div>
           </div>
         </div>
 
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'minmax(0, 1fr) auto',
-            gap: 10,
-            marginTop: 14,
-          }}
-        >
+        <div className="searchActions" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: 10, marginTop: 14 }}>
           <input
             className="input"
             value={q}
@@ -164,7 +152,7 @@ export default function ListingsPage() {
             placeholder="ابحث باسم الحي أو المخطط أو جزء الأرض"
           />
           <button className="btn" type="button" onClick={() => setSheetOpen(true)}>
-            الفلاتر
+            الفلاتر المتقدمة
           </button>
         </div>
       </div>
@@ -175,9 +163,9 @@ export default function ListingsPage() {
             <span
               key={chip.key}
               style={{
-                border: '1px solid rgba(214, 179, 91, 0.35)',
-                background: 'rgba(214, 179, 91, 0.10)',
-                color: '#8a6500',
+                border: '1px solid rgba(15, 118, 110, 0.35)',
+                background: 'rgba(15, 118, 110, 0.10)',
+                color: 'var(--primary)',
                 borderRadius: 999,
                 padding: '7px 12px',
                 fontWeight: 900,
@@ -193,9 +181,7 @@ export default function ListingsPage() {
         </div>
       ) : null}
 
-      {err ? (
-        <div className="card" style={{ padding: 16, marginTop: 14 }}>{err}</div>
-      ) : null}
+      {err ? <div className="card" style={{ padding: 16, marginTop: 14, color: 'var(--danger)' }}>{err}</div> : null}
 
       {loading ? (
         <div className="card" style={{ padding: 18, marginTop: 14 }}>جاري تحميل العروض...</div>
@@ -204,7 +190,7 @@ export default function ListingsPage() {
           لا توجد نتائج مطابقة للفلاتر الحالية.
         </div>
       ) : (
-        <div style={{ display: 'grid', gap: 12, marginTop: 14 }}>
+        <div className="resultsGrid" style={{ marginTop: 24 }}>
           {items.map((it, idx) => (
             <ListingCard key={it.id || it.docId || `idx-${idx}`} item={it} compact />
           ))}
@@ -216,11 +202,11 @@ export default function ListingsPage() {
           role="dialog"
           aria-modal="true"
           aria-label="الفلاتر"
-          style={{ position: 'fixed', inset: 0, zIndex: 70, display: 'flex', alignItems: 'flex-end' }}
+          style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'flex-end' }}
         >
           <div
             onClick={() => setSheetOpen(false)}
-            style={{ position: 'absolute', inset: 0, background: 'rgba(15, 23, 42, 0.42)' }}
+            style={{ position: 'absolute', inset: 0, background: 'rgba(15, 23, 42, 0.5)', backdropFilter: 'blur(4px)' }}
           />
 
           <div
@@ -243,15 +229,17 @@ export default function ListingsPage() {
                 gap: 12,
                 padding: '14px 16px',
                 borderBottom: '1px solid var(--border)',
+                background: '#f8fafc',
+                borderRadius: '20px 20px 0 0',
               }}
             >
-              <strong>فلترة العروض</strong>
-              <button className="btn" type="button" onClick={() => setSheetOpen(false)}>
-                إغلاق
+              <strong style={{ fontSize: 18, color: 'var(--text)' }}>فلترة العروض</strong>
+              <button className="btn" type="button" onClick={() => setSheetOpen(false)} style={{ padding: '6px 12px' }}>
+                ✕ إغلاق
               </button>
             </div>
 
-            <div style={{ padding: 16 }}>
+            <div style={{ padding: 20 }}>
               <label style={{ display: 'block', marginBottom: 6, fontWeight: 900 }}>الحي</label>
               <select className="input" value={neighborhood} onChange={(e) => setNeighborhood(e.target.value)}>
                 <option value="">كل الأحياء</option>
@@ -262,7 +250,7 @@ export default function ListingsPage() {
                 ))}
               </select>
 
-              <label style={{ display: 'block', marginTop: 14, marginBottom: 8, fontWeight: 900 }}>نوع التعامل</label>
+              <label style={{ display: 'block', marginTop: 20, marginBottom: 8, fontWeight: 900 }}>نوع التعامل</label>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 {DEAL_TYPES.map((d) => (
                   <button
@@ -276,7 +264,7 @@ export default function ListingsPage() {
                 ))}
               </div>
 
-              <label style={{ display: 'block', marginTop: 14, marginBottom: 8, fontWeight: 900 }}>تصنيف العقار</label>
+              <label style={{ display: 'block', marginTop: 20, marginBottom: 8, fontWeight: 900 }}>تصنيف العقار</label>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 {PROPERTY_CLASSES.map((c) => (
                   <button
@@ -294,7 +282,7 @@ export default function ListingsPage() {
                 ))}
               </div>
 
-              <label style={{ display: 'block', marginTop: 14, marginBottom: 6, fontWeight: 900 }}>الفئة</label>
+              <label style={{ display: 'block', marginTop: 20, marginBottom: 6, fontWeight: 900 }}>الفئة</label>
               <select
                 className="input"
                 value={propertyType}
@@ -309,12 +297,12 @@ export default function ListingsPage() {
                 ))}
               </select>
 
-              <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
+              <div style={{ display: 'flex', gap: 10, marginTop: 24, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
                 <button className="btn" type="button" onClick={clearFilters} style={{ flex: 1 }}>
-                  مسح
+                  مسح الفلاتر
                 </button>
                 <button className="btn btnPrimary" type="button" onClick={() => setSheetOpen(false)} style={{ flex: 1 }}>
-                  تطبيق
+                  تطبيق النتائج
                 </button>
               </div>
             </div>
@@ -323,10 +311,26 @@ export default function ListingsPage() {
       ) : null}
 
       <style jsx>{`
-        @media (max-width: 760px) {
-          div[style*='grid-template-columns: minmax(0, 1fr) auto'] {
-            grid-template-columns: 1fr !important;
-          }
+        .resultsGrid {
+          display: grid;
+          gap: 20px;
+          align-items: stretch;
+        }
+
+        @media (min-width: 1200px) {
+          .resultsGrid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+        }
+
+        @media (min-width: 901px) and (max-width: 1199px) {
+          .resultsGrid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+        }
+
+        @media (min-width: 641px) and (max-width: 900px) {
+          .resultsGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        }
+
+        @media (max-width: 640px) {
+          .resultsGrid, .searchActions { grid-template-columns: 1fr !important; }
         }
       `}</style>
     </div>
