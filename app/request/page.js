@@ -1,12 +1,11 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import Link from 'next/link';
-
 import { buildWhatsAppLink } from '@/components/WhatsAppBar';
 import { createRequest } from '@/lib/listings';
 import { NEIGHBORHOODS } from '@/lib/taxonomy';
 import { formatPriceSAR } from '@/lib/format';
+import PageHeader from '@/components/PageHeader';
 
 const DEAL_TYPES = [
   { key: 'sale', label: 'شراء (بحث عن بيع)' },
@@ -18,48 +17,50 @@ const PROPERTY_TYPES = ['أرض', 'فيلا', 'شقة', 'دور', 'عمارة', 
 export default function RequestPage() {
   const phoneDefault = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || '';
 
-  const [dealType, setDealType] = useState('sale');
-  const [propertyType, setPropertyType] = useState('أرض');
-  const [neighborhood, setNeighborhood] = useState('');
-  const [budgetMin, setBudgetMin] = useState('');
-  const [budgetMax, setBudgetMax] = useState('');
-  const [areaMin, setAreaMin] = useState('');
-  const [notes, setNotes] = useState('');
-
-  const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
+  const [formData, setFormData] = useState({
+    dealType: 'sale',
+    propertyType: 'أرض',
+    neighborhood: '',
+    budgetMin: '',
+    budgetMax: '',
+    areaMin: '',
+    name: '',
+    phone: '',
+    notes: ''
+  });
 
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [ok, setOk] = useState(false);
 
-  const waPhone = useMemo(() => {
-    // إذا المستخدم كتب رقم، نستخدمه. وإلا نستخدم رقم الواتساب الخاص بالموقع (للتواصل معك)
-    return phoneDefault || '966597520693';
-  }, [phoneDefault]);
+  const handleChange = (e) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
+
+  const handleNumericChange = (e) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value.replace(/[^\d]/g, '') });
+  };
+
+  const waPhone = useMemo(() => phoneDefault || '966597520693', [phoneDefault]);
 
   const waText = useMemo(() => {
-    const min = budgetMin ? formatPriceSAR(Number(budgetMin)) : '';
-    const max = budgetMax ? formatPriceSAR(Number(budgetMax)) : '';
-    const budgetText =
-      min && max ? `الميزانية: من ${min} إلى ${max}` : min ? `الميزانية: ${min}` : max ? `الميزانية: حتى ${max}` : '';
+    const min = formData.budgetMin ? formatPriceSAR(Number(formData.budgetMin)) : '';
+    const max = formData.budgetMax ? formatPriceSAR(Number(formData.budgetMax)) : '';
+    const budgetText = min && max ? `الميزانية: من ${min} إلى ${max}` : min ? `الميزانية: ${min}` : max ? `الميزانية: حتى ${max}` : '';
+    const areaText = formData.areaMin ? `المساحة المطلوبة: ${formData.areaMin} م²+` : '';
 
-    const areaText = areaMin ? `المساحة المطلوبة: ${areaMin} م²+` : '';
-
-    const lines = [
-      'السلام عليكم، هذا طلب عقاري من موقع عقار أبحر:',
-      `نوع الطلب: ${DEAL_TYPES.find((d) => d.key === dealType)?.label || dealType}`,
-      `نوع العقار: ${propertyType}`,
-      neighborhood ? `الحي: ${neighborhood}` : 'الحي: غير محدد',
-      budgetText || 'الميزانية: غير محددة',
-      areaText || '',
-      notes ? `ملاحظات: ${notes}` : '',
-      name ? `الاسم: ${name}` : '',
-      phone ? `رقم العميل: ${phone}` : '',
-    ].filter(Boolean);
-
-    return lines.join('\n');
-  }, [dealType, propertyType, neighborhood, budgetMin, budgetMax, areaMin, notes, name, phone]);
+    return [
+      'السلام عليكم، لدي طلب عقاري عبر موقع عقار أبحر 🏢:',
+      `🔹 *نوع الطلب:* ${DEAL_TYPES.find((d) => d.key === formData.dealType)?.label || formData.dealType}`,
+      `🔹 *نوع العقار:* ${formData.propertyType}`,
+      formData.neighborhood ? `📍 *الحي المطلوب:* ${formData.neighborhood}` : '',
+      budgetText ? `💰 *${budgetText}*` : '',
+      areaText ? `📏 *${areaText}*` : '',
+      formData.notes ? `📝 *ملاحظات:* ${formData.notes}` : '',
+      `👤 *الاسم:* ${formData.name}`,
+      `📱 *رقم الجوال:* ${formData.phone}`,
+    ].filter(Boolean).join('\n');
+  }, [formData]);
 
   const waLink = useMemo(() => buildWhatsAppLink({ phone: waPhone, text: waText }), [waPhone, waText]);
 
@@ -68,202 +69,150 @@ export default function RequestPage() {
     setErr('');
     setOk(false);
 
-    // تحقق خفيف
-    if (!dealType) return setErr('اختر نوع الطلب.');
-    if (!propertyType) return setErr('اختر نوع العقار.');
+    if (!formData.dealType) return setErr('الرجاء اختيار نوع الطلب.');
+    if (!formData.propertyType) return setErr('الرجاء اختيار نوع العقار.');
 
     setBusy(true);
     try {
-      const payload = {
-        dealType,
-        propertyType,
-        neighborhood: neighborhood || '',
-        budgetMin: budgetMin ? Number(budgetMin) : null,
-        budgetMax: budgetMax ? Number(budgetMax) : null,
-        areaMin: areaMin ? Number(areaMin) : null,
-        note: notes || '',
-        waText,
-        name: name || '',
-        phone: phone || '',
+      await createRequest({
+        dealType: formData.dealType,
+        propertyType: formData.propertyType,
+        neighborhood: formData.neighborhood || '',
+        budgetMin: formData.budgetMin ? Number(formData.budgetMin) : null,
+        budgetMax: formData.budgetMax ? Number(formData.budgetMax) : null,
+        areaMin: formData.areaMin ? Number(formData.areaMin) : null,
+        note: formData.notes || '',
+        name: formData.name || '',
+        phone: formData.phone || '',
         source: 'web',
         createdAt: new Date(),
-      };
-
-      await createRequest(payload);
-
+      });
       setOk(true);
-      // لا نمسح البيانات كلها حتى لو يحب يرجع يفتح واتساب بنفس الطلب
-    } catch (e2) {
-      setErr('تعذر إرسال الطلب. حاول مرة أخرى.');
+      window.open(waLink, '_blank');
+    } catch {
+      setErr('تعذر إرسال الطلب الآن. يرجى المحاولة مرة أخرى.');
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <div className="container">
-      <div style={{ margin: '16px 0 12px' }}>
-        <h1 style={{ margin: 0, fontSize: 18, fontWeight: 900 }}>أرسل طلبك</h1>
-        <div className="muted" style={{ marginTop: 6 }}>
-          اكتب طلبك، وسيتم حفظه في النظام، ويمكنك أيضًا إرساله مباشرة عبر واتساب.
+    <>
+      <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined" rel="stylesheet" />
+      
+      <div style={{ padding: '60px 0', minHeight: '80vh', direction: 'rtl' }}>
+        <div className="container" style={{ maxWidth: '850px' }}>
+          
+          <PageHeader 
+            icon="travel_explore" 
+            title="أرسل طلبك العقاري" 
+            description="لم تجد العقار المناسب؟ اكتب مواصفات طلبك وسنقوم بالبحث في شبكتنا العقارية وتوفير أفضل الخيارات لك." 
+          />
+
+          <div className="card" style={{ padding: '35px' }}>
+            <form onSubmit={submit} style={{ display: 'grid', gap: '30px' }}>
+              
+              <div>
+                <h3 style={{ margin: '0 0 15px 0', fontSize: '18px', color: 'var(--text)' }}>1. تفاصيل العقار المطلوب</h3>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px' }}>
+                  
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <label style={{ display: 'block', marginBottom: '10px', fontWeight: 800, fontSize: '14px' }}>نوع الطلب *</label>
+                    <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                      {DEAL_TYPES.map((d) => (
+                        <button
+                          key={d.key}
+                          type="button"
+                          className={`filterPill ${formData.dealType === d.key ? 'active' : ''}`}
+                          onClick={() => setFormData({ ...formData, dealType: d.key })}
+                          style={{ flex: 1, padding: '12px', minWidth: '150px' }}
+                        >
+                          {d.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: 800, fontSize: '14px' }}>نوع العقار *</label>
+                    <select name="propertyType" className="input" value={formData.propertyType} onChange={handleChange} required>
+                      {PROPERTY_TYPES.map((t) => (
+                        <option key={t} value={t}>{t}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: 800, fontSize: '14px' }}>الحي المفضل</label>
+                    <select name="neighborhood" className="input" value={formData.neighborhood} onChange={handleChange}>
+                      <option value="">أي حي</option>
+                      {NEIGHBORHOODS.map((n) => (
+                        <option key={n} value={n}>{n}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: 800, fontSize: '14px' }}>المساحة المطلوبة (م²)</label>
+                    <input type="text" name="areaMin" className="input" inputMode="numeric" value={formData.areaMin} onChange={handleNumericChange} placeholder="مثال: 400" />
+                  </div>
+                </div>
+              </div>
+
+              <hr style={{ border: '0', borderTop: '1px solid var(--border)', margin: '0' }} />
+
+              <div>
+                <h3 style={{ margin: '0 0 15px 0', fontSize: '18px', color: 'var(--text)' }}>2. الميزانية المحددة</h3>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px' }}>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: 800, fontSize: '14px' }}>الحد الأدنى للميزانية (ريال)</label>
+                    <input type="text" name="budgetMin" className="input" inputMode="numeric" value={formData.budgetMin} onChange={handleNumericChange} placeholder="مثال: 500000" />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: 800, fontSize: '14px' }}>الحد الأقصى للميزانية (ريال)</label>
+                    <input type="text" name="budgetMax" className="input" inputMode="numeric" value={formData.budgetMax} onChange={handleNumericChange} placeholder="مثال: 1200000" />
+                  </div>
+                </div>
+              </div>
+
+              <hr style={{ border: '0', borderTop: '1px solid var(--border)', margin: '0' }} />
+
+              <div>
+                <h3 style={{ margin: '0 0 15px 0', fontSize: '18px', color: 'var(--text)' }}>3. بيانات التواصل</h3>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px' }}>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: 800, fontSize: '14px' }}>الاسم الكريم *</label>
+                    <input type="text" name="name" className="input" value={formData.name} onChange={handleChange} placeholder="اكتب اسمك" required />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: 800, fontSize: '14px' }}>رقم الجوال *</label>
+                    <input type="tel" name="phone" className="input" value={formData.phone} onChange={handleChange} placeholder="05XXXXXXXX" required />
+                  </div>
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: 800, fontSize: '14px' }}>مواصفات وملاحظات إضافية</label>
+                    <textarea name="notes" className="input" rows={4} value={formData.notes} onChange={handleChange} placeholder="مثال: واجهة شمالية، قريب من الخدمات، لا يقبل البنك..." style={{ resize: 'vertical' }} />
+                  </div>
+                </div>
+              </div>
+
+              {err ? <div className="formError" style={{ color: 'var(--danger)', fontWeight: 800, textAlign: 'center' }}>{err}</div> : null}
+              {ok ? <div className="formSuccess" style={{ color: 'var(--success)', fontWeight: 800, textAlign: 'center', background: '#e6fceb', padding: '15px', borderRadius: '12px' }}>تم حفظ الطلب بنجاح في النظام! جاري تحويلك للواتساب...</div> : null}
+
+              <div style={{ marginTop: '10px' }}>
+                <button type="submit" className="btn btnPrimary" style={{ width: '100%', fontSize: '18px', padding: '16px' }} disabled={busy}>
+                  {busy ? 'جاري معالجة الطلب...' : 'إرسال الطلب واعتماده'}
+                  {!busy && <span className="material-icons-outlined">send</span>}
+                </button>
+                <p style={{ textAlign: 'center', fontSize: '13px', color: 'var(--muted)', marginTop: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }}>
+                  <span className="material-icons-outlined" style={{ fontSize: '16px' }}>sync</span>
+                  بمجرد الإرسال سيتم حفظ طلبك بالنظام وتوجيهك لمحادثة الواتساب مباشرة.
+                </p>
+              </div>
+
+            </form>
+          </div>
         </div>
       </div>
-
-      <form className="card" style={{ padding: 16 }} onSubmit={submit}>
-        {/* نوع الطلب */}
-        <label style={{ display: 'block', marginTop: 10, marginBottom: 6, fontWeight: 900 }}>
-          نوع الطلب
-        </label>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {DEAL_TYPES.map((d) => (
-            <button
-              key={d.key}
-              type="button"
-              onClick={() => setDealType(d.key)}
-              style={{
-                border: dealType === d.key ? '1px solid rgba(214,179,91,0.55)' : '1px solid var(--border)',
-                background: dealType === d.key ? 'rgba(214,179,91,0.12)' : '#fff',
-                color: 'var(--text)',
-                padding: '10px 14px',
-                borderRadius: 999,
-                fontWeight: 900,
-                cursor: 'pointer',
-              }}
-            >
-              {d.label}
-            </button>
-          ))}
-        </div>
-
-        {/* نوع العقار */}
-        <label style={{ display: 'block', marginTop: 12, marginBottom: 6, fontWeight: 900 }}>
-          نوع العقار
-        </label>
-        <select className="input" value={propertyType} onChange={(e) => setPropertyType(e.target.value)}>
-          {PROPERTY_TYPES.map((t) => (
-            <option key={t} value={t}>
-              {t}
-            </option>
-          ))}
-        </select>
-
-        {/* الحي */}
-        <label style={{ display: 'block', marginTop: 12, marginBottom: 6, fontWeight: 900 }}>
-          الحي
-        </label>
-        <select className="input" value={neighborhood} onChange={(e) => setNeighborhood(e.target.value)}>
-          <option value="">اختر الحي (اختياري)</option>
-          {(NEIGHBORHOODS || []).map((n) => (
-            <option key={n} value={n}>
-              {n}
-            </option>
-          ))}
-        </select>
-
-        {/* الميزانية */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 12 }}>
-          <div>
-            <label style={{ display: 'block', marginBottom: 6, fontWeight: 900 }}>الميزانية من</label>
-            <input
-              className="input"
-              inputMode="numeric"
-              value={budgetMin}
-              onChange={(e) => setBudgetMin(e.target.value.replace(/[^\d]/g, ''))}
-              placeholder="مثال: 500000"
-            />
-          </div>
-          <div>
-            <label style={{ display: 'block', marginBottom: 6, fontWeight: 900 }}>الميزانية إلى</label>
-            <input
-              className="input"
-              inputMode="numeric"
-              value={budgetMax}
-              onChange={(e) => setBudgetMax(e.target.value.replace(/[^\d]/g, ''))}
-              placeholder="مثال: 1200000"
-            />
-          </div>
-        </div>
-
-        {/* المساحة */}
-        <label style={{ display: 'block', marginTop: 12, marginBottom: 6, fontWeight: 900 }}>
-          المساحة المطلوبة (م²) - اختياري
-        </label>
-        <input
-          className="input"
-          inputMode="numeric"
-          value={areaMin}
-          onChange={(e) => setAreaMin(e.target.value.replace(/[^\d]/g, ''))}
-          placeholder="مثال: 400"
-        />
-
-        {/* بيانات العميل */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 12 }}>
-          <div>
-            <label style={{ display: 'block', marginBottom: 6, fontWeight: 900 }}>الاسم (اختياري)</label>
-            <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="اسم العميل" />
-          </div>
-          <div>
-            <label style={{ display: 'block', marginBottom: 6, fontWeight: 900 }}>رقم الجوال (اختياري)</label>
-            <input
-              className="input"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="05xxxxxxxx"
-            />
-          </div>
-        </div>
-
-        {/* ملاحظات */}
-        <label style={{ display: 'block', marginTop: 12, marginBottom: 6, fontWeight: 900 }}>
-          ملاحظات إضافية
-        </label>
-        <textarea
-          className="input"
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          rows={4}
-          placeholder="مثال: قريب من الخدمات… واجهة شمال… مباشر من المالك…"
-          style={{ resize: 'vertical' }}
-        />
-
-        {err ? (
-          <div style={{ marginTop: 10, color: 'var(--danger)', fontWeight: 900 }}>{err}</div>
-        ) : null}
-
-        {ok ? (
-          <div style={{ marginTop: 10, color: 'var(--success)', fontWeight: 900 }}>
-            تم إرسال الطلب بنجاح.
-          </div>
-        ) : null}
-
-        <div style={{ display: 'flex', gap: 10, marginTop: 12, flexWrap: 'wrap' }}>
-          <button className="btn btnPrimary" type="submit" disabled={busy} style={{ flex: 1, minWidth: 180 }}>
-            {busy ? '...' : 'إرسال الطلب'}
-          </button>
-
-          <a
-            className="btn"
-            href={waLink}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{
-              flex: 1,
-              minWidth: 180,
-              textAlign: 'center',
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              textDecoration: 'none',
-            }}
-          >
-            إرسال عبر واتساب
-          </a>
-        </div>
-
-        <div className="muted" style={{ marginTop: 10, fontSize: 12 }}>
-          تقدر أيضًا مشاهدة <Link href="/listings">كل العروض</Link> أو فتح <Link href="/map">الخريطة</Link>.
-        </div>
-      </form>
-    </div>
+    </>
   );
 }
