@@ -1,42 +1,29 @@
 'use client';
 
-import { useEffect, useState, Suspense } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { usePathname, useSearchParams } from 'next/navigation';
-
 import ListingCard from '@/components/ListingCard';
 import NeighborhoodGrid from '@/components/NeighborhoodGrid';
 import { fetchLatestListings } from '@/lib/listings';
+import { buildWhatsAppLink } from '@/components/WhatsAppBar';
 
-function QuickLinks() {
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const dealType = searchParams.get('dealType') || '';
-
-  const links = [
-    { href: '/listings', label: 'كل العروض', value: '' },
-    { href: '/listings?dealType=sale', label: 'بيع', value: 'sale' },
-    { href: '/listings?dealType=rent', label: 'إيجار', value: 'rent' },
-    { href: '/map', label: 'الخريطة', value: 'map' },
-  ];
-
-  const isActive = (link) => {
-    if (link.href.startsWith('/listings')) {
-      return pathname === '/listings' && dealType === link.value;
-    }
-    return pathname === link.href;
-  };
-
+function ListingsState({ loading, error, items }) {
+  if (loading) {
+    return (
+      <div className="listing-grid">
+        {[1, 2, 3, 4].map((id) => (
+          <div key={id} className="skeleton-card" />
+        ))}
+      </div>
+    );
+  }
+  if (error) return <div className="error-card">{error}</div>;
+  if (!items.length) return <div className="empty-card">لا توجد عقارات منشورة حاليًا في هذه الفئة.</div>;
+  
   return (
-    <div className="quickBarHome">
-      {links.map((link) => (
-        <Link
-          key={link.href}
-          href={link.href}
-          className={`pill ${isActive(link) ? 'active' : ''}`}
-        >
-          {link.label}
-        </Link>
+    <div className="listing-grid">
+      {items.map((item, index) => (
+        <ListingCard key={item?.id || item?.docId || item?.slug || `listing-${index}`} item={item} />
       ))}
     </div>
   );
@@ -45,88 +32,113 @@ function QuickLinks() {
 export default function HomePage() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState('');
+  const [errorText, setErrorText] = useState('');
+  const [activeTab, setActiveTab] = useState('all'); 
+
+  // استخدام رقم عقار أبحر بدلاً من رقم الفنار
+  const whatsappNumber = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || '966597520693';
+  const whatsappLink = buildWhatsAppLink({
+    phone: whatsappNumber,
+    text: 'السلام عليكم، أرغب في الاستفسار عن عروض عقار أبحر.',
+  });
 
   useEffect(() => {
-    let alive = true;
-    const loadListings = async () => {
+    let active = true;
+    async function load() {
       try {
-        setLoading(true);
-        const res = await fetchLatestListings(12);
-        if (!alive) return;
-        setItems(res || []);
-      } catch (error) {
-        if (!alive) return;
-        setErr('تعذر تحميل أحدث العروض.');
+        setLoading(true); setErrorText('');
+        const result = await fetchLatestListings({ n: 8, onlyPublic: true, includeLegacy: true });
+        if (!active) return;
+        setItems(Array.isArray(result) ? result : []);
+      } catch {
+        if (!active) return;
+        setErrorText('تعذر تحميل العقارات الآن، يرجى المحاولة لاحقاً.');
+        setItems([]);
       } finally {
-        if (alive) setLoading(false);
+        if (active) setLoading(false);
       }
-    };
-    
-    loadListings();
-
-    return () => {
-      alive = false;
-    };
+    }
+    load();
+    return () => { active = false; };
   }, []);
 
+  const filteredItems = useMemo(() => {
+    const safeItems = Array.isArray(items) ? items.filter(Boolean) : [];
+    if (activeTab === 'all') return safeItems;
+    return safeItems.filter(item => item.dealType === activeTab);
+  }, [items, activeTab]);
+
   return (
-    <div className="container">
-      {/* ✅ أحياء */}
-      <NeighborhoodGrid />
+    <>
+      <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined" rel="stylesheet" />
+      
+      <div>
+        <section className="home-hero-section">
+          <div className="home-hero-overlay"></div>
+          <div className="container home-hero-content">
+            
+            <div className="search-container">
+              <div className="search-tabs">
+                <button className={`tab-btn ${activeTab === 'all' ? 'active' : ''}`} onClick={() => setActiveTab('all')}>الكل</button>
+                <button className={`tab-btn ${activeTab === 'sale' ? 'active' : ''}`} onClick={() => setActiveTab('sale')}>للبـيع</button>
+                <button className={`tab-btn ${activeTab === 'rent' ? 'active' : ''}`} onClick={() => setActiveTab('rent')}>للإيجار</button>
+              </div>
+              <div>
+                 <Link href={`/listings?dealType=${activeTab !== 'all' ? activeTab : ''}`} className="main-search-btn">
+                    استكشف العقارات المتاحة الآن
+                    <span className="material-icons-outlined">search</span>
+                 </Link>
+              </div>
+            </div>
+          </div>
+        </section>
 
-      {/* ✅ اختصارات سريعة */}
-      <Suspense fallback={<div className="quickBarHome" style={{ opacity: 0.5 }}>جاري التحميل...</div>}>
-        <QuickLinks />
-      </Suspense>
+        <div className="container home-content-body">
+            <section className="features-grid">
+                <div className="feature-card">
+                    <div className="feature-icon-container"><span className="material-icons-outlined">handshake</span></div>
+                    <h3>تسويق عقارك باحترافية</h3>
+                    <p>نصدر لك عقد وساطة رسمي عبر منصة الهيئة، ونتولى تسويق عقارك.</p>
+                    <Link href="/marketing-request" className="feature-link">طلب تسويق <span className="material-icons-outlined">arrow_back</span></Link>
+                </div>
+                <div className="feature-card">
+                    <div className="feature-icon-container"><span className="material-icons-outlined">assignment</span></div>
+                    <h3>توثيق عقود الإيجار</h3>
+                    <p>نوفر خدمة إصدار وتوثيق عقود الإيجار الإلكترونية في منصة إيجار.</p>
+                    <Link href="/ejar-request" className="feature-link">طلب عقد <span className="material-icons-outlined">arrow_back</span></Link>
+                </div>
+                <div className="feature-card">
+                    <div className="feature-icon-container"><span className="material-icons-outlined">manage_search</span></div>
+                    <h3>أرسل طلبك العقاري</h3>
+                    <p>أرسل مواصفات طلبك وسنقوم بالبحث وتوفير الخيارات المناسبة لك.</p>
+                    <Link href="/request" className="feature-link">تقديم طلب <span className="material-icons-outlined">arrow_back</span></Link>
+                </div>
+            </section>
 
-      <div 
-        className="row" 
-        style={{ 
-          display: 'flex', 
-          justifyContent: 'space-between', 
-          alignItems: 'center', 
-          marginTop: '24px', 
-          marginBottom: '16px' 
-        }}
-      >
-        <h2 className="sectionTitle" style={{ margin: 0, fontSize: '1.25rem' }}>
-          أحدث العروض
-        </h2>
-        <Link href="/listings" className="btn">
-          تصفح الكل
-        </Link>
+            <NeighborhoodGrid title="استكشف أبرز أحياء شمال جدة" showViewAll />
+
+            <section style={{ marginBottom: '50px' }}>
+              <div className="section-header">
+                <div>
+                    <h2>أحدث العروض العقارية</h2>
+                    <p>اكتشف أحدث الشقق، الفلل، والأراضي المدرجة حديثاً</p>
+                </div>
+                <Link href="/listings" className="nb-view-btn">عرض كافة العقارات</Link>
+              </div>
+              <ListingsState loading={loading} error={errorText} items={filteredItems} />
+            </section>
+
+            <section className="cta-section">
+                <div>
+                    <h2 style={{ margin: '0 0 10px' }}>هل لديك استفسار سريع؟</h2>
+                    <p style={{ margin: 0, color: 'var(--muted)' }}>نحن هنا لخدمتك، تواصل معنا الآن مباشرة عبر الواتساب.</p>
+                </div>
+                <a href={whatsappLink} target="_blank" rel="noopener noreferrer" className="whatsapp-cta-btn">
+                    تحدث معنا عبر الواتساب
+                </a>
+            </section>
+        </div>
       </div>
-
-      {err && (
-        <div className="card" style={{ padding: 14, marginTop: 12, color: '#d32f2f', backgroundColor: '#fee' }}>
-          {err}
-        </div>
-      )}
-
-      {loading ? (
-        <div className="card" style={{ padding: 14, marginTop: 12 }}>
-          جاري تحميل العروض…
-        </div>
-      ) : items.length === 0 ? (
-        <div className="card" style={{ padding: 14, marginTop: 12 }}>
-          لا توجد عروض حتى الآن.
-        </div>
-      ) : (
-        <div 
-          style={{ 
-            marginTop: 12, 
-            display: 'grid', 
-            gap: '16px',
-            // هذا السطر يضمن تجاوب العروض مع جميع الشاشات (جوال، تابلت، كمبيوتر)
-            gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))'
-          }}
-        >
-          {items.map((it, index) => (
-            <ListingCard key={it.id || it.docId || `idx-${index}`} item={it} />
-          ))}
-        </div>
-      )}
-    </div>
+    </>
   );
 }
