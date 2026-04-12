@@ -1,16 +1,18 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
 import { useParams } from 'next/navigation';
 
 import { buildWhatsAppLink } from '@/components/WhatsAppBar';
 import { fetchListingById } from '@/lib/listings';
 import { formatPriceSAR, statusBadge } from '@/lib/format';
 
-function InfoItem({ label, value }) {
+function InfoItem({ label, value, full = false }) {
   if (value === undefined || value === null || value === '') return null;
+
   return (
-    <div className="infoItem">
+    <div className={`infoItem ${full ? 'full' : ''}`}>
       <div className="infoLabel">{label}</div>
       <div className="infoValue">{value}</div>
     </div>
@@ -20,15 +22,57 @@ function InfoItem({ label, value }) {
 function normalizeStatusLabel(item) {
   const status = String(item?.status || 'available');
   const isRent = String(item?.dealType || '').toLowerCase() === 'rent';
+
   if (status === 'sold') return isRent ? 'مؤجر' : 'مباع';
   if (status === 'reserved') return 'محجوز';
   if (status === 'canceled' || status === 'hidden') return 'غير متاح';
   return 'متاح';
 }
 
-export default function ListingDetails({ params }) {
-  const routeParams = useParams();
+function normalizeDealTypeLabel(value) {
+  const v = String(value || '').toLowerCase();
+  if (v === 'rent') return 'إيجار';
+  if (v === 'sale') return 'بيع';
+  return '';
+}
 
+function formatArea(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return '';
+  return `${n.toLocaleString('ar-SA')} م²`;
+}
+
+function getLocationText(item) {
+  return [item?.neighborhood, item?.plan, item?.part].filter(Boolean).join(' • ') || 'غير محدد';
+}
+
+function isFiniteCoord(v) {
+  const n = Number(v);
+  return Number.isFinite(n);
+}
+
+function getMapHref(item) {
+  const lat = Number(item?.lat);
+  const lng = Number(item?.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return '';
+  return `https://www.google.com/maps?q=${lat},${lng}`;
+}
+
+function getSafeImages(item) {
+  if (!Array.isArray(item?.images)) return [];
+  return item.images.filter(Boolean);
+}
+
+function normalizePhoneDigits(phone) {
+  const digits = String(phone || '').replace(/\D/g, '');
+  if (!digits) return '';
+  if (digits.startsWith('0')) return `966${digits.slice(1)}`;
+  if (digits.startsWith('966')) return digits;
+  return digits;
+}
+
+export default function ListingDetailsPage({ params }) {
+  const routeParams = useParams();
   const raw = params?.id ?? routeParams?.id;
   const rawId = Array.isArray(raw) ? raw[0] : raw;
 
@@ -44,6 +88,11 @@ export default function ListingDetails({ params }) {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
   const [activeImage, setActiveImage] = useState(0);
+  const [shareMsg, setShareMsg] = useState('');
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+
+  const touchStartX = useRef(0);
+  const touchEndX = useRef(0);
 
   useEffect(() => {
     let live = true;
@@ -59,6 +108,7 @@ export default function ListingDetails({ params }) {
       try {
         setLoading(true);
         setErr('');
+        setShareMsg('');
 
         if (!id) {
           if (live) {
@@ -69,6 +119,7 @@ export default function ListingDetails({ params }) {
         }
 
         const data = await fetchListingById(id);
+
         if (live) {
           setItem(data || null);
           setActiveImage(0);
@@ -93,74 +144,147 @@ export default function ListingDetails({ params }) {
     };
   }, [rawId, id]);
 
-  const images = useMemo(() => {
-    if (!Array.isArray(item?.images)) return [];
-    return item.images.filter(Boolean);
+  const images = useMemo(() => getSafeImages(item), [item]);
+  const selectedImage = images[activeImage] || images[0] || '';
+  const dealTypeLabel = useMemo(() => normalizeDealTypeLabel(item?.dealType), [item]);
+  const statusText = useMemo(() => normalizeStatusLabel(item), [item]);
+  const areaLabel = useMemo(() => formatArea(item?.area), [item]);
+  const mapHref = useMemo(() => getMapHref(item), [item]);
+  const locationText = useMemo(() => getLocationText(item), [item]);
+
+  const contactPhone = useMemo(() => {
+    const directPhone =
+      item?.phone ||
+      item?.contactPhone ||
+      item?.mobile ||
+      item?.whatsapp ||
+      '';
+    // استخدام رقم عقار أبحر كقيمة افتراضية
+    return normalizePhoneDigits(directPhone || process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || '966597520693');
   }, [item]);
 
-  const selectedImage = images[activeImage] || images[0] || '';
-
   const whatsappHref = useMemo(() => {
-    const phone = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || '';
     const text = item
       ? [
-          'السلام عليكم، أبغى استفسار عن العرض:',
-          item.title || '',
+          'السلام عليكم، أرغب في الاستفسار عن هذا العرض:',
+          item.title || 'عرض عقاري',
+          `السعر: ${formatPriceSAR(item.price)}`,
           `الحي: ${item.neighborhood || '—'}`,
           `المخطط: ${item.plan || '—'}`,
           `الجزء: ${item.part || '—'}`,
-          `السعر: ${formatPriceSAR(item.price)}`,
-        ].join('\n')
-      : 'السلام عليكم، أبغى استفسار عن عرض في عقار أبحر.';
-    return buildWhatsAppLink({ phone, text });
-  }, [item]);
+          `نوع الصفقة: ${dealTypeLabel || '—'}`,
+          `نوع العقار: ${item.propertyType || '—'}`,
+          item.licenseNumber ? `رقم الترخيص: ${item.licenseNumber}` : '',
+          item.direct ? 'مباشر' : '',
+          typeof window !== 'undefined' ? `الرابط: ${window.location.href}` : '',
+        ]
+          .filter(Boolean)
+          .join('\n')
+      : 'السلام عليكم، أرغب في الاستفسار عن أحد العروض العقارية.';
 
-  const mapHref = useMemo(() => {
-    const lat = Number(item?.lat);
-    const lng = Number(item?.lng);
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return '';
-    return `https://www.google.com/maps?q=${lat},${lng}`;
-  }, [item]);
+    return buildWhatsAppLink({ phone: contactPhone, text });
+  }, [item, dealTypeLabel, contactPhone]);
 
-  const areaLabel = item?.area ? `${item.area} م²` : '';
-  const dealTypeLabel =
-    String(item?.dealType || '').toLowerCase() === 'rent'
-      ? 'إيجار'
-      : String(item?.dealType || '').toLowerCase() === 'sale'
-        ? 'بيع'
-        : '';
+  function goPrevImage() {
+    if (!images.length) return;
+    setActiveImage((prev) => (prev - 1 + images.length) % images.length);
+  }
+
+  function goNextImage() {
+    if (!images.length) return;
+    setActiveImage((prev) => (prev + 1) % images.length);
+  }
+
+  function handleTouchStart(e) {
+    touchStartX.current = e.changedTouches[0]?.clientX || 0;
+  }
+
+  function handleTouchEnd(e) {
+    touchEndX.current = e.changedTouches[0]?.clientX || 0;
+    const diff = touchStartX.current - touchEndX.current;
+
+    if (Math.abs(diff) < 40) return;
+
+    if (diff > 0) {
+      goNextImage();
+    } else {
+      goPrevImage();
+    }
+  }
+
+  async function handleShare() {
+    try {
+      setShareMsg('');
+
+      const shareUrl = typeof window !== 'undefined' ? window.location.href : '';
+      const shareTitle = item?.title || 'عرض عقاري';
+      const shareText = `${shareTitle} - ${formatPriceSAR(item?.price)}`;
+
+      if (navigator.share) {
+        await navigator.share({
+          title: shareTitle,
+          text: shareText,
+          url: shareUrl,
+        });
+        return;
+      }
+
+      if (navigator.clipboard && shareUrl) {
+        await navigator.clipboard.writeText(shareUrl);
+        setShareMsg('تم نسخ رابط الإعلان.');
+        setTimeout(() => setShareMsg(''), 2500);
+      }
+    } catch {
+      setShareMsg('');
+    }
+  }
 
   return (
     <div className="container listingPageWrap">
       {loading ? (
-        <div className="card stateCard">جاري التحميل…</div>
+        <div className="card stateCard">جاري تحميل الإعلان…</div>
       ) : err ? (
         <div className="card stateCard">{err}</div>
       ) : !item ? (
         <div className="card stateCard">العرض غير موجود.</div>
       ) : (
         <>
+          <div className="topNavRow">
+            <Link href="/listings" className="backLink">
+              العودة إلى العروض
+            </Link>
+
+            <button type="button" className="shareBtn" onClick={handleShare}>
+              مشاركة
+            </button>
+          </div>
+
           <section className="heroCard card">
             <div className="heroMain">
               <div className="heroText">
-                <div className="topRow">
-                  <div className="statusWrap">
+                <div className="badgesRow">
+                  <div className="badgeWrap">
                     {statusBadge(item.status)}
-                    <span className="statusText">{normalizeStatusLabel(item)}</span>
+                    <span className="pill">{statusText}</span>
                   </div>
-                  {dealTypeLabel ? <span className="dealBadge">{dealTypeLabel}</span> : null}
+
+                  {dealTypeLabel ? <span className="pill deal">{dealTypeLabel}</span> : null}
+                  {item.direct ? <span className="pill direct">مباشر</span> : null}
                 </div>
 
                 <h1 className="pageTitle">{item.title || 'عرض عقاري'}</h1>
 
-                <div className="locationLine">
-                  {[item.neighborhood, item.plan, item.part].filter(Boolean).join(' • ') || '—'}
+                <div className="locationLine">{locationText}</div>
+
+                <div className="priceBlock">
+                  {formatPriceSAR(item.price)}
+                  {String(item?.dealType || '').toLowerCase() === 'rent' ? (
+                    <span className="rentHint"> / سنوي</span>
+                  ) : null}
                 </div>
 
-                <div className="priceBlock">{formatPriceSAR(item.price)}</div>
-
-                <div className="quickFacts">
-                  <InfoItem label="النوع" value={item.propertyType} />
+                <div className="heroFacts">
+                  <InfoItem label="نوع العقار" value={item.propertyType} />
                   <InfoItem label="المساحة" value={areaLabel} />
                   <InfoItem label="الحي" value={item.neighborhood} />
                   <InfoItem label="المخطط" value={item.plan} />
@@ -171,9 +295,10 @@ export default function ListingDetails({ params }) {
                 <a className="btn btnPrimary actionBtn" href={whatsappHref} target="_blank" rel="noreferrer">
                   تواصل واتساب
                 </a>
+
                 {mapHref ? (
                   <a className="btn actionBtn" href={mapHref} target="_blank" rel="noreferrer">
-                    فتح الموقع
+                    فتح الموقع على الخريطة
                   </a>
                 ) : null}
               </div>
@@ -184,36 +309,78 @@ export default function ListingDetails({ params }) {
             <div className="mainCol">
               <div className="card galleryCard">
                 {selectedImage ? (
-                  <div className="mainImageWrap">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img className="mainImage" src={selectedImage} alt={item.title || 'صورة العرض'} />
-                  </div>
-                ) : (
-                  <div className="emptyMedia">لا توجد صور لهذا العرض.</div>
-                )}
-
-                {images.length > 1 ? (
-                  <div className="thumbsRow">
-                    {images.map((src, idx) => (
+                  <>
+                    <div
+                      className="mainImageWrap"
+                      onTouchStart={handleTouchStart}
+                      onTouchEnd={handleTouchEnd}
+                    >
                       <button
                         type="button"
-                        key={`${src}-${idx}`}
-                        className={`thumbBtn ${idx === activeImage ? 'active' : ''}`}
-                        onClick={() => setActiveImage(idx)}
-                        aria-label={`عرض الصورة ${idx + 1}`}
+                        className="navBtn navPrev desktopOnly"
+                        onClick={goPrevImage}
+                        aria-label="الصورة السابقة"
+                      >
+                        ‹
+                      </button>
+
+                      <button
+                        type="button"
+                        className="imageButton"
+                        onClick={() => setLightboxOpen(true)}
+                        aria-label="فتح الصورة"
                       >
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={src} alt={`صورة ${idx + 1}`} className="thumbImage" />
+                        <img
+                          src={selectedImage}
+                          alt={item.title || 'صورة العقار'}
+                          className="mainImage"
+                        />
                       </button>
-                    ))}
-                  </div>
-                ) : null}
+
+                      <button
+                        type="button"
+                        className="navBtn navNext desktopOnly"
+                        onClick={goNextImage}
+                        aria-label="الصورة التالية"
+                      >
+                        ›
+                      </button>
+
+                      {images.length > 1 ? (
+                        <div className="mobileSwipeHint">اسحب يمين أو يسار للتنقل بين الصور</div>
+                      ) : null}
+                    </div>
+
+                    {images.length > 1 ? (
+                      <div className="thumbsScroller">
+                        <div className="thumbsRow">
+                          {images.map((src, idx) => (
+                            <button
+                              type="button"
+                              key={`${src}-${idx}`}
+                              className={`thumbBtn ${idx === activeImage ? 'active' : ''}`}
+                              onClick={() => setActiveImage(idx)}
+                              aria-label={`عرض الصورة ${idx + 1}`}
+                            >
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={src} alt={`صورة ${idx + 1}`} className="thumbImage" />
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+                  </>
+                ) : (
+                  <div className="emptyMedia">لا توجد صور لهذا الإعلان.</div>
+                )}
               </div>
 
               <div className="card sectionCard">
                 <h2 className="sectionHeading">تفاصيل الإعلان</h2>
+
                 <div className="detailsGrid">
-                  <InfoItem label="حالة العرض" value={normalizeStatusLabel(item)} />
+                  <InfoItem label="حالة العرض" value={statusText} />
                   <InfoItem label="نوع الصفقة" value={dealTypeLabel} />
                   <InfoItem label="نوع العقار" value={item.propertyType} />
                   <InfoItem label="المساحة" value={areaLabel} />
@@ -221,43 +388,83 @@ export default function ListingDetails({ params }) {
                   <InfoItem label="المخطط" value={item.plan} />
                   <InfoItem label="الجزء" value={item.part} />
                   <InfoItem label="رقم العرض" value={item.id || id} />
+                  <InfoItem label="رقم الترخيص" value={item.licenseNumber || item.license || ''} />
+                  <InfoItem label="الجوال المباشر" value={item.phone || item.contactPhone || item.mobile || item.whatsapp || ''} />
+                  <InfoItem label="مباشر" value={item.direct ? 'نعم' : ''} />
+                  <InfoItem
+                    label="الإحداثيات"
+                    value={
+                      isFiniteCoord(item?.lat) && isFiniteCoord(item?.lng)
+                        ? `${Number(item.lat)}, ${Number(item.lng)}`
+                        : ''
+                    }
+                    full
+                  />
                 </div>
               </div>
 
               <div className="card sectionCard">
                 <h2 className="sectionHeading">وصف العقار</h2>
-                <div className="descriptionText">{item.description || 'لا يوجد وصف مضاف لهذا العرض.'}</div>
+                <div className="descriptionText">
+                  {item.description || 'لا يوجد وصف مضاف لهذا الإعلان.'}
+                </div>
               </div>
             </div>
 
             <aside className="sideCol">
               <div className="card sideCard">
                 <h2 className="sideHeading">ملخص سريع</h2>
+
                 <div className="sideList">
                   <div className="sideRow">
                     <span>السعر</span>
                     <strong>{formatPriceSAR(item.price)}</strong>
                   </div>
+
                   <div className="sideRow">
                     <span>الحالة</span>
-                    <strong>{normalizeStatusLabel(item)}</strong>
+                    <strong>{statusText}</strong>
                   </div>
+
+                  {dealTypeLabel ? (
+                    <div className="sideRow">
+                      <span>الصفقة</span>
+                      <strong>{dealTypeLabel}</strong>
+                    </div>
+                  ) : null}
+
                   {item.propertyType ? (
                     <div className="sideRow">
                       <span>النوع</span>
                       <strong>{item.propertyType}</strong>
                     </div>
                   ) : null}
+
                   {areaLabel ? (
                     <div className="sideRow">
                       <span>المساحة</span>
                       <strong>{areaLabel}</strong>
                     </div>
                   ) : null}
+
                   {item.neighborhood ? (
                     <div className="sideRow">
                       <span>الحي</span>
                       <strong>{item.neighborhood}</strong>
+                    </div>
+                  ) : null}
+
+                  {item.licenseNumber || item.license ? (
+                    <div className="sideRow">
+                      <span>الترخيص</span>
+                      <strong>{item.licenseNumber || item.license}</strong>
+                    </div>
+                  ) : null}
+
+                  {(item.phone || item.contactPhone || item.mobile || item.whatsapp) ? (
+                    <div className="sideRow">
+                      <span>جوال المعلن</span>
+                      <strong>{item.phone || item.contactPhone || item.mobile || item.whatsapp}</strong>
                     </div>
                   ) : null}
                 </div>
@@ -266,26 +473,108 @@ export default function ListingDetails({ params }) {
                   <a className="btn btnPrimary actionBtn" href={whatsappHref} target="_blank" rel="noreferrer">
                     تواصل واتساب
                   </a>
+
                   {mapHref ? (
                     <a className="btn actionBtn" href={mapHref} target="_blank" rel="noreferrer">
-                      فتح الموقع على الخريطة
+                      فتح الخريطة
                     </a>
                   ) : null}
+
+                  <button type="button" className="btn actionBtn" onClick={handleShare}>
+                    مشاركة الإعلان
+                  </button>
+
+                  {shareMsg ? <div className="shareMsg">{shareMsg}</div> : null}
                 </div>
               </div>
             </aside>
           </section>
+
+          {lightboxOpen && selectedImage ? (
+            <div className="lightbox" onClick={() => setLightboxOpen(false)}>
+              <button
+                type="button"
+                className="lightboxClose"
+                onClick={() => setLightboxOpen(false)}
+                aria-label="إغلاق"
+              >
+                ×
+              </button>
+
+              {images.length > 1 ? (
+                <button
+                  type="button"
+                  className="lightboxNav lightboxPrev"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    goPrevImage();
+                  }}
+                  aria-label="السابق"
+                >
+                  ‹
+                </button>
+              ) : null}
+
+              <div
+                className="lightboxImageWrap"
+                onClick={(e) => e.stopPropagation()}
+                onTouchStart={handleTouchStart}
+                onTouchEnd={handleTouchEnd}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={selectedImage} alt={item.title || 'صورة العقار'} className="lightboxImage" />
+              </div>
+
+              {images.length > 1 ? (
+                <button
+                  type="button"
+                  className="lightboxNav lightboxNext"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    goNextImage();
+                  }}
+                  aria-label="التالي"
+                >
+                  ›
+                </button>
+              ) : null}
+            </div>
+          ) : null}
         </>
       )}
 
       <style jsx>{`
         .listingPageWrap {
-          padding-top: 16px;
-          padding-bottom: 8px;
+          padding-top: 14px;
+          padding-bottom: 14px;
         }
 
         .stateCard {
           padding: 18px;
+        }
+
+        .topNavRow {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          margin-bottom: 12px;
+        }
+
+        .backLink,
+        .shareBtn {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          min-height: 42px;
+          padding: 0 14px;
+          border-radius: 12px;
+          border: 1px solid var(--border);
+          background: #fff;
+          color: var(--text);
+          text-decoration: none;
+          font-weight: 800;
+          cursor: pointer;
         }
 
         .heroCard {
@@ -301,11 +590,11 @@ export default function ListingDetails({ params }) {
         }
 
         .heroText {
-          min-width: 0;
           flex: 1;
+          min-width: 0;
         }
 
-        .topRow {
+        .badgesRow {
           display: flex;
           align-items: center;
           gap: 10px;
@@ -313,14 +602,14 @@ export default function ListingDetails({ params }) {
           margin-bottom: 10px;
         }
 
-        .statusWrap {
+        .badgeWrap {
           display: inline-flex;
           align-items: center;
           gap: 8px;
+          flex-wrap: wrap;
         }
 
-        .statusText,
-        .dealBadge {
+        .pill {
           display: inline-flex;
           align-items: center;
           justify-content: center;
@@ -328,15 +617,20 @@ export default function ListingDetails({ params }) {
           padding: 0 12px;
           border-radius: 999px;
           border: 1px solid var(--border);
-          font-weight: 800;
-          font-size: 13px;
           background: #fff;
           color: var(--text);
+          font-size: 13px;
+          font-weight: 800;
         }
 
-        .dealBadge {
+        .pill.deal {
           background: var(--primary-light);
-          border-color: rgba(214, 179, 91, 0.2);
+          border-color: rgba(15, 118, 110, 0.25);
+        }
+
+        .pill.direct {
+          background: rgba(15, 118, 110, 0.12);
+          border-color: rgba(15, 118, 110, 0.28);
         }
 
         .pageTitle {
@@ -344,6 +638,7 @@ export default function ListingDetails({ params }) {
           font-size: clamp(22px, 3vw, 32px);
           line-height: 1.35;
           font-weight: 950;
+          color: var(--text);
         }
 
         .locationLine {
@@ -354,12 +649,18 @@ export default function ListingDetails({ params }) {
 
         .priceBlock {
           margin-top: 14px;
-          font-size: clamp(24px, 3.2vw, 34px);
+          font-size: clamp(24px, 3.1vw, 34px);
           font-weight: 950;
           color: #0f172a;
         }
 
-        .quickFacts {
+        .rentHint {
+          font-size: 16px;
+          font-weight: 800;
+          color: var(--muted);
+        }
+
+        .heroFacts {
           display: grid;
           grid-template-columns: repeat(4, minmax(0, 1fr));
           gap: 10px;
@@ -370,7 +671,7 @@ export default function ListingDetails({ params }) {
           display: flex;
           flex-direction: column;
           gap: 10px;
-          width: 230px;
+          width: 240px;
           flex-shrink: 0;
         }
 
@@ -382,7 +683,7 @@ export default function ListingDetails({ params }) {
 
         .contentGrid {
           display: grid;
-          grid-template-columns: minmax(0, 1.6fr) minmax(280px, 0.9fr);
+          grid-template-columns: minmax(0, 1.55fr) minmax(290px, 0.9fr);
           gap: 14px;
           align-items: start;
         }
@@ -400,19 +701,83 @@ export default function ListingDetails({ params }) {
         }
 
         .mainImageWrap {
+          position: relative;
           width: 100%;
-          border-radius: 18px;
+          min-height: 340px;
+          height: clamp(340px, 55vw, 620px);
           overflow: hidden;
-          background: #f1f5f9;
+          border-radius: 18px;
           border: 1px solid var(--border);
-          aspect-ratio: 16 / 10;
+          background: #fff;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          touch-action: pan-y;
+        }
+
+        .imageButton {
+          width: 100%;
+          height: 100%;
+          display: block;
+          border: 0;
+          background: transparent;
+          padding: 0;
+          cursor: zoom-in;
         }
 
         .mainImage {
           width: 100%;
           height: 100%;
-          object-fit: cover;
           display: block;
+          object-fit: contain;
+          background: #fff;
+        }
+
+        .mobileSwipeHint {
+          position: absolute;
+          bottom: 12px;
+          right: 12px;
+          left: 12px;
+          padding: 8px 10px;
+          border-radius: 10px;
+          background: rgba(15, 23, 42, 0.55);
+          color: #fff;
+          font-size: 12px;
+          text-align: center;
+          pointer-events: none;
+          display: none;
+        }
+
+        .navBtn {
+          position: absolute;
+          top: 50%;
+          transform: translateY(-50%);
+          z-index: 3;
+          width: 46px;
+          height: 46px;
+          border-radius: 999px;
+          border: 1px solid rgba(255, 255, 255, 0.65);
+          background: rgba(15, 23, 42, 0.45);
+          color: #fff;
+          font-size: 30px;
+          line-height: 1;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          backdrop-filter: blur(6px);
+        }
+
+        .navPrev {
+          right: 14px;
+        }
+
+        .navNext {
+          left: 14px;
+        }
+
+        .desktopOnly {
+          display: inline-flex;
         }
 
         .emptyMedia {
@@ -420,34 +785,43 @@ export default function ListingDetails({ params }) {
           display: flex;
           align-items: center;
           justify-content: center;
-          border-radius: 18px;
-          border: 1px dashed var(--border2);
-          background: #f8fafc;
-          color: var(--muted);
-          text-align: center;
           padding: 18px;
+          text-align: center;
+          color: var(--muted);
+          border: 1px dashed var(--border2, var(--border));
+          border-radius: 18px;
+          background: #f8fafc;
+        }
+
+        .thumbsScroller {
+          margin-top: 12px;
+          overflow-x: auto;
+          overflow-y: hidden;
+          padding-bottom: 4px;
+          -webkit-overflow-scrolling: touch;
         }
 
         .thumbsRow {
-          display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(78px, 1fr));
+          display: flex;
           gap: 10px;
-          margin-top: 12px;
+          min-width: max-content;
         }
 
         .thumbBtn {
+          width: 92px;
+          height: 72px;
+          flex: 0 0 auto;
           border: 1px solid var(--border);
           border-radius: 14px;
           background: #fff;
           padding: 0;
           overflow: hidden;
           cursor: pointer;
-          aspect-ratio: 1;
         }
 
         .thumbBtn.active {
-          border-color: rgba(214, 179, 91, 0.8);
-          box-shadow: 0 0 0 3px rgba(214, 179, 91, 0.18);
+          border-color: rgba(15, 118, 110, 0.85);
+          box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.18);
         }
 
         .thumbImage {
@@ -462,6 +836,7 @@ export default function ListingDetails({ params }) {
           margin: 0 0 12px;
           font-size: 18px;
           font-weight: 900;
+          color: var(--text);
         }
 
         .detailsGrid {
@@ -478,6 +853,10 @@ export default function ListingDetails({ params }) {
           min-width: 0;
         }
 
+        .infoItem.full {
+          grid-column: 1 / -1;
+        }
+
         .infoLabel {
           color: var(--muted);
           font-size: 13px;
@@ -486,8 +865,9 @@ export default function ListingDetails({ params }) {
 
         .infoValue {
           font-weight: 850;
-          line-height: 1.65;
+          line-height: 1.7;
           word-break: break-word;
+          color: var(--text);
         }
 
         .descriptionText {
@@ -503,7 +883,7 @@ export default function ListingDetails({ params }) {
 
         .sideList {
           display: grid;
-          gap: 10px;
+          gap: 2px;
         }
 
         .sideRow {
@@ -525,6 +905,74 @@ export default function ListingDetails({ params }) {
           margin-top: 14px;
         }
 
+        .shareMsg {
+          font-size: 13px;
+          color: var(--muted);
+          text-align: center;
+        }
+
+        .lightbox {
+          position: fixed;
+          inset: 0;
+          z-index: 1000;
+          background: rgba(0, 0, 0, 0.88);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 24px;
+        }
+
+        .lightboxImageWrap {
+          width: min(96vw, 1200px);
+          height: min(88vh, 900px);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .lightboxImage {
+          max-width: 100%;
+          max-height: 100%;
+          object-fit: contain;
+          display: block;
+        }
+
+        .lightboxClose {
+          position: absolute;
+          top: 18px;
+          left: 18px;
+          width: 46px;
+          height: 46px;
+          border: 0;
+          border-radius: 999px;
+          background: rgba(255, 255, 255, 0.16);
+          color: #fff;
+          font-size: 30px;
+          cursor: pointer;
+        }
+
+        .lightboxNav {
+          position: absolute;
+          top: 50%;
+          transform: translateY(-50%);
+          width: 52px;
+          height: 52px;
+          border: 0;
+          border-radius: 999px;
+          background: rgba(255, 255, 255, 0.16);
+          color: #fff;
+          font-size: 34px;
+          cursor: pointer;
+        }
+
+        .lightboxPrev {
+          right: 20px;
+        }
+
+        .lightboxNext {
+          left: 20px;
+        }
+
         @media (max-width: 900px) {
           .listingPageWrap {
             padding-top: 10px;
@@ -544,7 +992,7 @@ export default function ListingDetails({ params }) {
             grid-template-columns: 1fr 1fr;
           }
 
-          .quickFacts {
+          .heroFacts {
             grid-template-columns: repeat(2, minmax(0, 1fr));
           }
 
@@ -562,12 +1010,16 @@ export default function ListingDetails({ params }) {
             width: min(100%, calc(100% - 18px));
           }
 
+          .topNavRow {
+            flex-wrap: wrap;
+          }
+
           .heroCard,
           .galleryCard,
           .sectionCard,
           .sideCard {
-            border-radius: 16px;
             padding: 12px;
+            border-radius: 16px;
           }
 
           .pageTitle {
@@ -579,7 +1031,7 @@ export default function ListingDetails({ params }) {
             margin-top: 10px;
           }
 
-          .quickFacts,
+          .heroFacts,
           .detailsGrid {
             grid-template-columns: 1fr;
           }
@@ -589,13 +1041,23 @@ export default function ListingDetails({ params }) {
           }
 
           .mainImageWrap {
-            aspect-ratio: 4 / 3;
+            min-height: 260px;
+            height: 56vw;
+            max-height: 420px;
             border-radius: 14px;
           }
 
-          .thumbsRow {
-            grid-template-columns: repeat(4, minmax(0, 1fr));
-            gap: 8px;
+          .desktopOnly {
+            display: none;
+          }
+
+          .mobileSwipeHint {
+            display: block;
+          }
+
+          .thumbBtn {
+            width: 78px;
+            height: 62px;
           }
 
           .emptyMedia {
@@ -606,6 +1068,34 @@ export default function ListingDetails({ params }) {
             align-items: flex-start;
             flex-direction: column;
             gap: 6px;
+          }
+
+          .lightbox {
+            padding: 10px;
+          }
+
+          .lightboxImageWrap {
+            width: 100%;
+            height: 78vh;
+          }
+
+          .lightboxNav {
+            width: 44px;
+            height: 44px;
+            font-size: 30px;
+          }
+
+          .lightboxPrev {
+            right: 10px;
+          }
+
+          .lightboxNext {
+            left: 10px;
+          }
+
+          .lightboxClose {
+            top: 10px;
+            left: 10px;
           }
         }
       `}</style>
