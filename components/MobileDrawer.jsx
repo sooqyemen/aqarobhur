@@ -2,244 +2,71 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useEffect, useMemo } from 'react';
-
-function hashHue(text) {
-  const s = String(text || '');
-  let h = 0;
-  for (let i = 0; i < s.length; i += 1) h = (h * 31 + s.charCodeAt(i)) >>> 0;
-  return h % 360;
-}
-
-function IconBadge({ emoji, label }) {
-  const hue = useMemo(() => hashHue(label), [label]);
-
-  return (
-    <span
-      aria-hidden="true"
-      style={{
-        width: 36,
-        height: 36,
-        borderRadius: 14,
-        display: 'inline-flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        fontSize: 18,
-        border: `1px solid hsla(${hue}, 70%, 60%, 0.35)`,
-        background: `hsla(${hue}, 70%, 55%, 0.18)`,
-        flex: '0 0 auto',
-      }}
-    >
-      {emoji}
-    </span>
-  );
-}
+import { useEffect } from 'react';
+import { MAIN_NAV_LINKS } from '@/lib/navigation';
 
 export default function MobileDrawer({ open, onClose }) {
   const pathname = usePathname() || '/';
 
-  const links = useMemo(
-    () => [
-      { href: '/', label: 'الرئيسية', emoji: '🏠' },
-      { href: '/listings', label: 'كل العروض', emoji: '📋' },
-      { href: '/listings?dealType=sale', label: 'بيع', emoji: '💰' },
-      { href: '/listings?dealType=rent', label: 'إيجار', emoji: '🏷️' },
-      { href: '/map', label: 'الخريطة', emoji: '🗺️' },
-      { href: '/neighborhoods', label: 'الأحياء', emoji: '🏘️' },
-      { href: '/request', label: 'أرسل طلبك', emoji: '📨', primary: true },
-    ],
-    []
-  );
-
-  const onBackdrop = (e) => {
-    if (e.target === e.currentTarget) onClose?.();
-  };
-
-  useEffect(() => {
-    if (!open) return;
-    try {
-      const el = document.getElementById('mobile-drawer');
-      el?.focus?.();
-    } catch {}
-  }, [open]);
-
-  // قفل تمرير الصفحة عند فتح القائمة
   useEffect(() => {
     if (typeof document === 'undefined') return;
-
-    const html = document.documentElement;
     const body = document.body;
-    const prevHtmlOverflow = html.style.overflow;
-    const prevBodyOverflow = body.style.overflow;
-
-    if (open) {
-      html.style.overflow = 'hidden';
-      body.style.overflow = 'hidden';
-    }
-
-    return () => {
-      html.style.overflow = prevHtmlOverflow;
-      body.style.overflow = prevBodyOverflow;
-    };
+    if (open) body.style.overflow = 'hidden';
+    else body.style.overflow = '';
   }, [open]);
 
-  // إخفاء كامل في الشاشات الكبيرة (بديل media query)
-  const desktopHiddenStyle =
-    typeof window !== 'undefined' && window.innerWidth >= 1024 ? { display: 'none' } : null;
+  if (!open) return null;
 
   return (
-    <div
-      className={`mobileDrawerRoot ${open ? 'open' : ''}`}
-      onMouseDown={onBackdrop}
-      aria-hidden={!open}
-      style={{
-        position: 'fixed',
-        inset: 0,
-        zIndex: 10050,
-        pointerEvents: open ? 'auto' : 'none',
-        ...desktopHiddenStyle,
-      }}
-    >
-      {/* الخلفية */}
-      <div
-        aria-hidden="true"
-        style={{
-          position: 'absolute',
-          inset: 0,
-          background: 'rgba(15, 23, 42, 0.42)',
-          opacity: open ? 1 : 0,
-          transition: 'opacity 180ms ease',
-        }}
-      />
-
-      {/* الدرج */}
-      <aside
-        id="mobile-drawer"
-        role="dialog"
-        aria-modal="true"
-        aria-label="قائمة الجوال"
-        tabIndex={-1}
-        style={{
-          position: 'absolute',
-          top: 0,
-          bottom: 0,
-          right: 0,
-          width: 'min(86vw, 340px)',
-          background: '#ffffff',
-          borderLeft: '1px solid var(--border)',
-          boxShadow: '-22px 0 50px rgba(15, 23, 42, 0.18)',
-          transform: open ? 'translateX(0)' : 'translateX(110%)',
-          transition: 'transform 220ms ease',
-          padding: 14,
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 12,
-          outline: 'none',
-        }}
-      >
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 12,
-            padding: '4px 2px 10px',
-            borderBottom: '1px solid var(--border)',
-          }}
-        >
-          <div
-            style={{
-              fontWeight: 950,
-              fontSize: 16,
-              color: 'var(--text)',
-            }}
-          >
-            القائمة
+    <>
+      <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined" rel="stylesheet" />
+      <div className="drawerRoot" onClick={onClose}>
+        <aside className="drawerContent" onClick={(e) => e.stopPropagation()}>
+          <div className="drawerHeader">
+            <div className="brandTitle">
+              <strong>عقار أبحر</strong>
+              <span>القائمة الرئيسية</span>
+            </div>
+            <button className="closeBtn" onClick={onClose}>
+              <span className="material-icons-outlined">close</span>
+            </button>
           </div>
-
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="إغلاق القائمة"
-            style={{
-              width: 42,
-              height: 42,
-              borderRadius: 12,
-              border: '1px solid var(--border)',
-              background: '#fff',
-              color: 'var(--text)',
-              fontWeight: 950,
-              cursor: 'pointer',
-            }}
-          >
-            ✕
-          </button>
-        </div>
-
-        <div
-          role="navigation"
-          aria-label="روابط"
-          style={{
-            display: 'grid',
-            gap: 10,
-            paddingTop: 10,
-          }}
-        >
-          {links.map((it) => {
-            const active = it.href === '/' ? pathname === '/' : pathname.startsWith(it.href.split('?')[0]);
-
-            return (
-              <Link
-                key={it.href}
-                href={it.href}
-                onClick={onClose}
-                aria-current={active ? 'page' : undefined}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 10,
-                  padding: '12px 12px',
-                  borderRadius: 16,
-                  border: active
-                    ? '1px solid rgba(214, 179, 91, 0.55)'
-                    : '1px solid var(--border)',
-                  background: it.primary
-                    ? 'linear-gradient(135deg, var(--primary), var(--primary2))'
-                    : active
-                      ? 'rgba(214, 179, 91, 0.12)'
-                      : '#ffffff',
-                  color: it.primary ? '#1f2937' : 'var(--text)',
-                  fontWeight: 950,
-                  textDecoration: 'none',
-                }}
-              >
-                <IconBadge emoji={it.emoji} label={it.label} />
-                <span
-                  style={{
-                    fontSize: 14,
-                    whiteSpace: 'nowrap',
-                    lineHeight: 1.2,
-                  }}
-                >
-                  {it.label}
-                </span>
-              </Link>
-            );
-          })}
-        </div>
-
-        <div
-          className="muted"
-          style={{
-            marginTop: 'auto',
-            fontSize: 12,
-            opacity: 0.9,
-            padding: '8px 2px 0',
-          }}
-        >
-          اسحب للأسفل أو اضغط ✕ للإغلاق.
-        </div>
-      </aside>
-    </div>
+          <nav className="drawerNav">
+            {(MAIN_NAV_LINKS || []).map((link) => {
+              const active = link.href === '/' ? pathname === '/' : pathname.startsWith(link.href.split('?')[0]);
+              return (
+                <Link key={link.href} href={link.href} className={`navLink ${active ? 'active' : ''} ${link.primary ? 'primaryLink' : ''}`} onClick={onClose}>
+                  <span className="material-icons-outlined">{link.icon}</span>
+                  <span className="linkText">{link.label}</span>
+                  {active && <span className="activeDot"></span>}
+                </Link>
+              );
+            })}
+          </nav>
+          <div className="drawerFooter">
+            <p>© {new Date().getFullYear()} عقار أبحر</p>
+            <p>للتسويق والوساطة العقارية</p>
+          </div>
+        </aside>
+      </div>
+      <style jsx>{`
+        .drawerRoot { position: fixed; inset: 0; z-index: 10000; background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px); display: flex; justify-content: flex-end; animation: fadeIn 0.3s ease; }
+        .drawerContent { width: min(85vw, 320px); background: #ffffff; height: 100%; display: flex; flex-direction: column; box-shadow: -10px 0 30px rgba(0, 0, 0, 0.1); animation: slideIn 0.3s ease-out; }
+        .drawerHeader { padding: 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #edf2f7; }
+        .brandTitle strong { display: block; font-size: 18px; color: var(--text); }
+        .brandTitle span { font-size: 12px; color: var(--muted); }
+        .closeBtn { width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--border); background: var(--bg-soft); display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--text); }
+        .drawerNav { padding: 15px; display: flex; flex-direction: column; gap: 8px; flex-grow: 1; overflow-y: auto; }
+        .navLink { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: 12px; text-decoration: none; color: var(--muted); font-weight: 700; font-size: 15px; transition: all 0.2s; position: relative; }
+        .navLink:hover { background: var(--bg-soft); color: var(--text); }
+        .navLink.active { background: rgba(15, 118, 110, 0.1); color: var(--primary); }
+        .primaryLink { background: var(--primary); color: white !important; margin-top: 10px; }
+        .primaryLink:hover { background: #0d665f; }
+        .activeDot { width: 6px; height: 6px; background: var(--primary); border-radius: 50%; position: absolute; left: 15px; }
+        .drawerFooter { padding: 20px; border-top: 1px solid var(--border); text-align: center; font-size: 12px; color: var(--muted); line-height: 1.6; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
+      `}</style>
+    </>
   );
 }
