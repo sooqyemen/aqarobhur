@@ -1,52 +1,46 @@
 import './globals.css';
-
+import { Cairo } from 'next/font/google';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
-import MobileNav from '@/components/MobileNav';
 import WhatsAppBar from '@/components/WhatsAppBar';
 
+const cairo = Cairo({ 
+  subsets: ['arabic', 'latin'],
+  weight: ['400', '500', '600', '700', '800', '900'],
+  display: 'swap',
+});
+
 export const metadata = {
-  metadataBase: new URL('https://aqarobhur.com'),
-  title: 'عقار أبحر',
-  description: 'عروض عقارية في أبحر الشمالية وشمال جدة + استقبال الطلبات عبر واتساب.',
-  icons: {
-    icon: [
-      { url: '/favicon.ico', sizes: 'any' },
-      { url: '/favicon-16x16.png', type: 'image/png', sizes: '16x16' },
-      { url: '/favicon-32x32.png', type: 'image/png', sizes: '32x32' },
-      { url: '/icon-192x192.png', type: 'image/png', sizes: '192x192' }
-    ],
-    apple: [{ url: '/apple-touch-icon.png', sizes: '180x180', type: 'image/png' }],
-    shortcut: ['/favicon.ico']
-  },
-  manifest: '/site.webmanifest',
+  title: 'عقار أبحر | خيارك الأول لعقارات جدة',
+  description: 'منصة عقار أبحر هي بوابتك المتطورة للبحث عن أفضل العقارات في مدينة جدة وأبحر، بيع وشراء وتأجير وإدارة أملاك باحترافية وموثوقية عالية.',
+  keywords: 'عقار, أبحر, جدة, عقارات جدة, أراضي أبحر, فلل للبيع, شقق تمليك, إدارة أملاك, تسويق عقاري',
   openGraph: {
-    title: 'عقار أبحر',
-    description: 'عروض عقارية في أبحر الشمالية وشمال جدة + استقبال الطلبات عبر واتساب.',
-    images: ['/logo-full-1024.png'],
+    title: 'عقار أبحر | دليلك العقاري',
+    description: 'اكتشف أفضل العروض العقارية في أبحر وجدة.',
     locale: 'ar_SA',
-    siteName: 'عقار أبحر',
-    type: 'website'
+    type: 'website',
   },
-  twitter: {
-    card: 'summary_large_image',
-    title: 'عقار أبحر',
-    description: 'عروض عقارية في أبحر الشمالية وشمال جدة + استقبال الطلبات عبر واتساب.',
-    images: ['/logo-full-1024.png']
-  }
+};
+
+export const viewport = {
+  themeColor: '#0f766e',
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
 };
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="ar" dir="rtl">
+    <html lang="ar" dir="rtl" className={cairo.className}>
       <body>
-        <div className="appShell">
-          <Header />
-          <main className="appMain">{children}</main>
-          <Footer />
-          <MobileNav />
-          <WhatsAppBar />
-        </div>
+        <Header />
+        
+        <main className="mainContent">
+          {children}
+        </main>
+        
+        <Footer />
+        <WhatsAppBar />
       </body>
     </html>
   );
