@@ -1,7 +1,6 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { unzipSync, strFromU8 } from 'fflate';
 import { normalizeSaudiPhone } from '@/lib/contactUtils';
 
 function toEnglishDigits(str) {
@@ -114,7 +113,7 @@ export default function PasteMessageBox({ onAnalyze, loading = false }) {
       },
       importMode: fileInfo ? 'file' : 'paste',
       fileName: fileInfo,
-      fileType: fileInfo ? (fileInfo.toLowerCase().endsWith('.zip') ? 'zip' : 'txt') : 'text',
+      fileType: 'text',
     });
   }
 
@@ -130,21 +129,7 @@ export default function PasteMessageBox({ onAnalyze, loading = false }) {
         setFileInfo(file.name);
         return;
       }
-      if (file.name.toLowerCase().endsWith('.zip')) {
-        const buffer = await file.arrayBuffer();
-        const files = unzipSync(new Uint8Array(buffer));
-        const chunks = [];
-        for (const [name, data] of Object.entries(files)) {
-          if (name.startsWith('__MACOSX/') || name.endsWith('/')) continue;
-          if (!name.toLowerCase().endsWith('.txt')) continue;
-          chunks.push(`----- ${name} -----\n${strFromU8(data)}`);
-        }
-        if (!chunks.length) throw new Error('لم يتم العثور على ملفات نصية (TXT) صالحة داخل ملف الـ ZIP.');
-        updateField('rawText', chunks.join('\n\n'));
-        setFileInfo(file.name);
-        return;
-      }
-      throw new Error('نوع الملف غير مدعوم. الرجاء رفع ملفات TXT أو ZIP فقط.');
+      throw new Error('نوع الملف غير مدعوم. الرجاء رفع ملفات TXT فقط.');
     } catch (err) {
       setLocalError(err?.message || 'تعذر قراءة الملف.');
     } finally {
@@ -175,7 +160,6 @@ export default function PasteMessageBox({ onAnalyze, loading = false }) {
               <select value={form.sourceType} onChange={(e) => updateField('sourceType', e.target.value)} className="inputControl">
                 <option>نسخ ولصق</option>
                 <option>واتساب يدوي</option>
-                <option>ملف ZIP</option>
                 <option>ملف TXT</option>
                 <option>مصدر آخر</option>
               </select>
@@ -241,7 +225,7 @@ export default function PasteMessageBox({ onAnalyze, loading = false }) {
         <div className="panelFooter">
           <button type="button" className="btnOutline" onClick={() => fileInputRef.current?.click()} disabled={loading}>
             <span className="material-icons-outlined">upload_file</span>
-            رفع ملف (TXT, ZIP)
+            رفع ملف (TXT)
           </button>
           
           <button type="button" className="btnPrimary" onClick={handleAnalyze} disabled={loading || !form.rawText.trim()}>
@@ -253,7 +237,7 @@ export default function PasteMessageBox({ onAnalyze, loading = false }) {
           </button>
         </div>
 
-        <input ref={fileInputRef} type="file" accept=".txt,.zip" hidden onChange={handleFileChange} />
+        <input ref={fileInputRef} type="file" accept=".txt" hidden onChange={handleFileChange} />
       </div>
 
       <style jsx>{`
