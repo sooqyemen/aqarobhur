@@ -1,3 +1,7 @@
+'use client';
+
+import Image from 'next/image';
+import Link from 'next/link';
 // app/about/page.jsx
 import Image from 'next/image';
 import Link from 'next/link';
