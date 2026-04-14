@@ -112,58 +112,6 @@ export default function AboutPage() {
           </div>
         </section>
 
-        {/* Statistics */}
-        <section className="statsSection">
-          <div className="container">
-            <div className="statsGrid">
-              <div className="statItem">
-                <span className="statNumber">+500</span>
-                <span className="statLabel">عقار معروض</span>
-              </div>
-              <div className="statItem">
-                <span className="statNumber">+1200</span>
-                <span className="statLabel">عميل سعيد</span>
-              </div>
-              <div className="statItem">
-                <span className="statNumber">+15</span>
-                <span className="statLabel">عاماً من الخبرة</span>
-              </div>
-              <div className="statItem">
-                <span className="statNumber">24/7</span>
-                <span className="statLabel">دعم متواصل</span>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* Team Section (Optional) */}
-        <section className="teamSection">
-          <div className="container">
-            <h2 className="sectionTitle center">فريق القيادة</h2>
-            <p className="teamSubtitle">يقود منصتنا فريق من الخبراء العقاريين والمتخصصين في التكنولوجيا</p>
-            <div className="teamGrid">
-              <div className="teamCard">
-                <div className="teamAvatar">👤</div>
-                <h4>أحمد الغامدي</h4>
-                <p className="teamRole">المؤسس والمدير التنفيذي</p>
-                <p className="teamBio">خبرة 20 عاماً في التطوير العقاري والاستثمار.</p>
-              </div>
-              <div className="teamCard">
-                <div className="teamAvatar">👤</div>
-                <h4>سارة الحربي</h4>
-                <p className="teamRole">رئيس قسم التسويق</p>
-                <p className="teamBio">متخصصة في التسويق الرقمي وتجربة العملاء.</p>
-              </div>
-              <div className="teamCard">
-                <div className="teamAvatar">👤</div>
-                <h4>خالد الشهري</h4>
-                <p className="teamRole">مدير التقنية</p>
-                <p className="teamBio">خبير في تطوير المنصات العقارية والذكاء الاصطناعي.</p>
-              </div>
-            </div>
-          </div>
-        </section>
-
         {/* CTA */}
         <section className="ctaSection">
           <div className="container">
@@ -426,101 +374,6 @@ export default function AboutPage() {
           font-size: 14px;
         }
 
-        /* Statistics */
-        .statsSection {
-          padding: 60px 0;
-          background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-          color: white;
-        }
-
-        .statsGrid {
-          display: grid;
-          grid-template-columns: repeat(4, 1fr);
-          gap: 30px;
-          text-align: center;
-        }
-
-        .statItem {
-          display: flex;
-          flex-direction: column;
-          gap: 8px;
-        }
-
-        .statNumber {
-          font-size: 48px;
-          font-weight: 900;
-          color: #5eead4;
-        }
-
-        .statLabel {
-          font-size: 16px;
-          opacity: 0.8;
-        }
-
-        /* Team */
-        .teamSection {
-          padding: 80px 0;
-          background: var(--bg-soft);
-        }
-
-        .teamSubtitle {
-          text-align: center;
-          color: var(--muted);
-          margin-bottom: 50px;
-          font-size: 18px;
-        }
-
-        .teamGrid {
-          display: grid;
-          grid-template-columns: repeat(3, 1fr);
-          gap: 30px;
-        }
-
-        .teamCard {
-          background: white;
-          padding: 40px 20px;
-          border-radius: 24px;
-          text-align: center;
-          box-shadow: var(--shadow-sm);
-          border: 1px solid var(--border);
-          transition: transform 0.3s;
-        }
-
-        .teamCard:hover {
-          transform: translateY(-5px);
-          box-shadow: var(--shadow-md);
-        }
-
-        .teamAvatar {
-          width: 100px;
-          height: 100px;
-          border-radius: 50%;
-          background: #e2e8f0;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          margin: 0 auto 20px;
-          font-size: 48px;
-        }
-
-        .teamCard h4 {
-          font-size: 20px;
-          font-weight: 800;
-          margin-bottom: 6px;
-          color: var(--text);
-        }
-
-        .teamRole {
-          color: var(--primary);
-          font-weight: 600;
-          margin-bottom: 12px;
-        }
-
-        .teamBio {
-          color: var(--muted);
-          font-size: 14px;
-        }
-
         /* CTA */
         .ctaSection {
           padding: 60px 0 80px;
@@ -570,7 +423,7 @@ export default function AboutPage() {
           color: var(--primary);
         }
 
-        /* Responsive */
+        /* Responsive - تحسينات الجوال الكاملة */
         @media (max-width: 900px) {
           .contentGrid {
             grid-template-columns: 1fr;
@@ -579,35 +432,110 @@ export default function AboutPage() {
           .valuesGrid {
             grid-template-columns: repeat(2, 1fr);
           }
-          .statsGrid {
-            grid-template-columns: repeat(2, 1fr);
-            gap: 40px;
-          }
-          .teamGrid {
-            grid-template-columns: 1fr;
-            max-width: 400px;
-            margin: 0 auto;
-          }
         }
 
-        @media (max-width: 640px) {
-          .valuesGrid {
-            grid-template-columns: 1fr;
+        @media (max-width: 768px) {
+          .container {
+            padding: 0 16px;
           }
-          .statsGrid {
-            grid-template-columns: 1fr;
-          }
-          .vmGrid {
-            grid-template-columns: 1fr;
-          }
-          .ctaButtons {
-            flex-direction: column;
+          .aboutHero {
+            padding: 60px 0;
           }
           .heroTitle {
             font-size: 28px;
           }
+          .heroSubtitle {
+            font-size: 16px;
+          }
+          .aboutContent {
+            padding: 50px 0;
+          }
+          .textBlock .sectionTitle {
+            font-size: 28px;
+          }
+          .lead {
+            font-size: 18px;
+          }
+          .vmGrid {
+            grid-template-columns: 1fr;
+            gap: 20px;
+          }
+          .vmCard {
+            padding: 30px 20px;
+          }
+          .iconCircle {
+            width: 60px;
+            height: 60px;
+          }
+          .iconCircle .material-icons-outlined {
+            font-size: 30px;
+          }
+          .vmCard h3 {
+            font-size: 22px;
+          }
+          .valuesSection {
+            padding: 50px 0;
+          }
           .sectionTitle.center {
             font-size: 28px;
+            margin-bottom: 30px;
+          }
+          .valueCard {
+            padding: 25px 15px;
+          }
+          .valueCard .material-icons-outlined {
+            font-size: 34px;
+          }
+          .ctaSection {
+            padding: 40px 0 60px;
+          }
+          .ctaBox {
+            padding: 40px 20px;
+            border-radius: 24px;
+          }
+          .ctaBox h2 {
+            font-size: 26px;
+          }
+          .ctaBox p {
+            font-size: 16px;
+          }
+          .ctaButtons {
+            flex-direction: column;
+            gap: 12px;
+          }
+          .btnOutline {
+            padding: 12px 24px;
+          }
+        }
+
+        @media (max-width: 480px) {
+          .heroTitle {
+            font-size: 26px;
+          }
+          .heroSubtitle {
+            font-size: 15px;
+          }
+          .textBlock .sectionTitle {
+            font-size: 24px;
+          }
+          .lead {
+            font-size: 17px;
+          }
+          .textBlock p {
+            font-size: 15px;
+          }
+          .valuesGrid {
+            grid-template-columns: 1fr;
+            gap: 16px;
+          }
+          .valueCard h4 {
+            font-size: 18px;
+          }
+          .imageBadge {
+            bottom: 10px;
+            right: 10px;
+            padding: 6px 12px;
+            font-size: 12px;
           }
         }
       `}</style>
