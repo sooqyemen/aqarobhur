@@ -2,14 +2,6 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
-// app/about/page.jsx
-import Image from 'next/image';
-import Link from 'next/link';
-
-export const metadata = {
-  title: 'عن المنصة | عقار أبحر',
-  description: 'تعرف على عقار أبحر، منصتك الموثوقة للعقارات في جدة وأبحر. نقدم حلولاً مبتكرة للبيع والشراء والإيجار وإدارة الأملاك.',
-};
 
 export default function AboutPage() {
   return (
