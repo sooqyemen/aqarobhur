@@ -11,7 +11,6 @@ export default function Footer() {
 
   const currentYear = useMemo(() => new Date().getFullYear(), []);
 
-  // روابط التنقل (يمكن تخصيصها بسهولة)
   const quickLinks = [
     { href: '/', label: 'الرئيسية', icon: 'home' },
     { href: '/listings', label: 'كل العقارات', icon: 'apartment' },
@@ -38,7 +37,7 @@ export default function Footer() {
                 <div>
                   <h3 className="brandTitle">عقار أبحر</h3>
                   <p className="brandDesc">
-                    واجهة عقارية حديثة لعرض العقارات، استقبال الطلبات، وتسهيل التواصل المباشر لخدمتكم بشكل أسرع.
+                    مكتب عقار أبحر | متخصصون في بيع، شراء، وتأجير العقارات السكنية والتجارية في جدة وأبحر.
                   </p>
                 </div>
               </div>
@@ -51,7 +50,7 @@ export default function Footer() {
               </div>
             </section>
 
-            {/* القسم الثاني: الروابط السريعة (أصبح أكثر مرونة) */}
+            {/* القسم الثاني: الروابط السريعة */}
             <section className="footerSection">
               <h4 className="sectionTitle">روابط سريعة</h4>
               <nav className="footerLinks">
@@ -68,7 +67,7 @@ export default function Footer() {
               </nav>
             </section>
 
-            {/* القسم الثالث: معلومات التواصل مع تحسينات */}
+            {/* القسم الثالث: معلومات التواصل */}
             <section className="footerSection">
               <h4 className="sectionTitle">تواصل معنا</h4>
               <div className="contactList">
@@ -101,7 +100,6 @@ export default function Footer() {
                   <span>الخدمة: استقبال طلبات البيع والإيجار والتسويق الحصري.</span>
                 </div>
 
-                {/* وسائل التواصل الاجتماعي (اختياري) */}
                 <div className="socialLinks">
                   <a href="https://x.com/abhar" target="_blank" rel="noopener noreferrer" aria-label="تويتر">
                     <span className="material-icons-outlined">flutter_dash</span>
@@ -151,7 +149,6 @@ export default function Footer() {
           margin-bottom: 48px;
         }
 
-        /* تنسيقات الهوية (القسم الأول) */
         .brandSection {
           display: flex;
           flex-direction: column;
@@ -220,7 +217,6 @@ export default function Footer() {
           transform: translateY(-2px);
         }
 
-        /* تنسيقات العناوين والأقسام */
         .sectionTitle {
           margin: 0 0 24px 0;
           font-size: 18px;
@@ -241,7 +237,6 @@ export default function Footer() {
           border-radius: 4px;
         }
 
-        /* تنسيقات الروابط (القسم الثاني) */
         .footerLinks {
           display: flex;
           flex-direction: column;
@@ -286,7 +281,6 @@ export default function Footer() {
           color: #99f6e4;
         }
 
-        /* تنسيقات التواصل (القسم الثالث) */
         .contactList {
           display: flex;
           flex-direction: column;
@@ -374,7 +368,6 @@ export default function Footer() {
           color: #64748b;
         }
 
-        /* روابط التواصل الاجتماعي */
         .socialLinks {
           display: flex;
           gap: 16px;
@@ -406,7 +399,6 @@ export default function Footer() {
           font-size: 22px;
         }
 
-        /* الحقوق السفلية */
         .footerBottom {
           display: flex;
           flex-direction: row;
@@ -439,7 +431,6 @@ export default function Footer() {
           color: #5eead4;
         }
 
-        /* استجابة الجوال */
         @media (max-width: 768px) {
           .siteFooter {
             padding: 48px 0 20px;
