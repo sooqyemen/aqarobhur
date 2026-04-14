@@ -1,4 +1,4 @@
-// app/listing/[id]/page.jsx (أو .js حسب مشروعك)
+// app/listing/[id]/page.jsx
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
