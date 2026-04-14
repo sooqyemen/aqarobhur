@@ -1,1104 +1,412 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
+import { useParams, useRouter } from 'next/navigation';
+import Image from 'next/image';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
-
+import { fetchListingById, getListingMedia } from '@/lib/listings';
+import { formatPrice } from '@/lib/format';
 import { buildWhatsAppLink } from '@/components/WhatsAppBar';
-import { fetchListingById } from '@/lib/listings';
-import { formatPriceSAR, statusBadge } from '@/lib/format';
 
-function InfoItem({ label, value, full = false }) {
-  if (value === undefined || value === null || value === '') return null;
+// مكون صورة احتياطية في حال فشل التحميل
+const FallbackImage = () => (
+  <div className="fallback-image">
+    <span className="material-icons-outlined">photo_camera</span>
+    <p>لا توجد صورة</p>
+  </div>
+);
 
-  return (
-    <div className={`infoItem ${full ? 'full' : ''}`}>
-      <div className="infoLabel">{label}</div>
-      <div className="infoValue">{value}</div>
-    </div>
-  );
-}
-
-function normalizeStatusLabel(item) {
-  const status = String(item?.status || 'available');
-  const isRent = String(item?.dealType || '').toLowerCase() === 'rent';
-
-  if (status === 'sold') return isRent ? 'مؤجر' : 'مباع';
-  if (status === 'reserved') return 'محجوز';
-  if (status === 'canceled' || status === 'hidden') return 'غير متاح';
-  return 'متاح';
-}
-
-function normalizeDealTypeLabel(value) {
-  const v = String(value || '').toLowerCase();
-  if (v === 'rent') return 'إيجار';
-  if (v === 'sale') return 'بيع';
-  return '';
-}
-
-function formatArea(value) {
-  const n = Number(value);
-  if (!Number.isFinite(n) || n <= 0) return '';
-  return `${n.toLocaleString('ar-SA')} م²`;
-}
-
-function getLocationText(item) {
-  return [item?.neighborhood, item?.plan, item?.part].filter(Boolean).join(' • ') || 'غير محدد';
-}
-
-function isFiniteCoord(v) {
-  const n = Number(v);
-  return Number.isFinite(n);
-}
-
-function getMapHref(item) {
-  const lat = Number(item?.lat);
-  const lng = Number(item?.lng);
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return '';
-  return `https://www.google.com/maps?q=${lat},${lng}`;
-}
-
-function getSafeImages(item) {
-  if (!Array.isArray(item?.images)) return [];
-  return item.images.filter(Boolean);
-}
-
-function normalizePhoneDigits(phone) {
-  const digits = String(phone || '').replace(/\D/g, '');
-  if (!digits) return '';
-  if (digits.startsWith('0')) return `966${digits.slice(1)}`;
-  if (digits.startsWith('966')) return digits;
-  return digits;
-}
-
-export default function ListingDetailsPage({ params }) {
-  const routeParams = useParams();
-  const raw = params?.id ?? routeParams?.id;
-  const rawId = Array.isArray(raw) ? raw[0] : raw;
-
-  const id = useMemo(() => {
-    try {
-      return rawId ? decodeURIComponent(String(rawId)) : '';
-    } catch {
-      return rawId ? String(rawId) : '';
-    }
-  }, [rawId]);
-
-  const [item, setItem] = useState(null);
+export default function ListingDetailsPage() {
+  const { id } = useParams();
+  const router = useRouter();
+  
+  const [listing, setListing] = useState(null);
+  const [media, setMedia] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState('');
-  const [activeImage, setActiveImage] = useState(0);
-  const [shareMsg, setShareMsg] = useState('');
-  const [lightboxOpen, setLightboxOpen] = useState(false);
-
-  const touchStartX = useRef(0);
-  const touchEndX = useRef(0);
+  const [error, setError] = useState('');
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
 
   useEffect(() => {
-    let live = true;
-
-    if (rawId === undefined) {
-      setLoading(false);
-      return () => {
-        live = false;
-      };
-    }
-
-    (async () => {
+    async function loadData() {
       try {
         setLoading(true);
-        setErr('');
-        setShareMsg('');
-
-        if (!id) {
-          if (live) {
-            setItem(null);
-            setErr('رابط العرض غير صحيح.');
-          }
-          return;
-        }
-
         const data = await fetchListingById(id);
-
-        if (live) {
-          setItem(data || null);
-          setActiveImage(0);
+        if (!data) {
+          setError('هذا الإعلان غير موجود أو تم حذفه.');
+        } else {
+          setListing(data);
+          const images = await getListingMedia(id);
+          setMedia(images);
         }
-      } catch (e) {
-        const msg = String(e?.message || '');
-        if (live) {
-          setItem(null);
-          if (msg.includes('Missing or insufficient permissions') || e?.code === 'permission-denied') {
-            setErr('لا توجد صلاحية لعرض هذا العرض الآن.');
-          } else {
-            setErr(msg || 'تعذر تحميل العرض حالياً.');
-          }
-        }
+      } catch (err) {
+        console.error(err);
+        setError('حدث خطأ أثناء جلب تفاصيل الإعلان.');
       } finally {
-        if (live) setLoading(false);
+        setLoading(false);
       }
-    })();
-
-    return () => {
-      live = false;
-    };
-  }, [rawId, id]);
-
-  const images = useMemo(() => getSafeImages(item), [item]);
-  const selectedImage = images[activeImage] || images[0] || '';
-  const dealTypeLabel = useMemo(() => normalizeDealTypeLabel(item?.dealType), [item]);
-  const statusText = useMemo(() => normalizeStatusLabel(item), [item]);
-  const areaLabel = useMemo(() => formatArea(item?.area), [item]);
-  const mapHref = useMemo(() => getMapHref(item), [item]);
-  const locationText = useMemo(() => getLocationText(item), [item]);
-
-  const contactPhone = useMemo(() => {
-    const directPhone =
-      item?.phone ||
-      item?.contactPhone ||
-      item?.mobile ||
-      item?.whatsapp ||
-      '';
-    // استخدام رقم عقار أبحر كقيمة افتراضية
-    return normalizePhoneDigits(directPhone || process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || '966597520693');
-  }, [item]);
-
-  const whatsappHref = useMemo(() => {
-    const text = item
-      ? [
-          'السلام عليكم، أرغب في الاستفسار عن هذا العرض:',
-          item.title || 'عرض عقاري',
-          `السعر: ${formatPriceSAR(item.price)}`,
-          `الحي: ${item.neighborhood || '—'}`,
-          `المخطط: ${item.plan || '—'}`,
-          `الجزء: ${item.part || '—'}`,
-          `نوع الصفقة: ${dealTypeLabel || '—'}`,
-          `نوع العقار: ${item.propertyType || '—'}`,
-          item.licenseNumber ? `رقم الترخيص: ${item.licenseNumber}` : '',
-          item.direct ? 'مباشر' : '',
-          typeof window !== 'undefined' ? `الرابط: ${window.location.href}` : '',
-        ]
-          .filter(Boolean)
-          .join('\n')
-      : 'السلام عليكم، أرغب في الاستفسار عن أحد العروض العقارية.';
-
-    return buildWhatsAppLink({ phone: contactPhone, text });
-  }, [item, dealTypeLabel, contactPhone]);
-
-  function goPrevImage() {
-    if (!images.length) return;
-    setActiveImage((prev) => (prev - 1 + images.length) % images.length);
-  }
-
-  function goNextImage() {
-    if (!images.length) return;
-    setActiveImage((prev) => (prev + 1) % images.length);
-  }
-
-  function handleTouchStart(e) {
-    touchStartX.current = e.changedTouches[0]?.clientX || 0;
-  }
-
-  function handleTouchEnd(e) {
-    touchEndX.current = e.changedTouches[0]?.clientX || 0;
-    const diff = touchStartX.current - touchEndX.current;
-
-    if (Math.abs(diff) < 40) return;
-
-    if (diff > 0) {
-      goNextImage();
-    } else {
-      goPrevImage();
     }
-  }
+    if (id) loadData();
+  }, [id]);
 
-  async function handleShare() {
-    try {
-      setShareMsg('');
+  const imagesList = useMemo(() => {
+    const list = media.filter(m => m.url).map(m => m.url);
+    if (list.length === 0 && listing?.mainImage) list.push(listing.mainImage);
+    return list;
+  }, [media, listing]);
 
-      const shareUrl = typeof window !== 'undefined' ? window.location.href : '';
-      const shareTitle = item?.title || 'عرض عقاري';
-      const shareText = `${shareTitle} - ${formatPriceSAR(item?.price)}`;
+  if (loading) return (
+    <div className="loading-state container">
+      <div className="spinner"></div>
+      <p>جاري تحميل تفاصيل العقار...</p>
+    </div>
+  );
 
-      if (navigator.share) {
+  if (error || !listing) return (
+    <div className="error-state container">
+      <span className="material-icons-outlined error-icon">sentiment_dissatisfied</span>
+      <h2>عذراً!</h2>
+      <p>{error}</p>
+      <button onClick={() => router.back()} className="btn-back">العودة للسابق</button>
+    </div>
+  );
+
+  const isSale = listing.dealType === 'sale' || listing.dealType === 'للبيع';
+  const priceLabel = isSale ? 'سعر البيع' : 'الإيجار السنوي';
+  
+  const whatsappNumber = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || '966597520693';
+  const whatsappMsg = `السلام عليكم، بخصوص إعلان (${listing.title || 'العقار'}) المعروض في منصة عقار أبحر رقم الإعلان: ${id}، هل ما زال متاحاً؟`;
+  const contactLink = buildWhatsAppLink({ phone: whatsappNumber, text: whatsappMsg });
+
+  const handleShare = async () => {
+    if (navigator.share) {
+      try {
         await navigator.share({
-          title: shareTitle,
-          text: shareText,
-          url: shareUrl,
+          title: `عقار أبحر | ${listing.title}`,
+          text: `شاهد هذا العقار المميز في ${listing.neighborhood || 'أبحر'}`,
+          url: window.location.href,
         });
-        return;
-      }
-
-      if (navigator.clipboard && shareUrl) {
-        await navigator.clipboard.writeText(shareUrl);
-        setShareMsg('تم نسخ رابط الإعلان.');
-        setTimeout(() => setShareMsg(''), 2500);
-      }
-    } catch {
-      setShareMsg('');
+      } catch (err) { console.log('Share canceled', err); }
+    } else {
+      navigator.clipboard.writeText(window.location.href);
+      alert('تم نسخ رابط الإعلان!');
     }
-  }
+  };
 
   return (
-    <div className="container listingPageWrap">
-      {loading ? (
-        <div className="card stateCard">جاري تحميل الإعلان…</div>
-      ) : err ? (
-        <div className="card stateCard">{err}</div>
-      ) : !item ? (
-        <div className="card stateCard">العرض غير موجود.</div>
-      ) : (
-        <>
-          <div className="topNavRow">
-            <Link href="/listings" className="backLink">
-              العودة إلى العروض
-            </Link>
-
-            <button type="button" className="shareBtn" onClick={handleShare}>
-              مشاركة
-            </button>
+    <>
+      <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined" rel="stylesheet" />
+      
+      <div className="listing-page-wrapper">
+        <div className="container">
+          
+          {/* مسار التصفح (Breadcrumb) */}
+          <div className="breadcrumb">
+            <Link href="/">الرئيسية</Link>
+            <span className="separator">/</span>
+            <Link href="/listings">العقارات</Link>
+            <span className="separator">/</span>
+            <span className="current">{listing.dealType === 'sale' ? 'للبيع' : 'للإيجار'}</span>
           </div>
 
-          <section className="heroCard card">
-            <div className="heroMain">
-              <div className="heroText">
-                <div className="badgesRow">
-                  <div className="badgeWrap">
-                    {statusBadge(item.status)}
-                    <span className="pill">{statusText}</span>
-                  </div>
-
-                  {dealTypeLabel ? <span className="pill deal">{dealTypeLabel}</span> : null}
-                  {item.direct ? <span className="pill direct">مباشر</span> : null}
-                </div>
-
-                <h1 className="pageTitle">{item.title || 'عرض عقاري'}</h1>
-
-                <div className="locationLine">{locationText}</div>
-
-                <div className="priceBlock">
-                  {formatPriceSAR(item.price)}
-                  {String(item?.dealType || '').toLowerCase() === 'rent' ? (
-                    <span className="rentHint"> / سنوي</span>
-                  ) : null}
-                </div>
-
-                <div className="heroFacts">
-                  <InfoItem label="نوع العقار" value={item.propertyType} />
-                  <InfoItem label="المساحة" value={areaLabel} />
-                  <InfoItem label="الحي" value={item.neighborhood} />
-                  <InfoItem label="المخطط" value={item.plan} />
-                </div>
-              </div>
-
-              <div className="heroActions">
-                <a className="btn btnPrimary actionBtn" href={whatsappHref} target="_blank" rel="noreferrer">
-                  تواصل واتساب
-                </a>
-
-                {mapHref ? (
-                  <a className="btn actionBtn" href={mapHref} target="_blank" rel="noreferrer">
-                    فتح الموقع على الخريطة
-                  </a>
-                ) : null}
+          <div className="listing-header">
+            <div className="title-area">
+              <span className="badge-deal">{listing.dealType === 'sale' ? 'للبيع' : 'للإيجار'}</span>
+              <h1 className="title">{listing.title || `${listing.propertyType || 'عقار'} في ${listing.neighborhood || 'أبحر'}`}</h1>
+              <div className="location-info">
+                <span className="material-icons-outlined">location_on</span>
+                {listing.neighborhood || 'غير محدد الحي'} {listing.city ? `، ${listing.city}` : ''}
               </div>
             </div>
-          </section>
+            <div className="price-area-mobile">
+              <span className="price-label">{priceLabel}</span>
+              <span className="price-value">{formatPrice(listing.price)} <sub>ريال</sub></span>
+            </div>
+          </div>
 
-          <section className="contentGrid">
-            <div className="mainCol">
-              <div className="card galleryCard">
-                {selectedImage ? (
-                  <>
-                    <div
-                      className="mainImageWrap"
-                      onTouchStart={handleTouchStart}
-                      onTouchEnd={handleTouchEnd}
-                    >
-                      <button
-                        type="button"
-                        className="navBtn navPrev desktopOnly"
-                        onClick={goPrevImage}
-                        aria-label="الصورة السابقة"
-                      >
-                        ‹
-                      </button>
-
-                      <button
-                        type="button"
-                        className="imageButton"
-                        onClick={() => setLightboxOpen(true)}
-                        aria-label="فتح الصورة"
-                      >
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={selectedImage}
-                          alt={item.title || 'صورة العقار'}
-                          className="mainImage"
-                        />
-                      </button>
-
-                      <button
-                        type="button"
-                        className="navBtn navNext desktopOnly"
-                        onClick={goNextImage}
-                        aria-label="الصورة التالية"
-                      >
-                        ›
-                      </button>
-
-                      {images.length > 1 ? (
-                        <div className="mobileSwipeHint">اسحب يمين أو يسار للتنقل بين الصور</div>
-                      ) : null}
+          <div className="listing-content-grid">
+            
+            {/* القسم الأيمن (الصور والتفاصيل) */}
+            <div className="main-content">
+              
+              {/* معرض الصور */}
+              <div className="gallery-section">
+                <div className="main-image-container">
+                  {imagesList.length > 0 ? (
+                    <Image 
+                      src={imagesList[activeImageIndex]} 
+                      alt={listing.title || 'صورة العقار'} 
+                      fill 
+                      className="main-image"
+                      unoptimized
+                    />
+                  ) : (
+                    <FallbackImage />
+                  )}
+                  {imagesList.length > 1 && (
+                    <div className="image-counter">
+                      <span className="material-icons-outlined">photo_library</span>
+                      {activeImageIndex + 1} / {imagesList.length}
                     </div>
-
-                    {images.length > 1 ? (
-                      <div className="thumbsScroller">
-                        <div className="thumbsRow">
-                          {images.map((src, idx) => (
-                            <button
-                              type="button"
-                              key={`${src}-${idx}`}
-                              className={`thumbBtn ${idx === activeImage ? 'active' : ''}`}
-                              onClick={() => setActiveImage(idx)}
-                              aria-label={`عرض الصورة ${idx + 1}`}
-                            >
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img src={src} alt={`صورة ${idx + 1}`} className="thumbImage" />
-                            </button>
-                          ))}
-                        </div>
+                  )}
+                </div>
+                
+                {imagesList.length > 1 && (
+                  <div className="thumbnails-container">
+                    {imagesList.map((img, idx) => (
+                      <div 
+                        key={idx} 
+                        className={`thumbnail ${idx === activeImageIndex ? 'active' : ''}`}
+                        onClick={() => setActiveImageIndex(idx)}
+                      >
+                        <Image src={img} alt={`Thumbnail ${idx}`} fill unoptimized className="thumb-img" />
                       </div>
-                    ) : null}
-                  </>
-                ) : (
-                  <div className="emptyMedia">لا توجد صور لهذا الإعلان.</div>
+                    ))}
+                  </div>
                 )}
               </div>
 
-              <div className="card sectionCard">
-                <h2 className="sectionHeading">تفاصيل الإعلان</h2>
+              {/* أزرار الإجراءات السريعة (مشاركة، طباعة) */}
+              <div className="action-bar">
+                <button className="action-btn" onClick={handleShare}>
+                  <span className="material-icons-outlined">ios_share</span>
+                  مشاركة الإعلان
+                </button>
+                <button className="action-btn" onClick={() => window.print()}>
+                  <span className="material-icons-outlined">print</span>
+                  طباعة التفاصيل
+                </button>
+              </div>
 
-                <div className="detailsGrid">
-                  <InfoItem label="حالة العرض" value={statusText} />
-                  <InfoItem label="نوع الصفقة" value={dealTypeLabel} />
-                  <InfoItem label="نوع العقار" value={item.propertyType} />
-                  <InfoItem label="المساحة" value={areaLabel} />
-                  <InfoItem label="الحي" value={item.neighborhood} />
-                  <InfoItem label="المخطط" value={item.plan} />
-                  <InfoItem label="الجزء" value={item.part} />
-                  <InfoItem label="رقم العرض" value={item.id || id} />
-                  <InfoItem label="رقم الترخيص" value={item.licenseNumber || item.license || ''} />
-                  <InfoItem label="الجوال المباشر" value={item.phone || item.contactPhone || item.mobile || item.whatsapp || ''} />
-                  <InfoItem label="مباشر" value={item.direct ? 'نعم' : ''} />
-                  <InfoItem
-                    label="الإحداثيات"
-                    value={
-                      isFiniteCoord(item?.lat) && isFiniteCoord(item?.lng)
-                        ? `${Number(item.lat)}, ${Number(item.lng)}`
-                        : ''
-                    }
-                    full
-                  />
+              {/* التفاصيل الأساسية (مربعات) */}
+              <div className="details-card">
+                <h2>التفاصيل الأساسية</h2>
+                <div className="features-grid">
+                  {listing.area && (
+                    <div className="feature-item">
+                      <span className="material-icons-outlined">straighten</span>
+                      <div className="f-text">
+                        <span>المساحة</span>
+                        <strong>{listing.area} م²</strong>
+                      </div>
+                    </div>
+                  )}
+                  {listing.rooms && (
+                    <div className="feature-item">
+                      <span className="material-icons-outlined">bed</span>
+                      <div className="f-text">
+                        <span>الغرف</span>
+                        <strong>{listing.rooms}</strong>
+                      </div>
+                    </div>
+                  )}
+                  {listing.bathrooms && (
+                    <div className="feature-item">
+                      <span className="material-icons-outlined">bathtub</span>
+                      <div className="f-text">
+                        <span>دورات المياه</span>
+                        <strong>{listing.bathrooms}</strong>
+                      </div>
+                    </div>
+                  )}
+                  {listing.age && (
+                    <div className="feature-item">
+                      <span className="material-icons-outlined">event</span>
+                      <div className="f-text">
+                        <span>عمر العقار</span>
+                        <strong>{listing.age} سنة</strong>
+                      </div>
+                    </div>
+                  )}
+                  {listing.propertyType && (
+                    <div className="feature-item">
+                      <span className="material-icons-outlined">home_work</span>
+                      <div className="f-text">
+                        <span>النوع</span>
+                        <strong>{listing.propertyType}</strong>
+                      </div>
+                    </div>
+                  )}
+                  {listing.streetWidth && (
+                    <div className="feature-item">
+                      <span className="material-icons-outlined">add_road</span>
+                      <div className="f-text">
+                        <span>عرض الشارع</span>
+                        <strong>{listing.streetWidth} م</strong>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 
-              <div className="card sectionCard">
-                <h2 className="sectionHeading">وصف العقار</h2>
-                <div className="descriptionText">
-                  {item.description || 'لا يوجد وصف مضاف لهذا الإعلان.'}
+              {/* وصف العقار */}
+              {listing.description && (
+                <div className="details-card">
+                  <h2>وصف العقار</h2>
+                  <div className="description-text">
+                    {listing.description.split('\n').map((line, i) => (
+                      <p key={i}>{line}</p>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
+
             </div>
 
-            <aside className="sideCol">
-              <div className="card sideCard">
-                <h2 className="sideHeading">ملخص سريع</h2>
-
-                <div className="sideList">
-                  <div className="sideRow">
-                    <span>السعر</span>
-                    <strong>{formatPriceSAR(item.price)}</strong>
+            {/* القسم الأيسر (بطاقة السعر والتواصل الاستيكي) */}
+            <div className="sidebar">
+              <div className="sticky-card">
+                <div className="price-header">
+                  <span className="p-label">{priceLabel}</span>
+                  <div className="p-amount">
+                    {formatPrice(listing.price)} <span className="currency">ريال</span>
                   </div>
-
-                  <div className="sideRow">
-                    <span>الحالة</span>
-                    <strong>{statusText}</strong>
-                  </div>
-
-                  {dealTypeLabel ? (
-                    <div className="sideRow">
-                      <span>الصفقة</span>
-                      <strong>{dealTypeLabel}</strong>
-                    </div>
-                  ) : null}
-
-                  {item.propertyType ? (
-                    <div className="sideRow">
-                      <span>النوع</span>
-                      <strong>{item.propertyType}</strong>
-                    </div>
-                  ) : null}
-
-                  {areaLabel ? (
-                    <div className="sideRow">
-                      <span>المساحة</span>
-                      <strong>{areaLabel}</strong>
-                    </div>
-                  ) : null}
-
-                  {item.neighborhood ? (
-                    <div className="sideRow">
-                      <span>الحي</span>
-                      <strong>{item.neighborhood}</strong>
-                    </div>
-                  ) : null}
-
-                  {item.licenseNumber || item.license ? (
-                    <div className="sideRow">
-                      <span>الترخيص</span>
-                      <strong>{item.licenseNumber || item.license}</strong>
-                    </div>
-                  ) : null}
-
-                  {(item.phone || item.contactPhone || item.mobile || item.whatsapp) ? (
-                    <div className="sideRow">
-                      <span>جوال المعلن</span>
-                      <strong>{item.phone || item.contactPhone || item.mobile || item.whatsapp}</strong>
-                    </div>
-                  ) : null}
                 </div>
 
-                <div className="stickyActions">
-                  <a className="btn btnPrimary actionBtn" href={whatsappHref} target="_blank" rel="noreferrer">
-                    تواصل واتساب
+                <div className="advertiser-info">
+                  <div className="adv-avatar">
+                    <span className="material-icons-outlined">real_estate_agent</span>
+                  </div>
+                  <div className="adv-details">
+                    <span className="adv-title">المُعلن</span>
+                    <strong className="adv-name">مؤسسة عقار أبحر</strong>
+                    <span className="adv-license">رقم ترخيص فال: 1200000000</span>
+                  </div>
+                </div>
+
+                <div className="contact-actions">
+                  <a href={contactLink} target="_blank" rel="noopener noreferrer" className="btn-whatsapp">
+                    <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
+                      <path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.5 3.47 1.44 4.96L2 22l5.3-1.53c1.46.88 3.13 1.34 4.82 1.34 5.46 0 9.91-4.45 9.91-9.91 0-5.45-4.45-9.9-9.91-9.9zm0 18.18c-1.5 0-2.97-.44-4.22-1.27l-.3-.18-3.16.96.96-3.1-.2-.31a7.9 7.9 0 0 1-1.35-4.37c0-4.37 3.56-7.93 7.93-7.93 4.37 0 7.93 3.56 7.93 7.93 0 4.37-3.56 7.93-7.93 7.93zm4.09-5.86c-.22-.11-1.31-.65-1.51-.72-.2-.07-.35-.11-.5.11-.15.22-.58.72-.71.87-.13.15-.26.17-.48.06-.22-.11-.93-.34-1.77-1.09-.66-.59-1.1-1.32-1.23-1.54-.13-.22-.01-.34.1-.45.1-.1.22-.26.33-.39.11-.13.15-.22.22-.37.07-.15.04-.28-.02-.39-.06-.11-.5-1.21-.69-1.66-.18-.44-.36-.38-.5-.38h-.43c-.15 0-.39.06-.6.28-.22.22-.83.81-.83 1.98 0 1.17.85 2.3.97 2.46.12.16 1.67 2.55 4.04 3.58.57.24 1.01.38 1.36.49.57.18 1.09.15 1.5.09.46-.07 1.31-.54 1.49-1.06.18-.52.18-.97.13-1.06-.05-.09-.19-.15-.41-.26z"/>
+                    </svg>
+                    تواصل عبر واتساب
                   </a>
+                  <a href={`tel:${whatsappNumber}`} className="btn-call">
+                    <span className="material-icons-outlined">call</span>
+                    اتصال هاتفي
+                  </a>
+                </div>
 
-                  {mapHref ? (
-                    <a className="btn actionBtn" href={mapHref} target="_blank" rel="noreferrer">
-                      فتح الخريطة
-                    </a>
-                  ) : null}
-
-                  <button type="button" className="btn actionBtn" onClick={handleShare}>
-                    مشاركة الإعلان
-                  </button>
-
-                  {shareMsg ? <div className="shareMsg">{shareMsg}</div> : null}
+                <div className="meta-info">
+                  <span>رقم الإعلان: #{id.substring(0, 6)}</span>
+                  {listing.createdAt && (
+                    <span>تاريخ النشر: {new Date(listing.createdAt?.seconds * 1000 || Date.now()).toLocaleDateString('ar-SA')}</span>
+                  )}
                 </div>
               </div>
-            </aside>
-          </section>
-
-          {lightboxOpen && selectedImage ? (
-            <div className="lightbox" onClick={() => setLightboxOpen(false)}>
-              <button
-                type="button"
-                className="lightboxClose"
-                onClick={() => setLightboxOpen(false)}
-                aria-label="إغلاق"
-              >
-                ×
-              </button>
-
-              {images.length > 1 ? (
-                <button
-                  type="button"
-                  className="lightboxNav lightboxPrev"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    goPrevImage();
-                  }}
-                  aria-label="السابق"
-                >
-                  ‹
-                </button>
-              ) : null}
-
-              <div
-                className="lightboxImageWrap"
-                onClick={(e) => e.stopPropagation()}
-                onTouchStart={handleTouchStart}
-                onTouchEnd={handleTouchEnd}
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={selectedImage} alt={item.title || 'صورة العقار'} className="lightboxImage" />
-              </div>
-
-              {images.length > 1 ? (
-                <button
-                  type="button"
-                  className="lightboxNav lightboxNext"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    goNextImage();
-                  }}
-                  aria-label="التالي"
-                >
-                  ›
-                </button>
-              ) : null}
             </div>
-          ) : null}
-        </>
-      )}
+
+          </div>
+        </div>
+      </div>
 
       <style jsx>{`
-        .listingPageWrap {
-          padding-top: 14px;
-          padding-bottom: 14px;
+        .listing-page-wrapper { background: #f8fafc; min-height: 100vh; padding: 20px 0 60px; font-family: inherit; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 0 15px; }
+        
+        /* Breadcrumb */
+        .breadcrumb { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #64748b; margin-bottom: 20px; }
+        .breadcrumb a { color: var(--primary); text-decoration: none; font-weight: 600; }
+        .breadcrumb .separator { color: #cbd5e1; }
+        .breadcrumb .current { color: #94a3b8; }
+
+        /* Header */
+        .listing-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; background: white; padding: 20px; border-radius: 16px; box-shadow: 0 2px 10px rgba(0,0,0,0.02); }
+        .title-area { display: flex; flex-direction: column; gap: 8px; }
+        .badge-deal { align-self: flex-start; background: #e0f2fe; color: #0284c7; padding: 4px 12px; border-radius: 20px; font-size: 13px; font-weight: 700; }
+        .title { margin: 0; font-size: 26px; font-weight: 800; color: #0f172a; line-height: 1.3; }
+        .location-info { display: flex; align-items: center; gap: 6px; color: #64748b; font-size: 15px; font-weight: 500; }
+        .location-info .material-icons-outlined { font-size: 18px; color: var(--primary); }
+        
+        .price-area-mobile { display: none; } /* يظهر في الجوال فقط */
+
+        /* Grid Layout */
+        .listing-content-grid { display: grid; grid-template-columns: 1fr 380px; gap: 25px; align-items: start; }
+
+        /* Gallery */
+        .gallery-section { background: white; border-radius: 16px; overflow: hidden; margin-bottom: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.02); padding: 10px; }
+        .main-image-container { position: relative; width: 100%; height: 450px; border-radius: 12px; overflow: hidden; background: #f1f5f9; }
+        .main-image { object-fit: cover; transition: transform 0.3s ease; }
+        .fallback-image { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: #94a3b8; gap: 10px; }
+        .fallback-image .material-icons-outlined { font-size: 48px; opacity: 0.5; }
+        .image-counter { position: absolute; bottom: 15px; right: 15px; background: rgba(0,0,0,0.7); color: white; padding: 6px 12px; border-radius: 20px; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 6px; backdrop-filter: blur(4px); }
+        .image-counter .material-icons-outlined { font-size: 16px; }
+        
+        .thumbnails-container { display: flex; gap: 10px; margin-top: 10px; overflow-x: auto; padding-bottom: 5px; scrollbar-width: none; }
+        .thumbnails-container::-webkit-scrollbar { display: none; }
+        .thumbnail { position: relative; width: 100px; height: 75px; border-radius: 8px; overflow: hidden; cursor: pointer; opacity: 0.6; transition: all 0.2s; border: 2px solid transparent; flex-shrink: 0; }
+        .thumbnail.active { opacity: 1; border-color: var(--primary); box-shadow: 0 2px 8px rgba(15, 118, 110, 0.3); }
+        .thumb-img { object-fit: cover; }
+
+        /* Action Bar */
+        .action-bar { display: flex; gap: 15px; margin-bottom: 20px; }
+        .action-btn { flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px; background: white; border: 1px solid #e2e8f0; padding: 12px; border-radius: 12px; color: #475569; font-weight: 700; font-size: 14px; cursor: pointer; transition: all 0.2s; box-shadow: 0 2px 5px rgba(0,0,0,0.02); }
+        .action-btn:hover { background: #f8fafc; border-color: #cbd5e1; color: var(--primary); }
+        .action-btn .material-icons-outlined { font-size: 20px; }
+
+        /* Details Cards */
+        .details-card { background: white; border-radius: 16px; padding: 25px; margin-bottom: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.02); }
+        .details-card h2 { margin: 0 0 20px 0; font-size: 18px; font-weight: 800; color: #0f172a; display: flex; align-items: center; gap: 10px; }
+        .details-card h2::before { content: ''; display: block; width: 4px; height: 20px; background: var(--primary); border-radius: 4px; }
+        
+        .features-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 15px; }
+        .feature-item { display: flex; align-items: center; gap: 12px; background: #f8fafc; padding: 15px; border-radius: 12px; border: 1px solid #f1f5f9; }
+        .feature-item .material-icons-outlined { font-size: 24px; color: var(--primary); background: white; padding: 8px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.02); }
+        .f-text { display: flex; flex-direction: column; gap: 2px; }
+        .f-text span { font-size: 12px; color: #64748b; font-weight: 600; }
+        .f-text strong { font-size: 15px; color: #0f172a; font-weight: 800; }
+
+        .description-text { font-size: 15px; line-height: 1.8; color: #475569; font-weight: 500; }
+        .description-text p { margin-bottom: 10px; }
+
+        /* Sidebar (Sticky Card) */
+        .sidebar { position: relative; }
+        .sticky-card { position: sticky; top: 100px; background: white; border-radius: 16px; padding: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.05); border: 1px solid #f1f5f9; }
+        
+        .price-header { display: flex; flex-direction: column; gap: 5px; margin-bottom: 25px; padding-bottom: 20px; border-bottom: 1px solid #e2e8f0; }
+        .p-label { font-size: 14px; color: #64748b; font-weight: 700; }
+        .p-amount { font-size: 32px; font-weight: 900; color: var(--primary-dark); line-height: 1; }
+        .p-amount .currency { font-size: 18px; color: #64748b; font-weight: 700; margin-right: 5px; }
+
+        .advertiser-info { display: flex; align-items: center; gap: 15px; margin-bottom: 25px; }
+        .adv-avatar { width: 50px; height: 50px; background: #f1f5f9; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: var(--primary); }
+        .adv-avatar .material-icons-outlined { font-size: 26px; }
+        .adv-details { display: flex; flex-direction: column; }
+        .adv-title { font-size: 12px; color: #94a3b8; font-weight: 600; }
+        .adv-name { font-size: 16px; font-weight: 800; color: #0f172a; }
+        .adv-license { font-size: 12px; color: #64748b; margin-top: 2px; }
+
+        .contact-actions { display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; }
+        .btn-whatsapp { display: flex; align-items: center; justify-content: center; gap: 10px; background: #25d366; color: white; padding: 14px; border-radius: 12px; font-size: 16px; font-weight: 800; text-decoration: none; transition: background 0.2s; box-shadow: 0 4px 15px rgba(37,211,102,0.2); }
+        .btn-whatsapp:hover { background: #1ebc59; transform: translateY(-2px); }
+        .btn-call { display: flex; align-items: center; justify-content: center; gap: 10px; background: white; color: var(--primary); border: 2px solid var(--primary); padding: 12px; border-radius: 12px; font-size: 16px; font-weight: 800; text-decoration: none; transition: all 0.2s; }
+        .btn-call:hover { background: var(--bg-soft); }
+
+        .meta-info { display: flex; flex-direction: column; gap: 8px; font-size: 12px; color: #94a3b8; font-weight: 600; text-align: center; background: #f8fafc; padding: 15px; border-radius: 10px; }
+
+        /* Loading & Error States */
+        .loading-state, .error-state { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 60vh; text-align: center; color: #64748b; }
+        .spinner { width: 50px; height: 50px; border: 4px solid #e2e8f0; border-top-color: var(--primary); border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 20px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .error-icon { font-size: 64px; color: #cbd5e1; margin-bottom: 15px; }
+        .btn-back { background: var(--primary); color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 700; margin-top: 15px; cursor: pointer; }
+
+        /* Responsive Design */
+        @media (max-width: 992px) {
+          .listing-content-grid { grid-template-columns: 1fr; }
+          .sidebar { order: -1; } /* وضع بطاقة السعر في الأعلى في الجوال */
+          .sticky-card { position: relative; top: 0; margin-bottom: 20px; border-radius: 16px; }
+          
+          /* إخفاء السعر من الهيدر إذا كان معروضاً في البطاقة العلوية */
+          .listing-header { flex-direction: column; gap: 15px; }
         }
-
-        .stateCard {
-          padding: 18px;
-        }
-
-        .topNavRow {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 10px;
-          margin-bottom: 12px;
-        }
-
-        .backLink,
-        .shareBtn {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          min-height: 42px;
-          padding: 0 14px;
-          border-radius: 12px;
-          border: 1px solid var(--border);
-          background: #fff;
-          color: var(--text);
-          text-decoration: none;
-          font-weight: 800;
-          cursor: pointer;
-        }
-
-        .heroCard {
-          padding: 18px;
-          margin-bottom: 14px;
-        }
-
-        .heroMain {
-          display: flex;
-          align-items: flex-start;
-          justify-content: space-between;
-          gap: 18px;
-        }
-
-        .heroText {
-          flex: 1;
-          min-width: 0;
-        }
-
-        .badgesRow {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          flex-wrap: wrap;
-          margin-bottom: 10px;
-        }
-
-        .badgeWrap {
-          display: inline-flex;
-          align-items: center;
-          gap: 8px;
-          flex-wrap: wrap;
-        }
-
-        .pill {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          min-height: 32px;
-          padding: 0 12px;
-          border-radius: 999px;
-          border: 1px solid var(--border);
-          background: #fff;
-          color: var(--text);
-          font-size: 13px;
-          font-weight: 800;
-        }
-
-        .pill.deal {
-          background: var(--primary-light);
-          border-color: rgba(15, 118, 110, 0.25);
-        }
-
-        .pill.direct {
-          background: rgba(15, 118, 110, 0.12);
-          border-color: rgba(15, 118, 110, 0.28);
-        }
-
-        .pageTitle {
-          margin: 0;
-          font-size: clamp(22px, 3vw, 32px);
-          line-height: 1.35;
-          font-weight: 950;
-          color: var(--text);
-        }
-
-        .locationLine {
-          margin-top: 8px;
-          color: var(--muted);
-          line-height: 1.8;
-        }
-
-        .priceBlock {
-          margin-top: 14px;
-          font-size: clamp(24px, 3.1vw, 34px);
-          font-weight: 950;
-          color: #0f172a;
-        }
-
-        .rentHint {
-          font-size: 16px;
-          font-weight: 800;
-          color: var(--muted);
-        }
-
-        .heroFacts {
-          display: grid;
-          grid-template-columns: repeat(4, minmax(0, 1fr));
-          gap: 10px;
-          margin-top: 16px;
-        }
-
-        .heroActions {
-          display: flex;
-          flex-direction: column;
-          gap: 10px;
-          width: 240px;
-          flex-shrink: 0;
-        }
-
-        .actionBtn {
-          width: 100%;
-          text-align: center;
-          text-decoration: none;
-        }
-
-        .contentGrid {
-          display: grid;
-          grid-template-columns: minmax(0, 1.55fr) minmax(290px, 0.9fr);
-          gap: 14px;
-          align-items: start;
-        }
-
-        .mainCol,
-        .sideCol {
-          min-width: 0;
-        }
-
-        .galleryCard,
-        .sectionCard,
-        .sideCard {
-          padding: 14px;
-          margin-bottom: 14px;
-        }
-
-        .mainImageWrap {
-          position: relative;
-          width: 100%;
-          min-height: 340px;
-          height: clamp(340px, 55vw, 620px);
-          overflow: hidden;
-          border-radius: 18px;
-          border: 1px solid var(--border);
-          background: #fff;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          touch-action: pan-y;
-        }
-
-        .imageButton {
-          width: 100%;
-          height: 100%;
-          display: block;
-          border: 0;
-          background: transparent;
-          padding: 0;
-          cursor: zoom-in;
-        }
-
-        .mainImage {
-          width: 100%;
-          height: 100%;
-          display: block;
-          object-fit: contain;
-          background: #fff;
-        }
-
-        .mobileSwipeHint {
-          position: absolute;
-          bottom: 12px;
-          right: 12px;
-          left: 12px;
-          padding: 8px 10px;
-          border-radius: 10px;
-          background: rgba(15, 23, 42, 0.55);
-          color: #fff;
-          font-size: 12px;
-          text-align: center;
-          pointer-events: none;
-          display: none;
-        }
-
-        .navBtn {
-          position: absolute;
-          top: 50%;
-          transform: translateY(-50%);
-          z-index: 3;
-          width: 46px;
-          height: 46px;
-          border-radius: 999px;
-          border: 1px solid rgba(255, 255, 255, 0.65);
-          background: rgba(15, 23, 42, 0.45);
-          color: #fff;
-          font-size: 30px;
-          line-height: 1;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          cursor: pointer;
-          backdrop-filter: blur(6px);
-        }
-
-        .navPrev {
-          right: 14px;
-        }
-
-        .navNext {
-          left: 14px;
-        }
-
-        .desktopOnly {
-          display: inline-flex;
-        }
-
-        .emptyMedia {
-          min-height: 240px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          padding: 18px;
-          text-align: center;
-          color: var(--muted);
-          border: 1px dashed var(--border2, var(--border));
-          border-radius: 18px;
-          background: #f8fafc;
-        }
-
-        .thumbsScroller {
-          margin-top: 12px;
-          overflow-x: auto;
-          overflow-y: hidden;
-          padding-bottom: 4px;
-          -webkit-overflow-scrolling: touch;
-        }
-
-        .thumbsRow {
-          display: flex;
-          gap: 10px;
-          min-width: max-content;
-        }
-
-        .thumbBtn {
-          width: 92px;
-          height: 72px;
-          flex: 0 0 auto;
-          border: 1px solid var(--border);
-          border-radius: 14px;
-          background: #fff;
-          padding: 0;
-          overflow: hidden;
-          cursor: pointer;
-        }
-
-        .thumbBtn.active {
-          border-color: rgba(15, 118, 110, 0.85);
-          box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.18);
-        }
-
-        .thumbImage {
-          width: 100%;
-          height: 100%;
-          object-fit: cover;
-          display: block;
-        }
-
-        .sectionHeading,
-        .sideHeading {
-          margin: 0 0 12px;
-          font-size: 18px;
-          font-weight: 900;
-          color: var(--text);
-        }
-
-        .detailsGrid {
-          display: grid;
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-          gap: 10px;
-        }
-
-        .infoItem {
-          border: 1px solid var(--border);
-          border-radius: 16px;
-          padding: 12px;
-          background: #fff;
-          min-width: 0;
-        }
-
-        .infoItem.full {
-          grid-column: 1 / -1;
-        }
-
-        .infoLabel {
-          color: var(--muted);
-          font-size: 13px;
-          margin-bottom: 6px;
-        }
-
-        .infoValue {
-          font-weight: 850;
-          line-height: 1.7;
-          word-break: break-word;
-          color: var(--text);
-        }
-
-        .descriptionText {
-          white-space: pre-wrap;
-          line-height: 1.95;
-          color: var(--text);
-        }
-
-        .sideCard {
-          position: sticky;
-          top: 90px;
-        }
-
-        .sideList {
-          display: grid;
-          gap: 2px;
-        }
-
-        .sideRow {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 14px;
-          padding: 11px 0;
-          border-bottom: 1px solid var(--border);
-        }
-
-        .sideRow:last-child {
-          border-bottom: 0;
-        }
-
-        .stickyActions {
-          display: grid;
-          gap: 10px;
-          margin-top: 14px;
-        }
-
-        .shareMsg {
-          font-size: 13px;
-          color: var(--muted);
-          text-align: center;
-        }
-
-        .lightbox {
-          position: fixed;
-          inset: 0;
-          z-index: 1000;
-          background: rgba(0, 0, 0, 0.88);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          padding: 24px;
-        }
-
-        .lightboxImageWrap {
-          width: min(96vw, 1200px);
-          height: min(88vh, 900px);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-        }
-
-        .lightboxImage {
-          max-width: 100%;
-          max-height: 100%;
-          object-fit: contain;
-          display: block;
-        }
-
-        .lightboxClose {
-          position: absolute;
-          top: 18px;
-          left: 18px;
-          width: 46px;
-          height: 46px;
-          border: 0;
-          border-radius: 999px;
-          background: rgba(255, 255, 255, 0.16);
-          color: #fff;
-          font-size: 30px;
-          cursor: pointer;
-        }
-
-        .lightboxNav {
-          position: absolute;
-          top: 50%;
-          transform: translateY(-50%);
-          width: 52px;
-          height: 52px;
-          border: 0;
-          border-radius: 999px;
-          background: rgba(255, 255, 255, 0.16);
-          color: #fff;
-          font-size: 34px;
-          cursor: pointer;
-        }
-
-        .lightboxPrev {
-          right: 20px;
-        }
-
-        .lightboxNext {
-          left: 20px;
-        }
-
-        @media (max-width: 900px) {
-          .listingPageWrap {
-            padding-top: 10px;
-          }
-
-          .heroCard {
-            padding: 14px;
-          }
-
-          .heroMain {
-            flex-direction: column;
-          }
-
-          .heroActions {
-            width: 100%;
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-          }
-
-          .heroFacts {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-          }
-
-          .contentGrid {
-            grid-template-columns: 1fr;
-          }
-
-          .sideCard {
-            position: static;
-          }
-        }
-
-        @media (max-width: 640px) {
-          .listingPageWrap {
-            width: min(100%, calc(100% - 18px));
-          }
-
-          .topNavRow {
-            flex-wrap: wrap;
-          }
-
-          .heroCard,
-          .galleryCard,
-          .sectionCard,
-          .sideCard {
-            padding: 12px;
-            border-radius: 16px;
-          }
-
-          .pageTitle {
-            font-size: 21px;
-          }
-
-          .priceBlock {
-            font-size: 26px;
-            margin-top: 10px;
-          }
-
-          .heroFacts,
-          .detailsGrid {
-            grid-template-columns: 1fr;
-          }
-
-          .heroActions {
-            grid-template-columns: 1fr;
-          }
-
-          .mainImageWrap {
-            min-height: 260px;
-            height: 56vw;
-            max-height: 420px;
-            border-radius: 14px;
-          }
-
-          .desktopOnly {
-            display: none;
-          }
-
-          .mobileSwipeHint {
-            display: block;
-          }
-
-          .thumbBtn {
-            width: 78px;
-            height: 62px;
-          }
-
-          .emptyMedia {
-            min-height: 180px;
-          }
-
-          .sideRow {
-            align-items: flex-start;
-            flex-direction: column;
-            gap: 6px;
-          }
-
-          .lightbox {
-            padding: 10px;
-          }
-
-          .lightboxImageWrap {
-            width: 100%;
-            height: 78vh;
-          }
-
-          .lightboxNav {
-            width: 44px;
-            height: 44px;
-            font-size: 30px;
-          }
-
-          .lightboxPrev {
-            right: 10px;
-          }
-
-          .lightboxNext {
-            left: 10px;
-          }
-
-          .lightboxClose {
-            top: 10px;
-            left: 10px;
-          }
+        
+        @media (max-width: 600px) {
+          .main-image-container { height: 300px; }
+          .title { font-size: 20px; }
+          .features-grid { grid-template-columns: 1fr 1fr; }
+          .action-bar { flex-direction: column; }
         }
       `}</style>
-    </div>
+    </>
   );
 }
