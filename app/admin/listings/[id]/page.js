@@ -4,36 +4,23 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { deleteObject, getDownloadURL, ref as storageRef, uploadBytesResumable } from 'firebase/storage';
-import { deleteDoc, doc, updateDoc } from 'firebase/firestore'; 
 
 import AdminGuard from '@/components/admin/AdminGuard';
 import AdminShell from '@/components/admin/AdminShell';
 import { formatPriceSAR, statusBadge } from '@/lib/format';
 import { getFirebase } from '@/lib/firebaseClient';
-import { fetchListingById } from '@/lib/listings';
+import { fetchListingById, adminUpdateListing, adminDeleteListing } from '@/lib/listings';
 import { DEAL_TYPES, NEIGHBORHOODS, PROPERTY_CLASSES, PROPERTY_TYPES, STATUS_OPTIONS } from '@/lib/taxonomy';
 
 const MAX_FILES = 30;
 
-// === تعريف الدوال المفقودة هنا مباشرة لتجنب أخطاء البناء ===
+// === دوال مساعدة ===
 
 function getListingMedia(item) {
   if (Array.isArray(item?.imagesMeta) && item.imagesMeta.length > 0) return item.imagesMeta;
   if (Array.isArray(item?.images) && item.images.length > 0) return item.images.map(url => ({ url, kind: 'image' }));
   return [];
 }
-
-async function adminUpdateListing(id, patch) {
-  const { db } = getFirebase();
-  await updateDoc(doc(db, 'fanar_listings', id), { ...patch, updatedAt: new Date() });
-}
-
-async function adminDeleteListing(id) {
-  const { db } = getFirebase();
-  await deleteDoc(doc(db, 'fanar_listings', id));
-}
-
-// ========================================================
 
 function cleanString(value) { return String(value || '').trim(); }
 
@@ -180,6 +167,7 @@ export default function AdminListingEditPage() {
   }, [success, error]);
 
   const syncMediaToDoc = useCallback(async (nextMedia, { message = '' } = {}) => {
+    // استخدم الدالة المستوردة من @/lib/listings
     await adminUpdateListing(listingId, {
       imagesMeta: nextMedia,
       images: nextMedia.map((item) => item.url),
@@ -220,6 +208,7 @@ export default function AdminListingEditPage() {
         lng: toNum(form.lng),
       };
 
+      // استخدم الدالة المستوردة من @/lib/listings
       await adminUpdateListing(listingId, patch);
       setListing((prev) => (prev ? { ...prev, ...patch } : prev));
       setSuccess('تم تحديث بيانات الإعلان بنجاح.');
@@ -338,6 +327,7 @@ export default function AdminListingEditPage() {
           try { await deleteObject(storageRef(storage, entry.refPath)); } catch (_) {}
         }
       }
+      // استخدم الدالة المستوردة من @/lib/listings
       await adminDeleteListing(listingId);
       router.push('/admin/listings');
     } catch (e) {
