@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 
 const MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
-const DEFAULT_RETENTION_DAYS = 8;
+const DEFAULT_RETENTION_DAYS = 15;
 
 const KNOWN_NEIGHBORHOODS = [
   'الياقوت', 'الشراع', 'الصواري', 'اللؤلؤ', 'اللؤلؤة', 'الزمرد', 'الفنار', 'الشويصي',
@@ -9,23 +9,52 @@ const KNOWN_NEIGHBORHOODS = [
   'الشاطئ الذهبي', 'البندر', 'المروج', 'الموسى', 'العبير', 'الفرقان', 'الجزيرة',
 ];
 
-const FOLLOWUP_ONLY = ['مباشر', 'أكد', 'اكّد', 'هذا نفسه', 'موجود', 'أرسل', 'تم', 'تمت', 'عندك شي', 'فيه', 'اوك', 'تمام'];
-const IGNORE_PATTERNS = [/انضم/, /غادر/, /تم إنشاء/, /‎<Media omitted>/i, /السلام عليكم$/, /^هلا$/, /^مرحبا$/, /^صباح الخير$/];
+const FOLLOWUP_ONLY = [
+  'مباشر', 'أكد', 'اكّد', 'هذا نفسه', 'موجود', 'أرسل', 'تم', 'تمت', 'عندك شي', 'فيه', 'اوك', 'تمام',
+];
+
+const IGNORE_PATTERNS = [
+  /انضم/,
+  /غادر/,
+  /تم إنشاء/,
+  /غيّر موضوع المجموعة/,
+  /غيّر اسم المجموعة/,
+  /‎<Media omitted>/i,
+  /تم حذف هذه الرسالة/,
+  /السلام عليكم$/,
+  /^هلا$/,
+  /^مرحبا$/,
+  /^صباح الخير$/,
+];
+
+const SOLD_PATTERNS = [
+  /تم البيع/,
+  /انباع/,
+  /انباع/,
+  /مباع/,
+  /مبيوع/,
+  /محجوز/,
+  /تم التأجير/,
+  /اتأجر/,
+  /تأجر/,
+];
 
 export async function POST(request) {
   try {
     const payload = await request.json();
     const rawText = String(payload?.rawText || '').trim();
+
     if (!rawText) {
       return NextResponse.json({ error: 'النص الخام مطلوب للتحليل.' }, { status: 400 });
     }
 
     const retentionDays = resolveRetentionDays(payload);
     const now = new Date();
-
     const conversationTitle = deriveConversationTitle(payload.fileName || payload.source?.contactName || '');
+
     const messages = parseWhatsAppMessages(rawText);
     const grouped = groupMessages(messages, conversationTitle);
+
     const heuristicItems = grouped.map((group) =>
       classifyGroupHeuristic(group, payload, conversationTitle, { retentionDays, now })
     );
@@ -35,7 +64,13 @@ export async function POST(request) {
 
     if (process.env.OPENAI_API_KEY) {
       try {
-        const aiResult = await analyzeWithOpenAI({ grouped, payload, conversationTitle, retentionDays });
+        const aiResult = await analyzeWithOpenAI({
+          grouped,
+          payload,
+          conversationTitle,
+          retentionDays,
+        });
+
         if (Array.isArray(aiResult?.items) && aiResult.items.length) {
           finalItems = mergeAiWithHeuristic(
             aiResult.items,
@@ -45,6 +80,7 @@ export async function POST(request) {
             { retentionDays, now }
           );
         }
+
         aiSummary = String(aiResult?.summary || '').trim();
       } catch (err) {
         console.error('AI Analysis failed, falling back to heuristics:', err);
@@ -62,7 +98,10 @@ export async function POST(request) {
       items: finalItems,
     });
   } catch (error) {
-    return NextResponse.json({ error: error?.message || 'تعذر تحليل المحتوى.' }, { status: 500 });
+    return NextResponse.json(
+      { error: error?.message || 'تعذر تحليل المحتوى.' },
+      { status: 500 }
+    );
   }
 }
 
@@ -83,7 +122,10 @@ function deriveConversationTitle(fileName) {
 function parseWhatsAppMessages(rawText) {
   const lines = String(rawText || '').split(/\r?\n/);
   const messages = [];
-  const headerRegex = /^\s*(?:\[)?[‎‏‪-‮﻿\s]*?(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})\s*[،,]?\s*(\d{1,2}:\d{2}(?::\d{2})?\s*(?:AM|PM|am|pm|ص|م|صباحًا|مساءً)?)\s*(?:\])?\s*(?:-|–|—)?\s*([^:]+):\s?(.*)$/u;
+
+  const headerRegex =
+    /^\s*(?:\[)?[‎‏‪-‮﻿\s]*?(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})\s*[،,]?\s*(\d{1,2}:\d{2}(?::\d{2})?\s*(?:AM|PM|am|pm|ص|م|صباحًا|مساءً)?)\s*(?:\])?\s*(?:-|–|—)?\s*([^:]+):\s?(.*)$/u;
+
   let current = null;
 
   for (const rawLine of lines) {
@@ -139,14 +181,21 @@ function groupMessages(messages, conversationTitle) {
     titleTokens.some((token) => tokenize(sender).includes(token))
   );
 
-  const oneToOneChat = uniqueSenders.length > 0 && uniqueSenders.length <= 2 && !!likelyExternalSender;
+  const oneToOneChat =
+    uniqueSenders.length > 0 && uniqueSenders.length <= 2 && !!likelyExternalSender;
+
   const groups = [];
   let current = null;
 
   for (const msg of messages) {
     const isFromMe = oneToOneChat ? msg.sender !== likelyExternalSender : false;
 
-    if (!current || current.sender !== msg.sender || current.isFromMe !== isFromMe || current.messages.length >= 6) {
+    if (
+      !current ||
+      current.sender !== msg.sender ||
+      current.isFromMe !== isFromMe ||
+      current.messages.length >= 6
+    ) {
       if (current) groups.push(finalizeGroup(current));
       current = {
         sender: msg.sender || 'مسوق',
@@ -197,13 +246,20 @@ function classifyGroupHeuristic(group, payload, conversationTitle, options) {
   const area = extractArea(text);
   const price = extractPrice(text);
   const phone = extractPhone(text) || source.contactPhone;
-  const direct = /مباشر|مباشرة|مباشر من المالك|زبون مباشر|المالك/.test(text);
+  const direct = isDirectOffer(text);
+  const soldLike = SOLD_PATTERNS.some((pattern) => pattern.test(text));
 
-  const hasStrongListingWords = /للبيع|للايجار|للإيجار|أرض للبيع|فيلا للبيع|عمارة للبيع|شقة للبيع|شقة للإيجار|للبيع في|مباشر من المالك|مباشرة من المالك|وكيل إفراغ|صك|شارع\s*\d+|رقم\s*\d+/i.test(text);
-  const hasRequestWords = /(?:^|\s)(?:مطلوب|ابحث|أبحث|ابغى|أبغى|احتاج|أحتاج)(?:\s|$)|زبون|عميل/i.test(text);
+  const hasStrongListingWords =
+    /للبيع|للايجار|للإيجار|أرض للبيع|فيلا للبيع|عمارة للبيع|شقة للبيع|شقة للإيجار|للبيع في|مباشر من المالك|مباشرة من المالك|وكيل إفراغ|صك|شارع\s*\d+|رقم\s*\d+/i.test(text);
+
+  const hasRequestWords =
+    /(?:^|\s)(?:مطلوب|ابحث|أبحث|ابغى|أبغى|احتاج|أحتاج)(?:\s|$)|زبون|عميل/i.test(text);
+
   const requestLike = hasRequestWords && !hasStrongListingWords;
+  const listingLike =
+    hasStrongListingWords ||
+    (/بيع|إيجار|ايجار/.test(text) && !!(propertyType || neighborhood || part || plan || price || area));
 
-  const listingLike = hasStrongListingWords || (/بيع|إيجار|ايجار/.test(text) && !!(propertyType || neighborhood || part || plan || price || area));
   const hasLocation = !!(neighborhood || part || plan);
   const hasCore = !!(price || area || propertyType);
 
@@ -212,16 +268,20 @@ function classifyGroupHeuristic(group, payload, conversationTitle, options) {
       recordType: 'ignored',
       extractionStatus: 'ignored',
       confidence: 0.9,
+      priorityScore: 0,
       summary: `رسالة صادرة منك إلى ${source.contactName || group.sender || 'الطرف الآخر'}`,
       rawText: group.text,
-      reason: 'الرسائل الصادرة منك لا تُحفظ تلقائيًا كعروض واردة.',
+      reason: 'الرسائل الصادرة منك لا تُحفظ كعروض أو طلبات واردة.',
       source,
       groupMeta: { sender: group.sender, isFromMe: true, messagesCount: group.messages.length },
     }, timeMeta);
   }
 
   if (requestLike && (hasLocation || propertyType || price || area)) {
-    const confidence = scoreConfidence({ propertyType, hasLocation, price, area, phone, direct, text, kind: 'request' });
+    const confidence = scoreConfidence({
+      propertyType, hasLocation, price, area, phone, direct, text, kind: 'request'
+    });
+
     const request = {
       dealType: dealType || 'sale',
       propertyType: propertyType || '',
@@ -240,12 +300,16 @@ function classifyGroupHeuristic(group, payload, conversationTitle, options) {
 
     return withMeta({
       recordType: 'request',
-      extractionStatus: confidence >= 0.74 ? 'auto_saved' : 'needs_review',
+      extractionStatus: confidence >= 0.74 ? 'internal_ready' : 'needs_review',
       confidence,
+      priorityScore: buildPriorityScore({ direct: false, confidence, soldLike: false }),
       summary: buildRequestSummary(request),
       request,
       rawText: group.text,
-      reason: confidence >= 0.83 ? 'طلب واضح بموقع أو نوع عقار مع ميزانية/وصف كافٍ.' : 'يبدو طلبًا لكنه يحتاج مراجعة قبل الحفظ النهائي.',
+      reason:
+        confidence >= 0.83
+          ? 'طلب واضح بموقع أو نوع عقار مع ميزانية أو وصف كافٍ.'
+          : 'يبدو طلبًا لكنه يحتاج مراجعة قبل الاعتماد الداخلي.',
       source,
       groupMeta: { sender: group.sender, isFromMe: false, messagesCount: group.messages.length },
     }, {
@@ -255,7 +319,12 @@ function classifyGroupHeuristic(group, payload, conversationTitle, options) {
   }
 
   if (listingLike && hasCore && (hasLocation || propertyType)) {
-    const confidence = scoreConfidence({ propertyType, hasLocation, price, area, phone, direct, text, kind: 'listing' });
+    let confidence = scoreConfidence({
+      propertyType, hasLocation, price, area, phone, direct, text, kind: 'listing'
+    });
+
+    if (direct) confidence = clamp(confidence + 0.08, 0, 0.99);
+
     const listing = {
       title: buildListingTitle(propertyType, neighborhood, part),
       dealType: dealType || 'sale',
@@ -270,25 +339,40 @@ function classifyGroupHeuristic(group, payload, conversationTitle, options) {
       rawText: group.text,
     };
 
-    const expiredStatus = timeMeta.isFresh ? null : 'expired';
+    let extractionStatus = confidence >= 0.74 ? 'internal_ready' : 'needs_review';
+    let reason =
+      confidence >= 0.83
+        ? 'عرض واضح داخليًا فيه نوع عقار وموقع ومواصفات كافية.'
+        : 'عرض محتمل لكنه يحتاج مراجعة داخلية قبل الاعتماد.';
+
+    if (!timeMeta.isFresh) {
+      extractionStatus = 'expired';
+      reason = `العرض أقدم من ${timeMeta.retentionDays} يومًا، وسيبقى داخليًا فقط دون استخدام نشط.`;
+    }
+
+    if (soldLike) {
+      extractionStatus = 'sold';
+      reason = 'يبدو من الرسالة أن العرض مباع أو محجوز أو لم يعد متاحًا.';
+    }
 
     return withMeta({
       recordType: 'listing',
-      extractionStatus: expiredStatus || (confidence >= 0.74 ? 'auto_saved' : 'needs_review'),
+      extractionStatus,
       confidence,
+      priorityScore: buildPriorityScore({ direct, confidence, soldLike }),
       summary: buildListingSummary(listing),
       listing,
       rawText: group.text,
-      reason: !timeMeta.isFresh
-        ? `العرض أقدم من ${timeMeta.retentionDays} أيام، لذلك لن يُرفع تلقائيًا للمنصة.`
-        : confidence >= 0.83
-          ? 'عرض واضح فيه نوع عقار وموقع مع مواصفات كافية.'
-          : 'عرض محتمل لكنه غير مكتمل أو يحتاج مراجعة.',
+      reason,
       source: { ...source, contactPhone: phone || source.contactPhone },
       groupMeta: { sender: group.sender, isFromMe: false, messagesCount: group.messages.length },
     }, {
       ...timeMeta,
-      duplicateKey: buildDuplicateKey({ recordType: 'listing', listing, source: { ...source, contactPhone: phone || source.contactPhone } }),
+      duplicateKey: buildDuplicateKey({
+        recordType: 'listing',
+        listing,
+        source: { ...source, contactPhone: phone || source.contactPhone },
+      }),
     });
   }
 
@@ -297,7 +381,8 @@ function classifyGroupHeuristic(group, payload, conversationTitle, options) {
       recordType: requestLike ? 'request' : 'listing',
       extractionStatus: 'needs_review',
       confidence: 0.56,
-      summary: `سجل محتمل من ${source.contactName} يحتاج تأكيدًا قبل الحفظ النهائي.`,
+      priorityScore: buildPriorityScore({ direct, confidence: 0.56, soldLike }),
+      summary: `سجل محتمل من ${source.contactName} يحتاج تأكيدًا قبل الحفظ الداخلي.`,
       listing: requestLike ? null : {
         title: buildListingTitle(propertyType, neighborhood, part),
         dealType: dealType || 'sale',
@@ -324,7 +409,9 @@ function classifyGroupHeuristic(group, payload, conversationTitle, options) {
         note: text.slice(0, 1200),
       } : null,
       rawText: group.text,
-      reason: 'المحتوى له صلة عقارية لكنه غير واضح بما يكفي للحفظ التلقائي.',
+      reason: soldLike
+        ? 'هذه الرسالة مرتبطة بعرض غير نشط أو مباع وتحتاج مراجعة.'
+        : 'المحتوى له صلة عقارية لكنه غير واضح بما يكفي للاعتماد الداخلي.',
       source: { ...source, contactPhone: phone || source.contactPhone },
       groupMeta: { sender: group.sender, isFromMe: false, messagesCount: group.messages.length },
     }, {
@@ -338,6 +425,7 @@ function classifyGroupHeuristic(group, payload, conversationTitle, options) {
           part: part || '',
           area: area || null,
           price: price || null,
+          direct,
         },
         request: requestLike ? {
           propertyType: propertyType || '',
@@ -359,11 +447,12 @@ function classifyGroupHeuristic(group, payload, conversationTitle, options) {
 
 function buildSourceFromGroup(group, payload, conversationTitle) {
   const fallbackName = group.sender || payload?.source?.contactName || conversationTitle || 'مسوق';
+
   return {
     sourceType: String(payload?.sourceType || payload?.source?.sourceType || 'الوارد الذكي').trim(),
     contactName: fallbackName.trim() || 'مسوق',
     contactPhone: extractPhone(group.text) || String(payload?.source?.contactPhone || '').trim(),
-    contactRole: String(payload?.source?.contactRole || '').trim() || 'مسوق',
+    contactRole: String(payload?.source?.contactRole || '').trim() || 'وسيط',
   };
 }
 
@@ -371,9 +460,10 @@ function buildTimeMeta(group, options = {}) {
   const retentionDays = resolveRetentionDays({ retentionDays: options?.retentionDays });
   const now = options?.now instanceof Date ? options.now : new Date();
 
-  const messageDate = group?.messageDate instanceof Date && !Number.isNaN(group.messageDate.getTime())
-    ? group.messageDate
-    : null;
+  const messageDate =
+    group?.messageDate instanceof Date && !Number.isNaN(group.messageDate.getTime())
+      ? group.messageDate
+      : null;
 
   const expiresAt = messageDate ? addDays(messageDate, retentionDays) : null;
   const isFresh = expiresAt ? expiresAt.getTime() >= now.getTime() : true;
@@ -406,7 +496,11 @@ function withMeta(item, meta = {}) {
 
 function mergeAiWithHeuristic(aiItems, heuristicItems, payload, conversationTitle, options = {}) {
   return aiItems.map((item, index) => {
-    const base = heuristicItems[index] || heuristicItems.find((candidate) => candidate.rawText === item.rawText) || {};
+    const base =
+      heuristicItems[index] ||
+      heuristicItems.find((candidate) => candidate.rawText === item.rawText) ||
+      {};
+
     const source = {
       ...base.source,
       ...buildSourceFromGroup(
@@ -418,13 +512,15 @@ function mergeAiWithHeuristic(aiItems, heuristicItems, payload, conversationTitl
     };
 
     const recordType = normalizeRecordType(item.recordType || base.recordType);
-    const listing = recordType === 'request'
-      ? null
-      : normalizeListing({ ...(base.listing || {}), ...(item.listing || {}) });
+    const listing =
+      recordType === 'request'
+        ? null
+        : normalizeListing({ ...(base.listing || {}), ...(item.listing || {}) });
 
-    const req = recordType === 'request'
-      ? normalizeRequest({ ...(base.request || {}), ...(item.request || {}) }, source)
-      : null;
+    const req =
+      recordType === 'request'
+        ? normalizeRequest({ ...(base.request || {}), ...(item.request || {}) }, source)
+        : null;
 
     const merged = {
       ...base,
@@ -433,6 +529,7 @@ function mergeAiWithHeuristic(aiItems, heuristicItems, payload, conversationTitl
       recordType,
       extractionStatus: normalizeStatus(item.extractionStatus || base.extractionStatus),
       confidence: clamp(Number(item.confidence ?? base.confidence ?? 0.55), 0, 1),
+      priorityScore: Number(item.priorityScore ?? base.priorityScore ?? 0),
       rawText: String(item.rawText || base.rawText || '').trim(),
       summary: String(item.summary || base.summary || '').trim(),
       reason: String(item.reason || base.reason || '').trim(),
@@ -443,31 +540,57 @@ function mergeAiWithHeuristic(aiItems, heuristicItems, payload, conversationTitl
       messageDate: String(item.messageDate || base.messageDate || '').trim(),
       expiresAt: String(item.expiresAt || base.expiresAt || '').trim(),
       publishedAt: String(item.publishedAt || base.publishedAt || '').trim(),
-      isFresh: typeof item.isFresh === 'boolean' ? item.isFresh : (typeof base.isFresh === 'boolean' ? base.isFresh : true),
-      ageDays: Number.isFinite(item.ageDays) ? item.ageDays : (Number.isFinite(base.ageDays) ? base.ageDays : null),
-      sourceHash: String(item.sourceHash || base.sourceHash || hashString(normalizeFingerprintText(item.rawText || base.rawText || ''))),
+      isFresh:
+        typeof item.isFresh === 'boolean'
+          ? item.isFresh
+          : (typeof base.isFresh === 'boolean' ? base.isFresh : true),
+      ageDays:
+        Number.isFinite(item.ageDays)
+          ? item.ageDays
+          : (Number.isFinite(base.ageDays) ? base.ageDays : null),
+      sourceHash: String(
+        item.sourceHash ||
+        base.sourceHash ||
+        hashString(normalizeFingerprintText(item.rawText || base.rawText || ''))
+      ),
       duplicateKey: String(
-        item.duplicateKey
-        || base.duplicateKey
-        || buildDuplicateKey({ recordType, listing, request: req, source })
+        item.duplicateKey ||
+        base.duplicateKey ||
+        buildDuplicateKey({ recordType, listing, request: req, source })
       ),
     };
 
     if (merged.recordType === 'listing') {
-      if (!merged.isFresh) {
+      const soldLike = SOLD_PATTERNS.some((pattern) => pattern.test(normalizeText(merged.rawText)));
+
+      if (soldLike) {
+        merged.extractionStatus = 'sold';
+        merged.reason = merged.reason || 'يبدو أن العرض مباع أو محجوز.';
+      } else if (!merged.isFresh) {
         merged.extractionStatus = 'expired';
-        merged.reason = merged.reason || `العرض أقدم من ${merged.retentionDays} أيام.`;
-      } else if (merged.extractionStatus === 'auto_saved') {
+        merged.reason = merged.reason || `العرض أقدم من ${merged.retentionDays} يومًا.`;
+      } else if (merged.extractionStatus === 'internal_ready') {
         if (!listing.propertyType || !(listing.neighborhood || listing.part || listing.plan) || !(listing.price || listing.area)) {
           merged.extractionStatus = 'needs_review';
         }
       }
+
+      merged.priorityScore = buildPriorityScore({
+        direct: !!listing?.direct,
+        confidence: merged.confidence,
+        soldLike: merged.extractionStatus === 'sold',
+      });
     }
 
-    if (merged.recordType === 'request' && merged.extractionStatus === 'auto_saved') {
+    if (merged.recordType === 'request' && merged.extractionStatus === 'internal_ready') {
       if (!(req.propertyType || req.neighborhood || req.part || req.plan) || !(req.budgetMax || req.areaMin)) {
         merged.extractionStatus = 'needs_review';
       }
+      merged.priorityScore = buildPriorityScore({
+        direct: false,
+        confidence: merged.confidence,
+        soldLike: false,
+      });
     }
 
     return merged;
@@ -486,7 +609,7 @@ async function analyzeWithOpenAI({ grouped, payload, conversationTitle, retentio
       {
         role: 'system',
         content:
-          'أنت محلل وارد عقاري لمكتب "عقار أبحر" بجدة. المطلوب: تصنيف المقاطع إلى عرض أو طلب أو ignored. احفظ تلقائيًا فقط الواضح. أي غامض اجعله needs_review. إذا كان المقطع رسالة صادرة من صاحب النظام isFromMe=true فلا تحفظه كعرض وارد، بل اجعله ignored. الرسائل القصيرة مثل مباشر/أكد/موجود/تم ليست عرضًا مستقلًا. إذا كان العرض أقدم من نافذة الاحتفاظ فلا تجعله auto_saved بل expired أو needs_review. أعد JSON فقط بدون أي شرح خارجي.'
+          'أنت محلل وارد عقاري داخلي لمكتب "عقار أبحر" بجدة. العروض المستخرجة تحفظ داخليًا فقط في لوحة التحكم ولا تنشر للعامة. المطلوب: تصنيف المقاطع إلى listing أو request أو ignored. إذا كان العرض واضحًا اجعله internal_ready. إذا كان غامضًا اجعله needs_review. إذا كان قديمًا خارج نافذة الاحتفاظ اجعله expired. إذا كان النص يدل على أن العرض مباع أو محجوز اجعله sold. أعط أولوية أعلى للعروض التي فيها كلمة مباشر لأنها غالبًا مباشرة من المالك عبر وسيط مباشر. استخرج اسم المرسل ورقمه إن وجد. أعد JSON فقط.'
       },
       {
         role: 'user',
@@ -505,8 +628,9 @@ async function analyzeWithOpenAI({ grouped, payload, conversationTitle, retentio
             summary: 'string',
             items: [{
               recordType: 'listing | request | ignored',
-              extractionStatus: 'auto_saved | needs_review | ignored | possible_duplicate | expired',
+              extractionStatus: 'internal_ready | needs_review | ignored | possible_duplicate | expired | sold',
               confidence: 0.0,
+              priorityScore: 0,
               summary: 'string',
               reason: 'string',
               rawText: 'string',
@@ -614,7 +738,14 @@ function normalizeRecordType(value) {
 }
 
 function normalizeStatus(value) {
-  const allowed = ['auto_saved', 'needs_review', 'ignored', 'possible_duplicate', 'expired'];
+  const allowed = [
+    'internal_ready',
+    'needs_review',
+    'ignored',
+    'possible_duplicate',
+    'expired',
+    'sold',
+  ];
   const v = String(value || '').trim();
   return allowed.includes(v) ? v : 'needs_review';
 }
@@ -622,19 +753,20 @@ function normalizeStatus(value) {
 function buildStats(grouped, items) {
   return {
     totalGroups: grouped.length,
-    autoSavedCount: items.filter((item) => item.extractionStatus === 'auto_saved').length,
+    internalReadyCount: items.filter((item) => item.extractionStatus === 'internal_ready').length,
     reviewCount: items.filter((item) => item.extractionStatus === 'needs_review').length,
     ignoredCount: items.filter((item) => item.extractionStatus === 'ignored').length,
     expiredCount: items.filter((item) => item.extractionStatus === 'expired').length,
+    soldCount: items.filter((item) => item.extractionStatus === 'sold').length,
     listingCount: items.filter((item) => item.recordType === 'listing').length,
     requestCount: items.filter((item) => item.recordType === 'request').length,
-    freshCount: items.filter((item) => item.recordType === 'listing' && item.isFresh).length,
+    directCount: items.filter((item) => item.recordType === 'listing' && item.listing?.direct).length,
   };
 }
 
 function buildFallbackSummary(stats, title) {
   const who = title ? `من ${title}` : 'من الوارد';
-  return `تم تحليل ${stats.totalGroups} مقطع ${who}: ${stats.listingCount} عروض، ${stats.requestCount} طلبات، ${stats.autoSavedCount} محفوظ تلقائيًا، ${stats.reviewCount} للمراجعة، ${stats.expiredCount} منتهية.`;
+  return `تم تحليل ${stats.totalGroups} مقطع ${who}: ${stats.listingCount} عروض، ${stats.requestCount} طلبات، ${stats.internalReadyCount} جاهزة داخليًا، ${stats.reviewCount} للمراجعة، ${stats.expiredCount} منتهية، ${stats.soldCount} مباعة أو محجوزة.`;
 }
 
 function makeIgnored(group, source, reason) {
@@ -642,11 +774,16 @@ function makeIgnored(group, source, reason) {
     recordType: 'ignored',
     extractionStatus: 'ignored',
     confidence: 0.92,
+    priorityScore: 0,
     summary: 'رسالة غير مهمة للحفظ العقاري',
     rawText: group.text,
     reason,
     source,
-    groupMeta: { sender: group.sender, isFromMe: !!group.isFromMe, messagesCount: group.messages?.length || 1 },
+    groupMeta: {
+      sender: group.sender,
+      isFromMe: !!group.isFromMe,
+      messagesCount: group.messages?.length || 1,
+    },
   };
 }
 
@@ -657,10 +794,17 @@ function scoreConfidence({ propertyType, hasLocation, price, area, phone, direct
   if (price) score += 0.12;
   if (area) score += 0.08;
   if (phone) score += 0.04;
-  if (direct) score += 0.03;
+  if (direct) score += 0.08;
   if (kind === 'request' && /مطلوب|زبون|عميل/.test(text)) score += 0.08;
-  if (kind === 'listing' && /للبيع|للإيجار|للايجار|مباشر من المالك|وكيل إفراغ/.test(text)) score += 0.08;
-  return clamp(score, 0, 0.97);
+  if (kind === 'listing' && /للبيع|للإيجار|للايجار|مباشر من المالك|وكيل إفراغ|مباشر/.test(text)) score += 0.08;
+  return clamp(score, 0, 0.99);
+}
+
+function buildPriorityScore({ direct, confidence, soldLike }) {
+  let score = Math.round(Number(confidence || 0) * 100);
+  if (direct) score += 25;
+  if (soldLike) score -= 40;
+  return clamp(score, 0, 120);
 }
 
 function buildListingTitle(propertyType, neighborhood, part) {
@@ -671,13 +815,21 @@ function buildListingTitle(propertyType, neighborhood, part) {
 
 function buildListingSummary(listing) {
   const place = [listing.neighborhood, listing.plan, listing.part].filter(Boolean).join(' — ');
-  const details = [listing.propertyType, place, listing.price ? `${listing.price}` : '', listing.area ? `${listing.area}م` : ''].filter(Boolean).join(' — ');
-  return details || 'عرض عقاري واضح';
+  const details = [
+    listing.propertyType,
+    place,
+    listing.price ? `${listing.price}` : '',
+    listing.area ? `${listing.area}م` : '',
+    listing.direct ? 'مباشر' : '',
+  ].filter(Boolean).join(' — ');
+  return details || 'عرض عقاري داخلي واضح';
 }
 
 function buildRequestSummary(request) {
   const place = [request.neighborhood, request.plan, request.part].filter(Boolean).join(' — ');
-  const details = ['طلب', request.propertyType, place, request.budgetMax ? `${request.budgetMax}` : ''].filter(Boolean).join(' — ');
+  const details = ['طلب', request.propertyType, place, request.budgetMax ? `${request.budgetMax}` : '']
+    .filter(Boolean)
+    .join(' — ');
   return details;
 }
 
@@ -749,14 +901,17 @@ function extractPlan(text) {
 function extractArea(text) {
   const normalized = replaceArabicDigits(text);
   const match =
-    normalized.match(/(?:مساحة|المساحة|المساحه|متر|م٢|م2|م²)\s*[:\-]?\s*(\d{2,5})/i)
-    || normalized.match(/(\d{2,5})\s*(?:متر|م٢|م2|م²)/i);
+    normalized.match(/(?:مساحة|المساحة|المساحه|متر|م٢|م2|م²)\s*[:\-]?\s*(\d{2,5})/i) ||
+    normalized.match(/(\d{2,5})\s*(?:متر|م٢|م2|م²)/i);
   return match ? Number(match[1]) : null;
 }
 
 function extractPrice(text) {
   const normalized = replaceArabicDigits(text);
-  const match = normalized.match(/(?:السعر|مطلوب|الحد|حده|حدها|الصافي|بحدود)?\s*[:\-]?\s*(\d{2,7})\s*(مليون|الف|ألف)?/i);
+  const match = normalized.match(
+    /(?:السعر|مطلوب|الحد|حده|حدها|الصافي|بحدود)?\s*[:\-]?\s*(\d{2,7})\s*(مليون|الف|ألف)?/i
+  );
+
   if (!match) return null;
 
   let value = Number(match[1]);
@@ -780,6 +935,10 @@ function extractPhone(text) {
   return digits;
 }
 
+function isDirectOffer(text) {
+  return /(?:^|\s)مباشر(?:\s|$)|مباشرة|مباشر من المالك|مباشره من المالك|المالك مباشر|زبون مباشر|من المالك/u.test(text);
+}
+
 function isPureFollowup(text) {
   const clean = text.trim().replace(/\n/g, ' ');
   if (clean.length > 30) return false;
@@ -793,7 +952,10 @@ function parseWhatsAppTimestamp(raw) {
     .replace(/\s+ص\b/g, ' AM')
     .replace(/\s+م\b/g, ' PM');
 
-  const match = clean.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?$/i);
+  const match = clean.match(
+    /^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?$/i
+  );
+
   if (!match) return null;
 
   let day = Number(match[1]);
@@ -805,7 +967,6 @@ function parseWhatsAppTimestamp(raw) {
   const meridiem = String(match[7] || '').toUpperCase();
 
   if (year < 100) year += 2000;
-
   if (meridiem === 'PM' && hour < 12) hour += 12;
   if (meridiem === 'AM' && hour === 12) hour = 0;
 
@@ -856,10 +1017,12 @@ function normalizeFingerprintText(text) {
 function hashString(input) {
   const text = String(input || '');
   let hash = 0;
+
   for (let i = 0; i < text.length; i += 1) {
     hash = ((hash << 5) - hash) + text.charCodeAt(i);
     hash |= 0;
   }
+
   return `h${Math.abs(hash)}`;
 }
 
