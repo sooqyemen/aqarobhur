@@ -26,12 +26,16 @@ export default function RequestPage() {
     areaMin: '',
     name: '',
     phone: '',
-    notes: ''
+    notes: '',
   });
 
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [ok, setOk] = useState(false);
+
+  const [smartBusy, setSmartBusy] = useState(false);
+  const [smartError, setSmartError] = useState('');
+  const [smartResult, setSmartResult] = useState(null);
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -42,6 +46,26 @@ export default function RequestPage() {
   };
 
   const waPhone = useMemo(() => phoneDefault || '966597520693', [phoneDefault]);
+
+  const smartQuestion = useMemo(() => {
+    const parts = [];
+
+    if (formData.dealType === 'rent') parts.push('أحتاج عقار للإيجار');
+    else parts.push('أحتاج عقار للشراء');
+
+    if (formData.propertyType) parts.push(formData.propertyType);
+
+    if (formData.neighborhood) parts.push(`في حي ${formData.neighborhood}`);
+
+    if (formData.areaMin) parts.push(`بمساحة ${formData.areaMin} متر أو أكثر`);
+
+    if (formData.budgetMax) parts.push(`بحد أقصى ${formData.budgetMax} ريال`);
+    else if (formData.budgetMin) parts.push(`بميزانية تبدأ من ${formData.budgetMin} ريال`);
+
+    if (formData.notes) parts.push(formData.notes);
+
+    return parts.join(' ');
+  }, [formData]);
 
   const waText = useMemo(() => {
     const min = formData.budgetMin ? formatPriceSAR(Number(formData.budgetMin)) : '';
@@ -63,6 +87,32 @@ export default function RequestPage() {
   }, [formData]);
 
   const waLink = useMemo(() => buildWhatsAppLink({ phone: waPhone, text: waText }), [waPhone, waText]);
+
+  async function runSmartSearch() {
+    setSmartBusy(true);
+    setSmartError('');
+    setSmartResult(null);
+
+    try {
+      const res = await fetch('/api/ai/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question: smartQuestion }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data?.error || 'تعذر تنفيذ البحث الذكي.');
+      }
+
+      setSmartResult(data);
+    } catch (error) {
+      setSmartError(error?.message || 'تعذر تنفيذ البحث الذكي.');
+    } finally {
+      setSmartBusy(false);
+    }
+  }
 
   async function submit(e) {
     e.preventDefault();
@@ -99,23 +149,20 @@ export default function RequestPage() {
   return (
     <>
       <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined" rel="stylesheet" />
-      
+
       <div style={{ padding: '60px 0', minHeight: '80vh', direction: 'rtl' }}>
         <div className="container" style={{ maxWidth: '850px' }}>
-          
-          <PageHeader 
-            icon="travel_explore" 
-            title="أرسل طلبك العقاري" 
-            description="لم تجد العقار المناسب؟ اكتب مواصفات طلبك وسنقوم بالبحث في شبكتنا العقارية وتوفير أفضل الخيارات لك." 
+          <PageHeader
+            icon="travel_explore"
+            title="أرسل طلبك العقاري"
+            description="لم تجد العقار المناسب؟ اكتب مواصفات طلبك وسنقوم بالبحث في شبكتنا العقارية وتوفير أفضل الخيارات لك."
           />
 
           <div className="card" style={{ padding: '35px' }}>
             <form onSubmit={submit} style={{ display: 'grid', gap: '30px' }}>
-              
               <div>
                 <h3 style={{ margin: '0 0 15px 0', fontSize: '18px', color: 'var(--text)' }}>1. تفاصيل العقار المطلوب</h3>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px' }}>
-                  
                   <div style={{ gridColumn: '1 / -1' }}>
                     <label style={{ display: 'block', marginBottom: '10px', fontWeight: 800, fontSize: '14px' }}>نوع الطلب *</label>
                     <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
@@ -175,6 +222,83 @@ export default function RequestPage() {
                 </div>
               </div>
 
+              <div className="card" style={{ padding: '18px', background: '#fcfcfd', border: '1px solid var(--border)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px', fontWeight: 900 }}>
+                  <span className="material-icons-outlined">smart_toy</span>
+                  جرّب العقاري الذكي قبل إرسال الطلب
+                </div>
+
+                <div className="muted" style={{ fontSize: '14px', marginBottom: '14px' }}>
+                  سيبحث لك مباشرة في العروض الداخلية المناسبة لطلبك، ثم يمكنك متابعة التواصل عبر واتساب.
+                </div>
+
+                <div className="card" style={{ padding: '12px', background: '#fff' }}>
+                  <div style={{ fontWeight: 800, marginBottom: '6px' }}>صياغة الطلب الذكي:</div>
+                  <div style={{ color: 'var(--muted)', lineHeight: 1.8 }}>{smartQuestion || 'اكتب بيانات الطلب أولاً'}</div>
+                </div>
+
+                <button
+                  type="button"
+                  className="btn btnPrimary"
+                  style={{ marginTop: '14px', width: '100%' }}
+                  onClick={runSmartSearch}
+                  disabled={smartBusy}
+                >
+                  {smartBusy ? 'جاري البحث الذكي...' : 'ابحث بالعقاري الذكي'}
+                </button>
+
+                {smartError ? (
+                  <div style={{ marginTop: '12px', color: 'var(--danger)', fontWeight: 800 }}>{smartError}</div>
+                ) : null}
+
+                {smartResult ? (
+                  <div className="card" style={{ marginTop: '16px', padding: '16px', background: '#fff' }}>
+                    <div style={{ fontWeight: 900, marginBottom: '10px' }}>نتيجة العقاري الذكي</div>
+
+                    <pre
+                      style={{
+                        whiteSpace: 'pre-wrap',
+                        margin: 0,
+                        fontFamily: 'inherit',
+                        lineHeight: 1.9,
+                        color: 'var(--text)',
+                      }}
+                    >
+                      {smartResult.answer}
+                    </pre>
+
+                    {smartResult?.ctaText ? (
+                      <div
+                        style={{
+                          marginTop: '14px',
+                          padding: '12px',
+                          borderRadius: '12px',
+                          background: '#f8fafc',
+                          color: 'var(--muted)',
+                          lineHeight: 1.8,
+                          fontWeight: 700,
+                        }}
+                      >
+                        {smartResult.ctaText}
+                      </div>
+                    ) : null}
+
+                    {smartResult?.whatsappLink ? (
+                      <a
+                        href={smartResult.whatsappLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="btn btnPrimary"
+                        style={{ width: '100%', marginTop: '14px' }}
+                      >
+                        تواصل معنا عبر واتساب
+                        <span className="material-icons-outlined">chat</span>
+                      </a>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+
               <hr style={{ border: '0', borderTop: '1px solid var(--border)', margin: '0' }} />
 
               <div>
@@ -195,8 +319,8 @@ export default function RequestPage() {
                 </div>
               </div>
 
-              {err ? <div className="formError" style={{ color: 'var(--danger)', fontWeight: 800, textAlign: 'center' }}>{err}</div> : null}
-              {ok ? <div className="formSuccess" style={{ color: 'var(--success)', fontWeight: 800, textAlign: 'center', background: '#e6fceb', padding: '15px', borderRadius: '12px' }}>تم حفظ الطلب بنجاح في النظام! جاري تحويلك للواتساب...</div> : null}
+              {err ? <div style={{ color: 'var(--danger)', fontWeight: 800, textAlign: 'center' }}>{err}</div> : null}
+              {ok ? <div style={{ color: 'var(--success)', fontWeight: 800, textAlign: 'center', background: '#e6fceb', padding: '15px', borderRadius: '12px' }}>تم حفظ الطلب بنجاح في النظام! جاري تحويلك للواتساب...</div> : null}
 
               <div style={{ marginTop: '10px' }}>
                 <button type="submit" className="btn btnPrimary" style={{ width: '100%', fontSize: '18px', padding: '16px' }} disabled={busy}>
@@ -208,7 +332,6 @@ export default function RequestPage() {
                   بمجرد الإرسال سيتم حفظ طلبك بالنظام وتوجيهك لمحادثة الواتساب مباشرة.
                 </p>
               </div>
-
             </form>
           </div>
         </div>
