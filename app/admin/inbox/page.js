@@ -5,7 +5,6 @@ import AdminGuard from '@/components/admin/AdminGuard';
 import AdminShell from '@/components/admin/AdminShell';
 import PasteMessageBox from '@/components/admin/PasteMessageBox';
 import ExtractionReviewTable from '@/components/admin/ExtractionReviewTable';
-import { analyzeInboxInput } from '@/lib/aiExtractClient';
 import {
   fetchExtractedItems,
   fetchInboxEntries,
@@ -52,8 +51,19 @@ export default function AdminInboxPage() {
     setError('');
     setSummary('');
     try {
-      const analysis = await analyzeInboxInput(payload);
-      
+const res = await fetch('/api/ai/extract', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify(payload),
+});
+
+const analysis = await res.json();
+
+if (!res.ok) {
+  throw new Error(analysis?.error || 'فشل الذكاء الاصطناعي في تحليل النص.');
+}      
       const inboxEntryId = await saveInboxEntry({
         ...payload,
         parsedText: analysis.parsedText || '',

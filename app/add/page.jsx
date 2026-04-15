@@ -1,5 +1,5 @@
 'use client';
-
+export const dynamic = 'force-dynamic';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { getFirebase } from '@/lib/firebaseClient';
@@ -667,11 +667,11 @@ function CreateListingForm({ form, setForm, onSave, onReset, busy, createdId, up
     </section>
   );
 }
-
 export default function AddListingPage() {
-  const fb = getFirebase();
-  const auth = fb?.auth;
-  const storage = fb?.storage;
+  const [auth, setAuth] = useState(null);
+  const [storage, setStorage] = useState(null);
+  const [firebaseReady, setFirebaseReady] = useState(false);
+  const [firebaseErr, setFirebaseErr] = useState('');
 
   const [checking, setChecking] = useState(true);
   const [user, setUser] = useState(null);
@@ -708,10 +708,26 @@ export default function AddListingPage() {
   const uploader = useUploader(storage);
 
   useEffect(() => {
+    try {
+      const fb = getFirebase();
+      setAuth(fb?.auth || null);
+      setStorage(fb?.storage || null);
+      setFirebaseReady(true);
+    } catch (e) {
+      console.error('Firebase init error:', e);
+      setFirebaseErr('تعذر تهيئة Firebase. تأكد من متغيرات البيئة NEXT_PUBLIC_FIREBASE_*');
+      setChecking(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!auth) return;
+
     const unsub = onAuthStateChanged(auth, (u) => {
       setUser(u || null);
       setChecking(false);
     });
+
     return () => unsub();
   }, [auth]);
 
@@ -726,6 +742,8 @@ export default function AddListingPage() {
 
   const login = async (e) => {
     e.preventDefault();
+    if (!auth) return;
+
     setAuthErr('');
     setAuthBusy(true);
     try {
@@ -739,6 +757,8 @@ export default function AddListingPage() {
   };
 
   const logout = async () => {
+    if (!auth) return;
+
     setAuthErr('');
     setAuthBusy(true);
     try {
@@ -789,7 +809,17 @@ export default function AddListingPage() {
     }
   }, [form, uploader.urls, uploader.media]);
 
-  if (checking) {
+  if (firebaseErr) {
+    return (
+      <div className="container" style={{ paddingTop: 16, paddingBottom: 24 }}>
+        <section className="card" style={{ padding: 14, color: 'var(--danger)', fontWeight: 900 }}>
+          {firebaseErr}
+        </section>
+      </div>
+    );
+  }
+
+  if (checking || !firebaseReady) {
     return (
       <div className="container" style={{ paddingTop: 16 }}>
         <section className="card" style={{ padding: 14 }}>جاري التحقق…</section>
@@ -815,7 +845,7 @@ export default function AddListingPage() {
 
             {authErr ? <div style={{ marginTop: 10, color: 'var(--danger)', fontWeight: 900 }}>{authErr}</div> : null}
 
-            <button className="btn btnPrimary" style={{ marginTop: 12, width: '100%' }} disabled={authBusy}>
+            <button className="btn btnPrimary" style={{ marginTop: 12, width: '100%' }} disabled={authBusy || !auth}>
               {authBusy ? '...' : 'تسجيل دخول'}
             </button>
           </form>

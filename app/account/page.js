@@ -4,35 +4,56 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { getFirebase } from '@/lib/firebaseClient';
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth';
-import { isAdminUser } from '@/lib/admin'; 
+import { isAdminUser } from '@/lib/admin';
 
 export default function AccountPage() {
-  const { auth } = getFirebase();
+  const [auth, setAuth] = useState(null);
+  const [firebaseReady, setFirebaseReady] = useState(false);
+  const [firebaseError, setFirebaseError] = useState('');
 
   const [user, setUser] = useState(null);
-  const [isAuthLoading, setIsAuthLoading] = useState(true); 
-  
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
+
   const [email, setEmail] = useState('');
   const [pass, setPass] = useState('');
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
+    try {
+      const fb = getFirebase();
+      setAuth(fb.auth);
+      setFirebaseReady(true);
+    } catch (error) {
+      console.error('Firebase init error:', error);
+      setFirebaseError('تعذر تهيئة Firebase. تأكد من متغيرات البيئة NEXT_PUBLIC_FIREBASE_*');
+      setIsAuthLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!auth) return;
+
     const unsub = onAuthStateChanged(auth, (u) => {
       setUser(u || null);
       setIsAuthLoading(false);
     });
+
     return () => unsub();
   }, [auth]);
 
   async function doLogin(e) {
     e.preventDefault();
+    if (!auth) return;
+
     setErr('');
     setBusy(true);
+
     try {
       await signInWithEmailAndPassword(auth, email, pass);
       setPass('');
     } catch (error) {
+      console.error(error);
       setErr('بيانات الدخول غير صحيحة، يرجى المحاولة مرة أخرى.');
     } finally {
       setBusy(false);
@@ -40,28 +61,77 @@ export default function AccountPage() {
   }
 
   async function doLogout() {
+    if (!auth) return;
+
     setBusy(true);
     setErr('');
+
     try {
       await signOut(auth);
-    } catch {
+    } catch (error) {
+      console.error(error);
       setErr('تعذر تسجيل الخروج. يرجى التأكد من اتصالك بالإنترنت.');
     } finally {
       setBusy(false);
     }
   }
 
-  if (isAuthLoading) {
+  if (firebaseError) {
     return (
       <div className="container authContainer">
-         <div className="loadingSpinner"></div>
-         <p className="muted" style={{marginTop: '15px'}}>جاري التحقق من الحساب...</p>
-         
-         <style jsx>{`
-            .authContainer { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 50vh; }
-            .loadingSpinner { width: 40px; height: 40px; border: 4px solid #f3f3f3; border-top: 4px solid var(--primary); border-radius: 50%; animation: spin 1s linear infinite; }
-            @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-         `}</style>
+        <div className="errorBanner">{firebaseError}</div>
+
+        <style jsx>{`
+          .authContainer {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 50vh;
+          }
+          .errorBanner {
+            background: #fff5f5;
+            color: #c53030;
+            padding: 14px 18px;
+            border-radius: 12px;
+            font-size: 14px;
+            font-weight: 700;
+            border: 1px solid #fed7d7;
+            text-align: center;
+            max-width: 560px;
+          }
+        `}</style>
+      </div>
+    );
+  }
+
+  if (isAuthLoading || !firebaseReady) {
+    return (
+      <div className="container authContainer">
+        <div className="loadingSpinner"></div>
+        <p className="muted" style={{ marginTop: '15px' }}>جاري التحقق من الحساب...</p>
+
+        <style jsx>{`
+          .authContainer {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 50vh;
+          }
+          .loadingSpinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid var(--primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+          }
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+        `}</style>
       </div>
     );
   }
@@ -71,7 +141,7 @@ export default function AccountPage() {
   return (
     <>
       <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined" rel="stylesheet" />
-      
+
       <div className="container pageStack">
         <div className="pageHeader">
           <h1 className="pageTitle">إدارة الحساب</h1>
@@ -80,7 +150,6 @@ export default function AccountPage() {
 
         <div className="authWrapper">
           {user ? (
-            /* واجهة المستخدم المسجل للدخول */
             <div className="authCard loggedInCard">
               <div className="userInfo">
                 <div className="avatarCircle">
@@ -111,11 +180,10 @@ export default function AccountPage() {
               </button>
             </div>
           ) : (
-            /* واجهة تسجيل الدخول */
             <form className="authCard loginForm" onSubmit={doLogin}>
               <div className="formHeader">
-                 <span className="material-icons-outlined lockIcon">lock</span>
-                 <h2>تسجيل الدخول</h2>
+                <span className="material-icons-outlined lockIcon">lock</span>
+                <h2>تسجيل الدخول</h2>
               </div>
 
               <div className="inputGroup">
@@ -157,10 +225,12 @@ export default function AccountPage() {
               <button
                 className="btnPrimary loginBtn"
                 type="submit"
-                disabled={busy || !email || !pass}
+                disabled={busy || !email || !pass || !auth}
               >
                 {busy ? (
-                  <span className="material-icons-outlined" style={{ animation: 'spin 1s linear infinite' }}>refresh</span>
+                  <span className="material-icons-outlined" style={{ animation: 'spin 1s linear infinite' }}>
+                    refresh
+                  </span>
                 ) : (
                   <>تسجيل الدخول <span className="material-icons-outlined">login</span></>
                 )}
@@ -177,7 +247,7 @@ export default function AccountPage() {
         .pageSubtitle { color: var(--muted); margin: 0; font-size: 15px; }
 
         .authCard { background: white; border-radius: 20px; padding: 30px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); border: 1px solid var(--border); }
-        
+
         .loggedInCard { display: flex; flex-direction: column; gap: 20px; }
         .userInfo { display: flex; align-items: center; gap: 15px; background: #f8fafc; padding: 15px; border-radius: 12px; }
         .avatarCircle { width: 50px; height: 50px; background: #e2e8f0; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: var(--muted); }
@@ -185,10 +255,10 @@ export default function AccountPage() {
         .userEmail { font-weight: 800; font-size: 16px; color: var(--text); word-break: break-all; }
         .userRole { font-size: 13px; color: var(--muted); margin-top: 4px; font-weight: 600; }
         .adminRole { color: var(--primary); background: rgba(15, 118, 110, 0.1); padding: 4px 10px; border-radius: 10px; display: inline-block; }
-        
+
         .adminActions { border-top: 1px dashed var(--border); border-bottom: 1px dashed var(--border); padding: 20px 0; }
         .adminBtn { width: 100%; display: flex; justify-content: center; align-items: center; gap: 8px; font-size: 16px; padding: 14px; }
-        
+
         .btnLogout { background: #fff5f5; color: #c53030; border: 1px solid #fed7d7; padding: 12px; border-radius: 12px; font-weight: 700; cursor: pointer; display: flex; justify-content: center; align-items: center; gap: 8px; transition: all 0.2s; }
         .btnLogout:hover:not(:disabled) { background: #fed7d7; }
         .btnLogout:disabled { opacity: 0.6; cursor: not-allowed; }
@@ -199,13 +269,23 @@ export default function AccountPage() {
 
         .inputGroup { margin-bottom: 20px; }
         .inputGroup label { display: block; font-weight: 700; color: var(--muted); margin-bottom: 8px; font-size: 14px; }
-        
+
         .inputWithIcon { position: relative; display: flex; align-items: center; }
         .inputWithIcon .material-icons-outlined { position: absolute; right: 15px; color: #a0aec0; font-size: 20px; }
         .inputWithIcon .input { width: 100%; padding: 14px 45px 14px 15px; border: 1px solid var(--border); border-radius: 12px; font-size: 15px; transition: border-color 0.2s; }
         .inputWithIcon .input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.1); }
 
-        .errorBanner { background: #fff5f5; color: #c53030; padding: 12px 15px; border-radius: 10px; font-size: 14px; font-weight: 600; margin-bottom: 20px; border: 1px solid #fed7d7; text-align: center; }
+        .errorBanner, .errorMsg {
+          background: #fff5f5;
+          color: #c53030;
+          padding: 12px 15px;
+          border-radius: 10px;
+          font-size: 14px;
+          font-weight: 600;
+          margin-bottom: 20px;
+          border: 1px solid #fed7d7;
+          text-align: center;
+        }
 
         .loginBtn { width: 100%; padding: 16px; font-size: 16px; font-weight: 800; display: flex; justify-content: center; align-items: center; gap: 8px; border-radius: 12px; }
         .loginBtn:disabled { background: #a0aec0; cursor: not-allowed; }
