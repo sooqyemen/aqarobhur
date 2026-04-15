@@ -167,7 +167,6 @@ export default function AdminListingEditPage() {
   }, [success, error]);
 
   const syncMediaToDoc = useCallback(async (nextMedia, { message = '' } = {}) => {
-    // استخدم الدالة المستوردة من @/lib/listings
     await adminUpdateListing(listingId, {
       imagesMeta: nextMedia,
       images: nextMedia.map((item) => item.url),
@@ -208,7 +207,6 @@ export default function AdminListingEditPage() {
         lng: toNum(form.lng),
       };
 
-      // استخدم الدالة المستوردة من @/lib/listings
       await adminUpdateListing(listingId, patch);
       setListing((prev) => (prev ? { ...prev, ...patch } : prev));
       setSuccess('تم تحديث بيانات الإعلان بنجاح.');
@@ -327,7 +325,6 @@ export default function AdminListingEditPage() {
           try { await deleteObject(storageRef(storage, entry.refPath)); } catch (_) {}
         }
       }
-      // استخدم الدالة المستوردة من @/lib/listings
       await adminDeleteListing(listingId);
       router.push('/admin/listings');
     } catch (e) {
@@ -665,7 +662,7 @@ export default function AdminListingEditPage() {
         .emptyMediaState .material-icons-outlined { font-size: 48px; color: #a0aec0; margin-bottom: 10px; }
         .emptyMediaState h4 { margin: 0 0 5px 0; color: #2d3748; font-size: 18px; }
         
-        .mediaGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 15px; }
+        .mediaGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 15px; }
         
         .mediaTile { background: white; border: 1px solid #e2e8f0; border-radius: 14px; padding: 10px; display: flex; flex-direction: column; gap: 10px; transition: border-color 0.2s, box-shadow 0.2s; position: relative; }
         .mediaTile:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.05); border-color: #cbd5e0; }
@@ -678,8 +675,9 @@ export default function AdminListingEditPage() {
         .checkboxLabel input:checked ~ .checkmark { background: var(--primary); border-color: var(--primary); }
         .checkboxLabel input:checked ~ .checkmark::after { content: '\\e876'; font-family: 'Material Icons Outlined'; color: white; font-size: 16px; }
         
-        .mediaPreview { width: 100%; aspect-ratio: 1; border-radius: 10px; overflow: hidden; background: #f7fafc; }
-        .mediaElement { width: 100%; height: 100%; object-fit: cover; }
+        /* 🔧 الإصلاح الأساسي لعدم تراكم الصور */
+        .mediaPreview { position: relative; width: 100%; aspect-ratio: 1 / 1; border-radius: 10px; overflow: hidden; background: #f7fafc; }
+        .mediaElement { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
         
         .mediaDetails { display: flex; flex-direction: column; gap: 4px; }
         .mediaName { font-size: 13px; font-weight: 700; color: #2d3748; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; direction: ltr; text-align: right; }
