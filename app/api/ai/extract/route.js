@@ -1,14 +1,10 @@
 import { NextResponse } from 'next/server';
+import { NEIGHBORHOODS, normalizeNeighborhoodName } from '@/lib/taxonomy';
 
 const MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
 const DEFAULT_RETENTION_DAYS = 15;
 
-const KNOWN_NEIGHBORHOODS = [
-  'الياقوت', 'الشراع', 'الصواري', 'اللؤلؤ', 'اللؤلؤة', 'الزمرد', 'الفنار', 'الشويصي',
-  'أبحر الشمالية', 'البحيرات', 'الخليج', 'جوهرة العروس', 'الدرة', 'النجمة', 'اليسر',
-  'الشاطئ الذهبي', 'البندر', 'المروج', 'الموسى', 'العبير', 'الفرقان', 'الجزيرة',
-  'شمال جدة', 'ضاحية الخليج',
-];
+const KNOWN_NEIGHBORHOODS = [...NEIGHBORHOODS].sort((a, b) => b.length - a.length);
 
 const FOLLOWUP_ONLY = [
   'مباشر', 'أكد', 'اكّد', 'هذا نفسه', 'موجود', 'أرسل', 'تم', 'تمت', 'عندك شي', 'فيه', 'اوك', 'تمام',
@@ -959,7 +955,40 @@ function extractDealType(text) {
 }
 
 function extractNeighborhood(text) {
-  return KNOWN_NEIGHBORHOODS.find((item) => text.includes(item)) || '';
+  const base = String(text || '').trim();
+
+  const candidates = [
+    base,
+    base.replace(/\s+/g, ' '),
+    base.replace(/حي\s+/gu, ' '),
+    base.replace(/منطقة\s+/gu, ' '),
+  ]
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  for (const candidate of candidates) {
+    for (const item of KNOWN_NEIGHBORHOODS) {
+      if (candidate.includes(item)) {
+        return normalizeNeighborhoodName(item);
+      }
+    }
+  }
+
+  for (const candidate of candidates) {
+    const words = candidate.split(/[\s،,.:\-_/]+/).filter(Boolean);
+    for (let i = 0; i < words.length; i += 1) {
+      for (let len = 3; len >= 1; len -= 1) {
+        const chunk = words.slice(i, i + len).join(' ').trim();
+        if (!chunk) continue;
+        const normalizedChunk = normalizeNeighborhoodName(chunk);
+        if (KNOWN_NEIGHBORHOODS.includes(normalizedChunk)) {
+          return normalizedChunk;
+        }
+      }
+    }
+  }
+
+  return '';
 }
 
 function extractSchemeName(text) {
