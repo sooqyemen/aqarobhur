@@ -7,6 +7,7 @@ const KNOWN_NEIGHBORHOODS = [
   'الياقوت', 'الشراع', 'الصواري', 'اللؤلؤ', 'اللؤلؤة', 'الزمرد', 'الفنار', 'الشويصي',
   'أبحر الشمالية', 'البحيرات', 'الخليج', 'جوهرة العروس', 'الدرة', 'النجمة', 'اليسر',
   'الشاطئ الذهبي', 'البندر', 'المروج', 'الموسى', 'العبير', 'الفرقان', 'الجزيرة',
+  'شمال جدة', 'ضاحية الخليج',
 ];
 
 const FOLLOWUP_ONLY = [
@@ -18,7 +19,9 @@ const IGNORE_PATTERNS = [
   /غادر/,
   /تم إنشاء/,
   /غيّر موضوع المجموعة/,
+  /غير موضوع المجموعة/,
   /غيّر اسم المجموعة/,
+  /غير اسم المجموعة/,
   /‎<Media omitted>/i,
   /تم حذف هذه الرسالة/,
   /السلام عليكم$/,
@@ -29,7 +32,6 @@ const IGNORE_PATTERNS = [
 
 const SOLD_PATTERNS = [
   /تم البيع/,
-  /انباع/,
   /انباع/,
   /مباع/,
   /مبيوع/,
@@ -56,7 +58,7 @@ export async function POST(request) {
     const grouped = groupMessages(messages, conversationTitle);
 
     const heuristicItems = grouped.map((group) =>
-      classifyGroupHeuristic(group, payload, conversationTitle, { retentionDays, now })
+      classifyGroupHeuristic(group, payload, conversationTitle, { retentionDays, now, grouped })
     );
 
     let finalItems = heuristicItems;
@@ -231,7 +233,7 @@ function finalizeGroup(group) {
 
 function classifyGroupHeuristic(group, payload, conversationTitle, options) {
   const text = normalizeText(group.text);
-  const source = buildSourceFromGroup(group, payload, conversationTitle);
+  const source = buildSourceFromGroup(group, payload, conversationTitle, options?.grouped || []);
   const timeMeta = buildTimeMeta(group, options);
 
   if (!text || IGNORE_PATTERNS.some((pattern) => pattern.test(text)) || isPureFollowup(text)) {
@@ -241,13 +243,16 @@ function classifyGroupHeuristic(group, payload, conversationTitle, options) {
   const propertyType = extractPropertyType(text);
   const dealType = extractDealType(text);
   const neighborhood = extractNeighborhood(text);
+  const schemeName = extractSchemeName(text);
   const part = extractPart(text);
-  const plan = extractPlan(text);
+  const plotNumber = extractPlotNumber(text);
   const area = extractArea(text);
   const price = extractPrice(text);
-  const phone = extractPhone(text) || source.contactPhone;
-  const direct = isDirectOffer(text);
+  const streetDetails = extractStreetDetails(text);
+  const phone = extractPhone(text) || source.contactPhone || extractPhoneFromNearbyGroups(group, options?.grouped || []);
+  const direct = isDirectOffer(text) || /وكيل حصري|حصري/.test(text);
   const soldLike = SOLD_PATTERNS.some((pattern) => pattern.test(text));
+  const exclusiveAgent = /وكيل حصري|حصري/.test(text);
 
   const hasStrongListingWords =
     /للبيع|للايجار|للإيجار|أرض للبيع|فيلا للبيع|عمارة للبيع|شقة للبيع|شقة للإيجار|للبيع في|مباشر من المالك|مباشرة من المالك|وكيل إفراغ|صك|شارع\s*\d+|رقم\s*\d+/i.test(text);
@@ -258,9 +263,9 @@ function classifyGroupHeuristic(group, payload, conversationTitle, options) {
   const requestLike = hasRequestWords && !hasStrongListingWords;
   const listingLike =
     hasStrongListingWords ||
-    (/بيع|إيجار|ايجار/.test(text) && !!(propertyType || neighborhood || part || plan || price || area));
+    (/بيع|إيجار|ايجار/.test(text) && !!(propertyType || neighborhood || part || schemeName || price || area));
 
-  const hasLocation = !!(neighborhood || part || plan);
+  const hasLocation = !!(neighborhood || part || schemeName || plotNumber);
   const hasCore = !!(price || area || propertyType);
 
   if (group.isFromMe) {
@@ -278,24 +283,37 @@ function classifyGroupHeuristic(group, payload, conversationTitle, options) {
   }
 
   if (requestLike && (hasLocation || propertyType || price || area)) {
+    const requestBudget = inferRequestBudget(text);
+    const requestArea = inferRequestArea(text, propertyType);
+
     const confidence = scoreConfidence({
-      propertyType, hasLocation, price, area, phone, direct, text, kind: 'request'
+      propertyType,
+      hasLocation,
+      price: requestBudget,
+      area: requestArea,
+      phone,
+      direct,
+      text,
+      kind: 'request',
     });
 
     const request = {
       dealType: dealType || 'sale',
       propertyType: propertyType || '',
       neighborhood: neighborhood || '',
-      plan: plan || '',
+      plan: schemeName || '',
       part: part || '',
-      budgetMax: price || null,
-      areaMin: area || null,
-      areaMax: area || null,
+      budgetMax: requestBudget || null,
+      areaMin: requestArea || null,
+      areaMax: requestArea || null,
       directClient: /زبون مباشر|عميل مباشر/.test(text),
       name: source.contactName,
       phone,
-      note: text.slice(0, 1200),
+      note: buildRequestNote(text, schemeName, plotNumber, streetDetails, exclusiveAgent),
       rawText: group.text,
+      plotNumber: plotNumber || '',
+      schemeName: schemeName || '',
+      streetDetails,
     };
 
     return withMeta({
@@ -308,7 +326,7 @@ function classifyGroupHeuristic(group, payload, conversationTitle, options) {
       rawText: group.text,
       reason:
         confidence >= 0.83
-          ? 'طلب واضح بموقع أو نوع عقار مع ميزانية أو وصف كافٍ.'
+          ? 'طلب واضح بموقع أو نوع عقار مع مساحة أو ميزانية أو وصف كافٍ.'
           : 'يبدو طلبًا لكنه يحتاج مراجعة قبل الاعتماد الداخلي.',
       source,
       groupMeta: { sender: group.sender, isFromMe: false, messagesCount: group.messages.length },
@@ -320,22 +338,32 @@ function classifyGroupHeuristic(group, payload, conversationTitle, options) {
 
   if (listingLike && hasCore && (hasLocation || propertyType)) {
     let confidence = scoreConfidence({
-      propertyType, hasLocation, price, area, phone, direct, text, kind: 'listing'
+      propertyType,
+      hasLocation,
+      price,
+      area,
+      phone,
+      direct,
+      text,
+      kind: 'listing',
     });
 
     if (direct) confidence = clamp(confidence + 0.08, 0, 0.99);
 
     const listing = {
-      title: buildListingTitle(propertyType, neighborhood, part),
+      title: buildListingTitle(propertyType, neighborhood, part, schemeName),
       dealType: dealType || 'sale',
       propertyType: propertyType || 'أرض',
       neighborhood: neighborhood || '',
-      plan: plan || '',
+      plan: schemeName || '',
       part: part || '',
+      plotNumber: plotNumber || '',
       area: area || null,
       price: price || null,
       direct,
-      description: text.slice(0, 1200),
+      streetDetails,
+      exclusiveAgent,
+      description: buildListingDescription(text, streetDetails, plotNumber, schemeName, exclusiveAgent),
       rawText: group.text,
     };
 
@@ -377,6 +405,9 @@ function classifyGroupHeuristic(group, payload, conversationTitle, options) {
   }
 
   if (propertyType || hasLocation || price || area) {
+    const requestBudget = inferRequestBudget(text);
+    const requestArea = inferRequestArea(text, propertyType);
+
     return withMeta({
       recordType: requestLike ? 'request' : 'listing',
       extractionStatus: 'needs_review',
@@ -384,29 +415,35 @@ function classifyGroupHeuristic(group, payload, conversationTitle, options) {
       priorityScore: buildPriorityScore({ direct, confidence: 0.56, soldLike }),
       summary: `سجل محتمل من ${source.contactName} يحتاج تأكيدًا قبل الحفظ الداخلي.`,
       listing: requestLike ? null : {
-        title: buildListingTitle(propertyType, neighborhood, part),
+        title: buildListingTitle(propertyType, neighborhood, part, schemeName),
         dealType: dealType || 'sale',
         propertyType: propertyType || '',
         neighborhood: neighborhood || '',
-        plan: plan || '',
+        plan: schemeName || '',
         part: part || '',
+        plotNumber: plotNumber || '',
         area: area || null,
         price: price || null,
         direct,
-        description: text.slice(0, 1200),
+        streetDetails,
+        exclusiveAgent,
+        description: buildListingDescription(text, streetDetails, plotNumber, schemeName, exclusiveAgent),
       },
       request: requestLike ? {
         dealType: dealType || 'sale',
         propertyType: propertyType || '',
         neighborhood: neighborhood || '',
-        plan: plan || '',
+        plan: schemeName || '',
         part: part || '',
-        budgetMax: price || null,
-        areaMin: area || null,
-        areaMax: area || null,
+        budgetMax: requestBudget || null,
+        areaMin: requestArea || null,
+        areaMax: requestArea || null,
         name: source.contactName,
         phone,
-        note: text.slice(0, 1200),
+        note: buildRequestNote(text, schemeName, plotNumber, streetDetails, exclusiveAgent),
+        plotNumber: plotNumber || '',
+        schemeName: schemeName || '',
+        streetDetails,
       } : null,
       rawText: group.text,
       reason: soldLike
@@ -421,21 +458,23 @@ function classifyGroupHeuristic(group, payload, conversationTitle, options) {
         listing: requestLike ? null : {
           propertyType: propertyType || '',
           neighborhood: neighborhood || '',
-          plan: plan || '',
+          plan: schemeName || '',
           part: part || '',
           area: area || null,
           price: price || null,
           direct,
+          plotNumber: plotNumber || '',
         },
         request: requestLike ? {
           propertyType: propertyType || '',
           neighborhood: neighborhood || '',
-          plan: plan || '',
+          plan: schemeName || '',
           part: part || '',
-          budgetMax: price || null,
-          areaMin: area || null,
-          areaMax: area || null,
+          budgetMax: requestBudget || null,
+          areaMin: requestArea || null,
+          areaMax: requestArea || null,
           phone,
+          plotNumber: plotNumber || '',
         } : null,
         source: { ...source, contactPhone: phone || source.contactPhone },
       }),
@@ -445,13 +484,17 @@ function classifyGroupHeuristic(group, payload, conversationTitle, options) {
   return withMeta(makeIgnored(group, source, 'المحتوى ليس عرضًا أو طلبًا واضحًا.'), timeMeta);
 }
 
-function buildSourceFromGroup(group, payload, conversationTitle) {
+function buildSourceFromGroup(group, payload, conversationTitle, grouped = []) {
   const fallbackName = group.sender || payload?.source?.contactName || conversationTitle || 'مسوق';
+  const fallbackPhone =
+    extractPhone(group.text) ||
+    String(payload?.source?.contactPhone || '').trim() ||
+    extractPhoneFromNearbyGroups(group, grouped);
 
   return {
     sourceType: String(payload?.sourceType || payload?.source?.sourceType || 'الوارد الذكي').trim(),
     contactName: fallbackName.trim() || 'مسوق',
-    contactPhone: extractPhone(group.text) || String(payload?.source?.contactPhone || '').trim(),
+    contactPhone: fallbackPhone,
     contactRole: String(payload?.source?.contactRole || '').trim() || 'وسيط',
   };
 }
@@ -506,7 +549,8 @@ function mergeAiWithHeuristic(aiItems, heuristicItems, payload, conversationTitl
       ...buildSourceFromGroup(
         { sender: item.sender || base.groupMeta?.sender || '', text: item.rawText || base.rawText || '' },
         payload,
-        conversationTitle
+        conversationTitle,
+        []
       ),
       ...(item.source || {}),
     };
@@ -609,7 +653,7 @@ async function analyzeWithOpenAI({ grouped, payload, conversationTitle, retentio
       {
         role: 'system',
         content:
-          'أنت محلل وارد عقاري داخلي لمكتب "عقار أبحر" بجدة. العروض المستخرجة تحفظ داخليًا فقط في لوحة التحكم ولا تنشر للعامة. المطلوب: تصنيف المقاطع إلى listing أو request أو ignored. إذا كان العرض واضحًا اجعله internal_ready. إذا كان غامضًا اجعله needs_review. إذا كان قديمًا خارج نافذة الاحتفاظ اجعله expired. إذا كان النص يدل على أن العرض مباع أو محجوز اجعله sold. أعط أولوية أعلى للعروض التي فيها كلمة مباشر لأنها غالبًا مباشرة من المالك عبر وسيط مباشر. استخرج اسم المرسل ورقمه إن وجد. أعد JSON فقط.'
+          'أنت محلل وارد عقاري داخلي لمكتب "عقار أبحر" بجدة. العروض المستخرجة تحفظ داخليًا فقط في لوحة التحكم ولا تنشر للعامة. المطلوب: تصنيف المقاطع إلى listing أو request أو ignored. إذا كان العرض واضحًا اجعله internal_ready. إذا كان غامضًا اجعله needs_review. إذا كان قديمًا خارج نافذة الاحتفاظ اجعله expired. إذا كان النص يدل على أن العرض مباع أو محجوز اجعله sold. أعط أولوية أعلى للعروض التي فيها كلمة مباشر. استخرج رقم الجوال بدقة، والجزء مثل ٢و، ورقم القطعة، والمخطط، وتفاصيل الشوارع. في الطلبات لا تعتبر 900 سعرًا إذا كان السياق يدل على أنها مساحة 900 متر. أعد JSON فقط.'
       },
       {
         role: 'user',
@@ -646,9 +690,12 @@ async function analyzeWithOpenAI({ grouped, payload, conversationTitle, retentio
                 neighborhood: 'string',
                 plan: 'string',
                 part: 'string',
+                plotNumber: 'string',
+                streetDetails: ['string'],
                 area: 0,
                 price: 0,
                 direct: true,
+                exclusiveAgent: true,
                 description: 'string'
               },
               request: {
@@ -657,6 +704,8 @@ async function analyzeWithOpenAI({ grouped, payload, conversationTitle, retentio
                 neighborhood: 'string',
                 plan: 'string',
                 part: 'string',
+                plotNumber: 'string',
+                streetDetails: ['string'],
                 budgetMax: 0,
                 areaMin: 0,
                 areaMax: 0,
@@ -706,9 +755,12 @@ function normalizeListing(listing = {}) {
     neighborhood: String(listing.neighborhood || '').trim(),
     plan: String(listing.plan || '').trim(),
     part: String(listing.part || '').trim(),
+    plotNumber: String(listing.plotNumber || '').trim(),
+    streetDetails: Array.isArray(listing.streetDetails) ? listing.streetDetails.filter(Boolean) : [],
     area: toNullableNumber(listing.area),
     price: toNullableNumber(listing.price),
     direct: !!listing.direct,
+    exclusiveAgent: !!listing.exclusiveAgent,
     description: String(listing.description || '').trim(),
   };
 }
@@ -720,6 +772,8 @@ function normalizeRequest(request = {}, source = {}) {
     neighborhood: String(request.neighborhood || '').trim(),
     plan: String(request.plan || '').trim(),
     part: String(request.part || '').trim(),
+    plotNumber: String(request.plotNumber || '').trim(),
+    streetDetails: Array.isArray(request.streetDetails) ? request.streetDetails.filter(Boolean) : [],
     budgetMax: toNullableNumber(request.budgetMax),
     areaMin: toNullableNumber(request.areaMin),
     areaMax: toNullableNumber(request.areaMax),
@@ -792,8 +846,8 @@ function scoreConfidence({ propertyType, hasLocation, price, area, phone, direct
   if (propertyType) score += 0.14;
   if (hasLocation) score += 0.14;
   if (price) score += 0.12;
-  if (area) score += 0.08;
-  if (phone) score += 0.04;
+  if (area) score += 0.1;
+  if (phone) score += 0.08;
   if (direct) score += 0.08;
   if (kind === 'request' && /مطلوب|زبون|عميل/.test(text)) score += 0.08;
   if (kind === 'listing' && /للبيع|للإيجار|للايجار|مباشر من المالك|وكيل إفراغ|مباشر/.test(text)) score += 0.08;
@@ -807,14 +861,20 @@ function buildPriorityScore({ direct, confidence, soldLike }) {
   return clamp(score, 0, 120);
 }
 
-function buildListingTitle(propertyType, neighborhood, part) {
+function buildListingTitle(propertyType, neighborhood, part, schemeName) {
   const type = propertyType || 'عرض عقاري';
-  const place = [neighborhood, part].filter(Boolean).join(' ');
+  const place = [neighborhood, schemeName, part].filter(Boolean).join(' — ');
   return place ? `${type} ${place}` : type;
 }
 
 function buildListingSummary(listing) {
-  const place = [listing.neighborhood, listing.plan, listing.part].filter(Boolean).join(' — ');
+  const place = [
+    listing.neighborhood,
+    listing.plan,
+    listing.part ? `جزء ${listing.part}` : '',
+    listing.plotNumber ? `قطعة ${listing.plotNumber}` : '',
+  ].filter(Boolean).join(' — ');
+
   const details = [
     listing.propertyType,
     place,
@@ -822,14 +882,26 @@ function buildListingSummary(listing) {
     listing.area ? `${listing.area}م` : '',
     listing.direct ? 'مباشر' : '',
   ].filter(Boolean).join(' — ');
+
   return details || 'عرض عقاري داخلي واضح';
 }
 
 function buildRequestSummary(request) {
-  const place = [request.neighborhood, request.plan, request.part].filter(Boolean).join(' — ');
-  const details = ['طلب', request.propertyType, place, request.budgetMax ? `${request.budgetMax}` : '']
-    .filter(Boolean)
-    .join(' — ');
+  const place = [
+    request.neighborhood,
+    request.plan,
+    request.part ? `جزء ${request.part}` : '',
+    request.plotNumber ? `قطعة ${request.plotNumber}` : '',
+  ].filter(Boolean).join(' — ');
+
+  const details = [
+    'طلب',
+    request.propertyType,
+    place,
+    request.areaMin ? `${request.areaMin}م` : '',
+    request.budgetMax ? `${request.budgetMax}` : '',
+  ].filter(Boolean).join(' — ');
+
   return details;
 }
 
@@ -842,6 +914,7 @@ function buildDuplicateKey({ recordType, listing, request, source }) {
       normalizeKey(listing?.neighborhood),
       normalizeKey(listing?.plan),
       normalizeKey(listing?.part),
+      normalizeKey(listing?.plotNumber),
       normalizeNumeric(listing?.area),
       normalizeNumeric(listing?.price),
       normalizePhone(source?.contactPhone),
@@ -857,6 +930,7 @@ function buildDuplicateKey({ recordType, listing, request, source }) {
       normalizeKey(request?.neighborhood),
       normalizeKey(request?.plan),
       normalizeKey(request?.part),
+      normalizeKey(request?.plotNumber),
       normalizeNumeric(request?.budgetMax),
       normalizeNumeric(request?.areaMin),
       normalizeNumeric(request?.areaMax),
@@ -888,14 +962,53 @@ function extractNeighborhood(text) {
   return KNOWN_NEIGHBORHOODS.find((item) => text.includes(item)) || '';
 }
 
-function extractPart(text) {
-  const match = text.match(/\b([12][أ-يa-zA-Z]?[^\s،,.]{0,2})\b/u);
-  return match ? match[1] : '';
+function extractSchemeName(text) {
+  const schemeMatch =
+    text.match(/(?:مخطط)\s*([0-9٠-٩]+)\s*([أ-يa-zA-Z])?/u) ||
+    text.match(/(?:مخطط)\s+([^\n،.]+)/u);
+
+  if (!schemeMatch) return '';
+
+  const base = String(schemeMatch[1] || '').trim();
+  const suffix = String(schemeMatch[2] || '').trim();
+
+  if (base && /^[0-9٠-٩]+$/.test(base)) {
+    return suffix ? `${toWesternDigits(base)}${suffix}` : toWesternDigits(base);
+  }
+
+  return String(schemeMatch[1] || '').trim().slice(0, 60);
 }
 
-function extractPlan(text) {
-  const match = text.match(/(?:مخطط|حي)\s+([^\n،.]+)/u);
-  return match ? String(match[1] || '').trim().slice(0, 60) : '';
+function extractPart(text) {
+  const match =
+    text.match(/(?:جزء|الجزء)\s*([0-9٠-٩]+)\s*([أ-يa-zA-Z])/u) ||
+    text.match(/(?:جزء|الجزء)\s*([0-9٠-٩]+[أ-يa-zA-Z])/u);
+
+  if (!match) return '';
+
+  if (match[2]) {
+    return `${toWesternDigits(match[1])}${String(match[2]).trim()}`;
+  }
+
+  return String(match[1] || '').trim();
+}
+
+function extractPlotNumber(text) {
+  const match =
+    text.match(/(?:رقم\s*القطعة|القطعة|قطعة)\s*[:\-]?\s*([0-9٠-٩]+)/u);
+
+  return match ? toWesternDigits(match[1]) : '';
+}
+
+function extractStreetDetails(text) {
+  const matches = [...String(text || '').matchAll(/شارع\s*([0-9٠-٩]+)\s*(شمالي|جنوبي|شرقي|غربي)?/gu)];
+  const streets = matches.map((m) => {
+    const number = toWesternDigits(m[1] || '');
+    const dir = String(m[2] || '').trim();
+    return `شارع ${number}${dir ? ` ${dir}` : ''}`.trim();
+  });
+
+  return Array.from(new Set(streets)).filter(Boolean);
 }
 
 function extractArea(text) {
@@ -903,40 +1016,122 @@ function extractArea(text) {
   const match =
     normalized.match(/(?:مساحة|المساحة|المساحه|متر|م٢|م2|م²)\s*[:\-]?\s*(\d{2,5})/i) ||
     normalized.match(/(\d{2,5})\s*(?:متر|م٢|م2|م²)/i);
+
   return match ? Number(match[1]) : null;
 }
 
 function extractPrice(text) {
   const normalized = replaceArabicDigits(text);
-  const match = normalized.match(
-    /(?:السعر|مطلوب|الحد|حده|حدها|الصافي|بحدود)?\s*[:\-]?\s*(\d{2,7})\s*(مليون|الف|ألف)?/i
-  );
+  const explicit =
+    normalized.match(/(?:السعر|مطلوب|الحد|حده|حدها|الصافي|بحدود)\s*[:\-]?\s*(\d{2,7})\s*(مليون|الف|ألف)?/i);
 
-  if (!match) return null;
+  if (!explicit) return null;
 
-  let value = Number(match[1]);
+  let value = Number(explicit[1]);
   if (!Number.isFinite(value) || value <= 0) return null;
 
-  if (match[2] && /مليون/.test(match[2])) value *= 1000000;
-  else if (match[2] && /الف|ألف/.test(match[2])) value *= 1000;
+  if (explicit[2] && /مليون/.test(explicit[2])) value *= 1000000;
+  else if (explicit[2] && /الف|ألف/.test(explicit[2])) value *= 1000;
 
   return value;
 }
 
+function inferRequestBudget(text) {
+  const normalized = replaceArabicDigits(text);
+
+  const budgetMatch =
+    normalized.match(/(?:ميزانية|الميزانية|حده|حدها|بحدود|سعر|بمبلغ|المبلغ)\s*[:\-]?\s*(\d{2,7})\s*(مليون|الف|ألف)?/i) ||
+    normalized.match(/(\d{2,7})\s*(مليون|الف|ألف)\b/i);
+
+  if (!budgetMatch) return null;
+
+  let value = Number(budgetMatch[1]);
+  if (!Number.isFinite(value) || value <= 0) return null;
+
+  if (budgetMatch[2] && /مليون/.test(budgetMatch[2])) value *= 1000000;
+  else if (budgetMatch[2] && /الف|ألف/.test(budgetMatch[2])) value *= 1000;
+
+  return value;
+}
+
+function inferRequestArea(text, propertyType) {
+  const explicitArea = extractArea(text);
+  if (explicitArea) return explicitArea;
+
+  const normalized = replaceArabicDigits(text);
+
+  if (/مطلوب|ابغى|أبغى|احتاج|أحتاج|عميل|زبون/.test(normalized) && /ارض|أرض/.test(normalized)) {
+    const standalone = normalized.match(/\b(\d{3,4})\b/);
+    if (standalone) {
+      const value = Number(standalone[1]);
+      if (value >= 100 && value <= 5000) return value;
+    }
+  }
+
+  if (String(propertyType || '') === 'أرض') {
+    const standalone = normalized.match(/\b(\d{3,4})\b/);
+    if (standalone) {
+      const value = Number(standalone[1]);
+      if (value >= 100 && value <= 5000 && !/الف|ألف|مليون/.test(normalized)) return value;
+    }
+  }
+
+  return null;
+}
+
 function extractPhone(text) {
   const normalized = replaceArabicDigits(text);
-  const match = normalized.match(/(?:\+966|00966|966|0)?5\d{8}/);
-  if (!match) return '';
+  const matches = [...normalized.matchAll(/(?:\+966|00966|966|0)?5\d{8}/g)];
+  if (!matches.length) return '';
 
-  let digits = match[0].replace(/\D/g, '');
+  const last = matches[matches.length - 1][0];
+  let digits = last.replace(/\D/g, '');
+
   if (digits.startsWith('966')) digits = `0${digits.slice(3)}`;
   if (digits.length === 9 && digits.startsWith('5')) digits = `0${digits}`;
 
   return digits;
 }
 
+function extractPhoneFromNearbyGroups(group, grouped = []) {
+  const idx = grouped.findIndex((g) => g === group || g?.rawText === group?.rawText || g?.text === group?.text);
+  if (idx === -1) return '';
+
+  const start = Math.max(0, idx - 2);
+  const end = Math.min(grouped.length - 1, idx + 2);
+
+  for (let i = start; i <= end; i += 1) {
+    const phone = extractPhone(grouped[i]?.text || '');
+    if (phone) return phone;
+  }
+
+  return '';
+}
+
 function isDirectOffer(text) {
   return /(?:^|\s)مباشر(?:\s|$)|مباشرة|مباشر من المالك|مباشره من المالك|المالك مباشر|زبون مباشر|من المالك/u.test(text);
+}
+
+function buildListingDescription(text, streetDetails, plotNumber, schemeName, exclusiveAgent) {
+  const extra = [];
+
+  if (plotNumber) extra.push(`رقم القطعة: ${plotNumber}`);
+  if (schemeName) extra.push(`المخطط: ${schemeName}`);
+  if (streetDetails?.length) extra.push(`الشوارع: ${streetDetails.join(' + ')}`);
+  if (exclusiveAgent) extra.push('وكيل حصري');
+
+  return [text.slice(0, 1200), ...extra].filter(Boolean).join(' | ');
+}
+
+function buildRequestNote(text, schemeName, plotNumber, streetDetails, exclusiveAgent) {
+  const extra = [];
+
+  if (schemeName) extra.push(`المخطط: ${schemeName}`);
+  if (plotNumber) extra.push(`القطعة: ${plotNumber}`);
+  if (streetDetails?.length) extra.push(`الشوارع: ${streetDetails.join(' + ')}`);
+  if (exclusiveAgent) extra.push('وكيل حصري');
+
+  return [text.slice(0, 1200), ...extra].filter(Boolean).join(' | ');
 }
 
 function isPureFollowup(text) {
@@ -985,6 +1180,10 @@ function stripBidi(text) {
 
 function replaceArabicDigits(text) {
   return String(text || '').replace(/[٠-٩]/g, (d) => '٠١٢٣٤٥٦٧٨٩'.indexOf(d));
+}
+
+function toWesternDigits(text) {
+  return replaceArabicDigits(String(text || ''));
 }
 
 function tokenize(text) {
