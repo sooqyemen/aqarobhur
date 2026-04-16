@@ -5,29 +5,58 @@ import { formatPriceSAR } from '@/lib/format';
 
 const FILTERS = [
   { value: 'all', label: 'الكل', icon: 'apps' },
+  { value: 'internal_ready', label: 'جاهز داخليًا', icon: 'inventory_2' },
   { value: 'needs_review', label: 'للمراجعة', icon: 'rule' },
-  { value: 'auto_saved', label: 'تم الحفظ', icon: 'verified' },
+  { value: 'expired', label: 'منتهي', icon: 'event_busy' },
+  { value: 'sold', label: 'مباع/محجوز', icon: 'sell' },
   { value: 'possible_duplicate', label: 'مكرر محتمل', icon: 'content_copy' },
   { value: 'ignored', label: 'متجاهل', icon: 'block' },
 ];
 
-export default function ExtractionReviewTable({ items = [], onApprove, onIgnore, onDelete, onBulkDelete, onRefresh }) {
+export default function ExtractionReviewTable({
+  items = [],
+  onApprove,
+  onIgnore,
+  onDelete,
+  onBulkDelete,
+  onRefresh,
+}) {
   const [activeFilter, setActiveFilter] = useState('all');
   const [busyId, setBusyId] = useState('');
   const [message, setMessage] = useState('');
   const [selectedIds, setSelectedIds] = useState([]);
 
-  const filtered = useMemo(() => {
-    if (activeFilter === 'all') return items;
-    return items.filter((item) => String(item.extractionStatus || '') === activeFilter);
-  }, [activeFilter, items]);
+  const sortedItems = useMemo(() => {
+    const safe = Array.isArray(items) ? [...items] : [];
+    return safe.sort((a, b) => {
+      const priorityDiff = Number(b.priorityScore || 0) - Number(a.priorityScore || 0);
+      if (priorityDiff !== 0) return priorityDiff;
+      return toMillis(b.updatedAt || b.createdAt) - toMillis(a.updatedAt || a.createdAt);
+    });
+  }, [items]);
 
-  const filteredIds = useMemo(() => filtered.map((item) => item.id).filter(Boolean), [filtered]);
-  const selectedInFilter = useMemo(() => selectedIds.filter((id) => filteredIds.includes(id)), [selectedIds, filteredIds]);
-  const allInFilterSelected = filteredIds.length > 0 && selectedInFilter.length === filteredIds.length;
+  const filtered = useMemo(() => {
+    if (activeFilter === 'all') return sortedItems;
+    return sortedItems.filter((item) => String(item.extractionStatus || '') === activeFilter);
+  }, [activeFilter, sortedItems]);
+
+  const filteredIds = useMemo(
+    () => filtered.map((item) => item.id).filter(Boolean),
+    [filtered]
+  );
+
+  const selectedInFilter = useMemo(
+    () => selectedIds.filter((id) => filteredIds.includes(id)),
+    [selectedIds, filteredIds]
+  );
+
+  const allInFilterSelected =
+    filteredIds.length > 0 && selectedInFilter.length === filteredIds.length;
 
   useEffect(() => {
-    setSelectedIds((current) => current.filter((id) => items.some((item) => item.id === id)));
+    setSelectedIds((current) =>
+      current.filter((id) => items.some((item) => item.id === id))
+    );
   }, [items]);
 
   useEffect(() => {
@@ -41,7 +70,7 @@ export default function ExtractionReviewTable({ items = [], onApprove, onIgnore,
     setBusyId(item.id || item.summary);
     try {
       await onApprove?.(item);
-      setMessage('تم اعتماد العنصر ونشره بنجاح.');
+      setMessage('تم اعتماد العنصر داخليًا بنجاح.');
       onRefresh?.();
     } catch (err) {
       setMessage(err?.message || 'تعذر اعتماد العنصر. حاول مرة أخرى.');
@@ -95,7 +124,7 @@ export default function ExtractionReviewTable({ items = [], onApprove, onIgnore,
       setSelectedIds([]);
       setMessage(`تم حذف ${selectedItems.length} عنصر بنجاح.`);
       onRefresh?.();
-    } catch (err) {
+    } catch {
       setMessage('حدث خطأ أثناء الحذف الجماعي.');
     } finally {
       setBusyId('');
@@ -104,7 +133,11 @@ export default function ExtractionReviewTable({ items = [], onApprove, onIgnore,
 
   function toggleOne(id) {
     if (!id) return;
-    setSelectedIds((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]));
+    setSelectedIds((current) =>
+      current.includes(id)
+        ? current.filter((item) => item !== id)
+        : [...current, id]
+    );
   }
 
   function toggleSelectAllInFilter() {
@@ -118,21 +151,24 @@ export default function ExtractionReviewTable({ items = [], onApprove, onIgnore,
 
   return (
     <>
-      <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined" rel="stylesheet" />
-      
+      <link
+        href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined"
+        rel="stylesheet"
+      />
+
       <div className="tableContainer">
         <div className="tableHeader">
           <div className="headerText">
-            <h3>نتائج معالجة الذكاء الاصطناعي</h3>
-            <p>راجع البيانات المستخرجة، واعتمد الصالح منها أو احذف المكرر.</p>
+            <h3>نتائج معالجة الوارد الذكي</h3>
+            <p>هذه العروض داخلية فقط، وتُستخدم لخدمة العملاء والبحث الداخلي دون نشرها للعامة.</p>
           </div>
-          
+
           <div className="filtersWrap">
             {FILTERS.map((item) => (
-              <button 
-                key={item.value} 
-                type="button" 
-                onClick={() => setActiveFilter(item.value)} 
+              <button
+                key={item.value}
+                type="button"
+                onClick={() => setActiveFilter(item.value)}
                 className={`filterBtn ${activeFilter === item.value ? 'active' : ''}`}
               >
                 <span className="material-icons-outlined">{item.icon}</span>
@@ -143,106 +179,263 @@ export default function ExtractionReviewTable({ items = [], onApprove, onIgnore,
         </div>
 
         {message && (
-          <div className={`alert ${message.includes('تعذر') || message.includes('خطأ') ? 'alertError' : 'alertSuccess'}`}>
-             <span className="material-icons-outlined">{message.includes('تعذر') || message.includes('خطأ') ? 'error' : 'check_circle'}</span>
-             {message}
+          <div
+            className={`alert ${
+              message.includes('تعذر') || message.includes('خطأ')
+                ? 'alertError'
+                : 'alertSuccess'
+            }`}
+          >
+            <span className="material-icons-outlined">
+              {message.includes('تعذر') || message.includes('خطأ')
+                ? 'error'
+                : 'check_circle'}
+            </span>
+            {message}
           </div>
         )}
 
         <div className={`bulkActionsBar ${selectedInFilter.length > 0 ? 'active' : ''}`}>
           <label className="checkboxLabel">
-            <input type="checkbox" checked={allInFilterSelected} onChange={toggleSelectAllInFilter} disabled={!filteredIds.length || bulkBusy} />
+            <input
+              type="checkbox"
+              checked={allInFilterSelected}
+              onChange={toggleSelectAllInFilter}
+              disabled={!filteredIds.length || bulkBusy}
+            />
             <span className="checkmark"></span>
-            <span className="chkText">تحديد كل نتائج ({activeFilter === 'all' ? 'الكل' : FILTERS.find(f => f.value === activeFilter)?.label})</span>
+            <span className="chkText">
+              تحديد كل نتائج ({activeFilter === 'all' ? 'الكل' : FILTERS.find((f) => f.value === activeFilter)?.label})
+            </span>
           </label>
-          
+
           <div className="bulkTools">
-            {selectedInFilter.length > 0 && <span className="selectedCount">تم تحديد: <strong>{selectedInFilter.length}</strong></span>}
-            <button type="button" className="btnDangerBulk" disabled={!selectedInFilter.length || bulkBusy} onClick={handleBulkDelete}>
-              <span className="material-icons-outlined">{bulkBusy ? 'autorenew' : 'delete_sweep'}</span>
+            {selectedInFilter.length > 0 && (
+              <span className="selectedCount">
+                تم تحديد: <strong>{selectedInFilter.length}</strong>
+              </span>
+            )}
+            <button
+              type="button"
+              className="btnDangerBulk"
+              disabled={!selectedInFilter.length || bulkBusy}
+              onClick={handleBulkDelete}
+            >
+              <span className="material-icons-outlined">
+                {bulkBusy ? 'autorenew' : 'delete_sweep'}
+              </span>
               {bulkBusy ? 'جاري الحذف...' : 'حذف المحدد'}
             </button>
           </div>
         </div>
 
         <div className="resultsList">
-          {filtered.length > 0 ? filtered.map((item) => {
-            const listing = item.listing || {};
-            const request = item.request || {};
-            const isRequest = item.recordType === 'request';
-            const busy = bulkBusy || busyId === (item.id || item.summary);
-            const checked = selectedIds.includes(item.id);
-            const confidenceScore = Math.round(Number(item.confidence || 0) * 100);
+          {filtered.length > 0 ? (
+            filtered.map((item) => {
+              const listing = item.listing || {};
+              const request = item.request || {};
+              const isRequest = item.recordType === 'request';
+              const busy = bulkBusy || busyId === (item.id || item.summary);
+              const checked = selectedIds.includes(item.id);
+              const confidenceScore = Math.round(Number(item.confidence || 0) * 100);
+              const priorityScore = Number(item.priorityScore || 0);
+              const contactName = item.source?.contactName || request.name || 'مجهول';
+              const contactPhone = item.source?.contactPhone || request.phone || '';
+              const isDirect = !!listing.direct;
+              const isExpired = item.extractionStatus === 'expired';
+              const isSold = item.extractionStatus === 'sold';
 
-            return (
-              <div key={item.id || `${item.recordType}-${item.summary}`} className={`resultCard ${checked ? 'selected' : ''}`}>
-                
-                <div className="cardTop">
-                  <label className="checkboxLabel">
-                    <input type="checkbox" checked={checked} onChange={() => toggleOne(item.id)} disabled={busy} />
-                    <span className="checkmark"></span>
-                  </label>
-                  
-                  <div className="metaBadges">
-                    <Badge text={isRequest ? 'طلب عقاري' : item.recordType === 'listing' ? 'عرض عقاري' : 'غير مصنف'} kind={isRequest ? 'green' : 'blue'} icon={isRequest ? 'support_agent' : 'real_estate_agent'} />
-                    <Badge text={statusLabel(item.extractionStatus)} kind={statusKind(item.extractionStatus)} />
-                    <Badge text={`دقة الذكاء: ${confidenceScore}%`} kind={confidenceScore > 80 ? 'green' : confidenceScore > 50 ? 'warning' : 'gray'} icon="psychology" />
+              return (
+                <div
+                  key={item.id || `${item.recordType}-${item.summary}`}
+                  className={`resultCard ${checked ? 'selected' : ''}`}
+                >
+                  <div className="cardTop">
+                    <label className="checkboxLabel">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleOne(item.id)}
+                        disabled={busy}
+                      />
+                      <span className="checkmark"></span>
+                    </label>
+
+                    <div className="metaBadges">
+                      <Badge
+                        text={
+                          isRequest
+                            ? 'طلب عقاري'
+                            : item.recordType === 'listing'
+                              ? 'عرض داخلي'
+                              : 'غير مصنف'
+                        }
+                        kind={isRequest ? 'green' : 'blue'}
+                        icon={isRequest ? 'support_agent' : 'real_estate_agent'}
+                      />
+
+                      <Badge
+                        text={statusLabel(item.extractionStatus)}
+                        kind={statusKind(item.extractionStatus)}
+                      />
+
+                      {isDirect ? (
+                        <Badge text="مباشر" kind="gold" icon="bolt" />
+                      ) : null}
+
+                      <Badge
+                        text={`الأولوية: ${priorityScore}`}
+                        kind={priorityScore >= 90 ? 'green' : priorityScore >= 70 ? 'warning' : 'gray'}
+                        icon="priority_high"
+                      />
+
+                      <Badge
+                        text={`دقة الذكاء: ${confidenceScore}%`}
+                        kind={
+                          confidenceScore > 80 ? 'green' : confidenceScore > 50 ? 'warning' : 'gray'
+                        }
+                        icon="psychology"
+                      />
+                    </div>
                   </div>
-                </div>
 
-                <div className="cardSummary">{item.summary || 'بدون ملخص'}</div>
-                {item.reason && <div className="cardReason"><span className="material-icons-outlined">info</span> {item.reason}</div>}
+                  <div className="cardSummary">{item.summary || 'بدون ملخص'}</div>
 
-                <div className="infoGrid">
-                  {!isRequest ? (
-                    <>
-                      <Info label="نوع العقار" value={listing.propertyType} />
-                      <Info label="نوع الصفقة" value={listing.dealType === 'rent' ? 'للإيجار' : listing.dealType === 'sale' ? 'للبيع' : listing.dealType} />
-                      <Info label="الموقع" value={[listing.neighborhood, listing.plan, listing.part].filter(Boolean).join(' — ')} />
-                      <Info label="السعر المطلوب" value={listing.price ? formatPriceSAR(listing.price) : 'غير محدد'} highlight />
-                      <Info label="المساحة" value={listing.area ? `${listing.area} م²` : '—'} />
-                      <Info label="المصدر/الرقم" value={`${item.source?.contactName || 'مجهول'} — ${item.source?.contactPhone || ''}`} />
-                    </>
-                  ) : (
-                    <>
-                      <Info label="نوع العقار المطلوب" value={request.propertyType} />
-                      <Info label="نوع الصفقة" value={request.dealType === 'rent' ? 'استئجار' : request.dealType === 'sale' ? 'شراء' : request.dealType} />
-                      <Info label="الحي المفضل" value={[request.neighborhood, request.plan, request.part].filter(Boolean).join(' — ')} />
-                      <Info label="الميزانية" value={request.budgetMax ? formatPriceSAR(request.budgetMax) : 'غير محددة'} highlight />
-                      <Info label="العميل/الرقم" value={`${request.name || item.source?.contactName || 'مجهول'} — ${request.phone || item.source?.contactPhone || ''}`} />
-                      <Info label="النوع" value={request.directClient ? 'مباشر' : 'عن طريق مسوق'} />
-                    </>
+                  {item.reason && (
+                    <div className="cardReason">
+                      <span className="material-icons-outlined">info</span> {item.reason}
+                    </div>
                   )}
-                </div>
 
-                <details className="rawTextDetails">
-                  <summary><span className="material-icons-outlined">receipt_long</span> عرض النص الأصلي للمقارنة</summary>
-                  <pre className="rawTextContent">{item.rawText || 'لا يوجد نص أصلي مرفق.'}</pre>
-                </details>
+                  <div className="infoGrid">
+                    {!isRequest ? (
+                      <>
+                        <Info label="نوع العقار" value={listing.propertyType} />
+                        <Info
+                          label="نوع الصفقة"
+                          value={
+                            listing.dealType === 'rent'
+                              ? 'للإيجار'
+                              : listing.dealType === 'sale'
+                                ? 'للبيع'
+                                : listing.dealType
+                          }
+                        />
+                        <Info
+                          label="الموقع"
+                          value={[listing.neighborhood, listing.plan, listing.part].filter(Boolean).join(' — ')}
+                        />
+                        <Info
+                          label="السعر المطلوب"
+                          value={listing.price ? formatPriceSAR(listing.price) : 'غير محدد'}
+                          highlight
+                        />
+                        <Info label="المساحة" value={listing.area ? `${listing.area} م²` : '—'} />
+                        <Info label="اسم الوسيط/المرسل" value={contactName} />
+                        <Info label="رقم الجوال" value={contactPhone || '—'} />
+                        <Info label="الصلاحية حتى" value={formatDate(item.expiresAt)} />
+                        <Info label="تاريخ الرسالة" value={formatDate(item.messageDate)} />
+                      </>
+                    ) : (
+                      <>
+                        <Info label="نوع العقار المطلوب" value={request.propertyType} />
+                        <Info
+                          label="نوع الصفقة"
+                          value={
+                            request.dealType === 'rent'
+                              ? 'استئجار'
+                              : request.dealType === 'sale'
+                                ? 'شراء'
+                                : request.dealType
+                          }
+                        />
+                        <Info
+                          label="الحي المفضل"
+                          value={[request.neighborhood, request.plan, request.part].filter(Boolean).join(' — ')}
+                        />
+                        <Info
+                          label="الميزانية"
+                          value={request.budgetMax ? formatPriceSAR(request.budgetMax) : 'غير محددة'}
+                          highlight
+                        />
+                        <Info label="العميل/المرسل" value={contactName} />
+                        <Info label="رقم الجوال" value={contactPhone || '—'} />
+                        <Info label="تاريخ الرسالة" value={formatDate(item.messageDate)} />
+                      </>
+                    )}
+                  </div>
 
-                <div className="cardActions">
-                  {item.extractionStatus !== 'auto_saved' && item.recordType !== 'ignored' && (
-                    <button type="button" className="btnPrimary" disabled={busy} onClick={() => handleApprove(item)}>
-                       <span className="material-icons-outlined">check_circle</span>
-                       {busyId === (item.id || item.summary) ? 'جاري الاعتماد...' : isRequest ? 'اعتماد الطلب' : 'اعتماد ونشر العرض'}
+                  <details className="rawTextDetails">
+                    <summary>
+                      <span className="material-icons-outlined">receipt_long</span>
+                      عرض النص الأصلي للمقارنة
+                    </summary>
+                    <pre className="rawTextContent">{item.rawText || 'لا يوجد نص أصلي مرفق.'}</pre>
+                  </details>
+
+                  <div className="cardActions">
+                    {item.extractionStatus !== 'internal_ready' &&
+                    item.extractionStatus !== 'ignored' &&
+                    item.extractionStatus !== 'expired' &&
+                    item.extractionStatus !== 'sold' ? (
+                      <button
+                        type="button"
+                        className="btnPrimary"
+                        disabled={busy}
+                        onClick={() => handleApprove(item)}
+                      >
+                        <span className="material-icons-outlined">check_circle</span>
+                        {busyId === (item.id || item.summary)
+                          ? 'جاري الاعتماد...'
+                          : isRequest
+                            ? 'اعتماد الطلب'
+                            : 'اعتماد داخلي'}
+                      </button>
+                    ) : null}
+
+                    {item.extractionStatus !== 'ignored' ? (
+                      <button
+                        type="button"
+                        className="btnOutline"
+                        disabled={busy}
+                        onClick={() => handleIgnore(item)}
+                      >
+                        <span className="material-icons-outlined">block</span>
+                        تجاهل
+                      </button>
+                    ) : null}
+
+                    <button
+                      type="button"
+                      className="btnDanger"
+                      disabled={busy}
+                      onClick={() => handleDelete(item)}
+                    >
+                      <span className="material-icons-outlined">delete_forever</span>
+                      حذف نهائي
                     </button>
+                  </div>
+
+                  {(isExpired || isSold) && (
+                    <div className="noticeBar">
+                      <span className="material-icons-outlined">
+                        {isSold ? 'sell' : 'event_busy'}
+                      </span>
+                      {isSold
+                        ? 'هذا العرض غير نشط لأنه مباع أو محجوز.'
+                        : 'هذا العرض منتهي الصلاحية وسيبقى للأرشفة الداخلية فقط.'}
+                    </div>
                   )}
-                  {item.extractionStatus !== 'ignored' && (
-                    <button type="button" className="btnOutline" disabled={busy} onClick={() => handleIgnore(item)}>
-                        <span className="material-icons-outlined">block</span> تجاهل
-                    </button>
-                  )}
-                  <button type="button" className="btnDanger" disabled={busy} onClick={() => handleDelete(item)}>
-                      <span className="material-icons-outlined">delete_forever</span> حذف نهائي
-                  </button>
                 </div>
-              </div>
-            );
-          }) : (
+              );
+            })
+          ) : (
             <div className="emptyState">
-                <span className="material-icons-outlined">filter_list_off</span>
-                <h4>لا توجد بيانات</h4>
-                <p>لا يوجد أي عنصر يطابق التصفية الحالية ({FILTERS.find(f => f.value === activeFilter)?.label}).</p>
+              <span className="material-icons-outlined">filter_list_off</span>
+              <h4>لا توجد بيانات</h4>
+              <p>
+                لا يوجد أي عنصر يطابق التصفية الحالية ({FILTERS.find((f) => f.value === activeFilter)?.label}).
+              </p>
             </div>
           )}
         </div>
@@ -250,11 +443,9 @@ export default function ExtractionReviewTable({ items = [], onApprove, onIgnore,
 
       <style jsx>{`
         .tableContainer { background: white; border-radius: 16px; border: 1px solid #edf2f7; box-shadow: 0 4px 6px rgba(0,0,0,0.02); overflow: hidden; }
-        
         .tableHeader { padding: 20px; border-bottom: 1px solid #edf2f7; display: flex; flex-direction: column; gap: 20px; }
         .headerText h3 { margin: 0 0 5px 0; font-size: 18px; font-weight: 800; color: #1a202c; }
         .headerText p { margin: 0; color: #718096; font-size: 14px; }
-        
         .filtersWrap { display: flex; flex-wrap: wrap; gap: 8px; background: #f7fafc; padding: 6px; border-radius: 12px; border: 1px solid #e2e8f0; width: fit-content; }
         .filterBtn { display: flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 8px; border: none; background: transparent; color: #4a5568; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
         .filterBtn .material-icons-outlined { font-size: 18px; }
@@ -281,7 +472,6 @@ export default function ExtractionReviewTable({ items = [], onApprove, onIgnore,
         .chkText { font-size: 14px; font-weight: 600; color: #4a5568; }
 
         .resultsList { display: flex; flex-direction: column; gap: 15px; padding: 20px; background: #f8fafc; }
-        
         .resultCard { background: white; border-radius: 16px; border: 1px solid #e2e8f0; padding: 20px; transition: all 0.2s; box-shadow: 0 2px 4px rgba(0,0,0,0.01); }
         .resultCard:hover { border-color: #cbd5e0; box-shadow: 0 6px 12px rgba(0,0,0,0.03); }
         .resultCard.selected { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary); }
@@ -294,7 +484,7 @@ export default function ExtractionReviewTable({ items = [], onApprove, onIgnore,
         .cardReason .material-icons-outlined { font-size: 16px; }
 
         .infoGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; margin-bottom: 15px; }
-        
+
         .rawTextDetails { background: #fcfcfd; border: 1px solid #edf2f7; border-radius: 12px; overflow: hidden; transition: all 0.3s; }
         .rawTextDetails summary { padding: 12px 15px; display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700; color: #4a5568; cursor: pointer; list-style: none; user-select: none; }
         .rawTextDetails summary::-webkit-details-marker { display: none; }
@@ -311,12 +501,16 @@ export default function ExtractionReviewTable({ items = [], onApprove, onIgnore,
         .btnDanger:hover:not(:disabled) { background: #fff5f5; border-color: #feb2b2; }
         .cardActions button:disabled { opacity: 0.6; cursor: not-allowed; }
 
+        .noticeBar { margin-top: 14px; display: flex; align-items: center; gap: 8px; background: #f7fafc; color: #4a5568; border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px 12px; font-size: 13px; font-weight: 700; }
         .emptyState { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 60px 20px; color: #718096; text-align: center; }
         .emptyState .material-icons-outlined { font-size: 48px; color: #cbd5e0; margin-bottom: 15px; }
         .emptyState h4 { margin: 0 0 5px 0; font-size: 18px; color: #2d3748; }
         .emptyState p { margin: 0; font-size: 14px; }
-        
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(-10px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
       `}</style>
     </>
   );
@@ -344,16 +538,34 @@ function Badge({ text, kind = 'gray', icon }) {
     green: { bg: '#f0fff4', text: '#2f855a', border: '#c6f6d5' },
     red: { bg: '#fff5f5', text: '#c53030', border: '#fed7d7' },
     warning: { bg: '#fffff0', text: '#b7791f', border: '#fef08a' },
-    gray: { bg: '#f7fafc', text: '#4a5568', border: '#e2e8f0' }
+    gray: { bg: '#f7fafc', text: '#4a5568', border: '#e2e8f0' },
+    gold: { bg: '#fffaf0', text: '#b7791f', border: '#f6e05e' },
   };
   const theme = styles[kind] || styles.gray;
 
   return (
-    <div className="badgeItem" style={{ background: theme.bg, color: theme.text, borderColor: theme.border }}>
-      {icon && <span className="material-icons-outlined" style={{ fontSize: '14px' }}>{icon}</span>}
+    <div
+      className="badgeItem"
+      style={{ background: theme.bg, color: theme.text, borderColor: theme.border }}
+    >
+      {icon ? (
+        <span className="material-icons-outlined" style={{ fontSize: '14px' }}>
+          {icon}
+        </span>
+      ) : null}
       {text}
       <style jsx>{`
-        .badgeItem { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 8px; font-size: 12px; font-weight: 700; border: 1px solid; white-space: nowrap; }
+        .badgeItem {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          padding: 4px 10px;
+          border-radius: 8px;
+          font-size: 12px;
+          font-weight: 700;
+          border: 1px solid;
+          white-space: nowrap;
+        }
       `}</style>
     </div>
   );
@@ -361,20 +573,45 @@ function Badge({ text, kind = 'gray', icon }) {
 
 function statusLabel(value) {
   switch (value) {
-    case 'auto_saved': return 'تم الحفظ التلقائي';
-    case 'needs_review': return 'يحتاج مراجعة بشرية';
-    case 'possible_duplicate': return 'تنبيه: مكرر محتمل';
-    case 'ignored': return 'مستبعد / متجاهل';
+    case 'internal_ready': return 'جاهز داخليًا';
+    case 'needs_review': return 'يحتاج مراجعة';
+    case 'possible_duplicate': return 'مكرر محتمل';
+    case 'ignored': return 'متجاهل';
+    case 'expired': return 'منتهي';
+    case 'sold': return 'مباع/محجوز';
     default: return value || 'غير معروف';
   }
 }
 
 function statusKind(value) {
   switch (value) {
-    case 'auto_saved': return 'green';
+    case 'internal_ready': return 'green';
     case 'needs_review': return 'blue';
-    case 'possible_duplicate': return 'red';
+    case 'possible_duplicate': return 'warning';
     case 'ignored': return 'gray';
+    case 'expired': return 'red';
+    case 'sold': return 'red';
     default: return 'gray';
   }
+}
+
+function formatDate(value) {
+  if (!value) return '—';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  return new Intl.DateTimeFormat('ar-SA', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  }).format(date);
+}
+
+function toMillis(v) {
+  try {
+    if (!v) return 0;
+    if (typeof v.toMillis === 'function') return v.toMillis();
+    if (v instanceof Date) return v.getTime();
+    if (typeof v === 'number') return v;
+  } catch (_) {}
+  return 0;
 }
