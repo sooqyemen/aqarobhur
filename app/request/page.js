@@ -2,7 +2,6 @@
 
 import { useMemo, useState } from 'react';
 import { buildWhatsAppLink } from '@/components/WhatsAppBar';
-import { createRequest } from '@/lib/listings';
 import { NEIGHBORHOODS } from '@/lib/taxonomy';
 import { formatPriceSAR } from '@/lib/format';
 import PageHeader from '@/components/PageHeader';
@@ -124,21 +123,31 @@ export default function RequestPage() {
 
     setBusy(true);
     try {
-      await createRequest({
-        dealType: formData.dealType,
-        propertyType: formData.propertyType,
-        neighborhood: formData.neighborhood || '',
-        budgetMin: formData.budgetMin ? Number(formData.budgetMin) : null,
-        budgetMax: formData.budgetMax ? Number(formData.budgetMax) : null,
-        areaMin: formData.areaMin ? Number(formData.areaMin) : null,
-        note: formData.notes || '',
-        name: formData.name || '',
-        phone: formData.phone || '',
-        source: 'web',
-        createdAt: new Date(),
+      const res = await fetch('/api/client-requests', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          dealType: formData.dealType,
+          propertyType: formData.propertyType,
+          neighborhood: formData.neighborhood || '',
+          budgetMin: formData.budgetMin ? Number(formData.budgetMin) : null,
+          budgetMax: formData.budgetMax ? Number(formData.budgetMax) : null,
+          areaMin: formData.areaMin ? Number(formData.areaMin) : null,
+          note: formData.notes || '',
+          name: formData.name || '',
+          phone: formData.phone || '',
+          waText,
+          source: 'web',
+        }),
       });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data?.error || 'تعذر إرسال الطلب الآن.');
+      }
+
       setOk(true);
-      window.open(waLink, '_blank');
+      window.open(data?.whatsappLink || waLink, '_blank');
     } catch {
       setErr('تعذر إرسال الطلب الآن. يرجى المحاولة مرة أخرى.');
     } finally {

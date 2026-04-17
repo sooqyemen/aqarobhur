@@ -6,6 +6,7 @@ import { normalizeSaudiPhone } from '@/lib/contactUtils';
 
 const MAX_CHARS_PER_BATCH = 120000;
 const MAX_BATCHES = 12;
+const MAX_AGE_DAYS = 30;
 
 function toEnglishDigits(str) {
   const arabicNumbers = [/٠/g, /١/g, /٢/g, /٣/g, /٤/g, /٥/g, /٦/g, /٧/g, /٨/g, /٩/g];
@@ -14,59 +15,6 @@ function toEnglishDigits(str) {
     result = result.replace(arabicNumbers[i], i);
   }
   return result;
-}
-
-function filterOldChats(rawText, monthsLimit = 3) {
-  const limitDate = new Date();
-  limitDate.setMonth(limitDate.getMonth() - monthsLimit);
-
-  const lines = String(rawText || '').split('\n');
-  const filteredLines = [];
-  let keepCurrentMessage = true;
-
-  const dateRegex = /^[\u200E\u200F\s\[]*(\d{1,4})[-/.](\d{1,2})[-/.](\d{1,4})/;
-
-  for (const line of lines) {
-    const normalizedLine = toEnglishDigits(line);
-    const match = normalizedLine.match(dateRegex);
-
-    if (match) {
-      const p1 = parseInt(match[1], 10);
-      const p2 = parseInt(match[2], 10);
-      const p3 = parseInt(match[3], 10);
-
-      let year;
-      let month;
-      let day;
-
-      if (p3 > 1000) {
-        year = p3;
-        day = p1;
-        month = p2;
-        if (month > 12) {
-          month = p1;
-          day = p2;
-        }
-      } else if (p1 > 1000) {
-        year = p1;
-        month = p2;
-        day = p3;
-      }
-
-      if (year && month && day) {
-        const msgDate = new Date(year, month - 1, day);
-        if (!Number.isNaN(msgDate.getTime())) {
-          keepCurrentMessage = msgDate >= limitDate;
-        }
-      }
-    }
-
-    if (keepCurrentMessage) {
-      filteredLines.push(line);
-    }
-  }
-
-  return filteredLines.join('\n');
 }
 
 function splitIntoBatches(rawText, maxChars = MAX_CHARS_PER_BATCH, maxBatches = MAX_BATCHES) {
@@ -101,6 +49,77 @@ function splitIntoBatches(rawText, maxChars = MAX_CHARS_PER_BATCH, maxBatches = 
   return batches.filter(Boolean);
 }
 
+function parseHeaderDate(line) {
+  const normalized = toEnglishDigits(String(line || ''));
+  const match = normalized.match(/^[\u200E\u200F\s\[]*(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})/);
+  if (!match) return null;
+
+  let day = Number(match[1]);
+  let month = Number(match[2]);
+  let year = Number(match[3]);
+
+  if (year < 100) year += 2000;
+  if (year >= 1300 && year <= 1600) {
+    const gregorian = islamicToGregorian(year, month, day);
+    year = gregorian.year;
+    month = gregorian.month;
+    day = gregorian.day;
+  }
+
+  const date = new Date(year, month - 1, day);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function islamicToGregorian(year, month, day) {
+  const jd =
+    Math.floor((11 * year + 3) / 30) +
+    354 * year +
+    30 * month -
+    Math.floor((month - 1) / 2) +
+    day +
+    1948440 -
+    386;
+
+  return julianDayToGregorian(jd);
+}
+
+function julianDayToGregorian(jd) {
+  let l = jd + 68569;
+  const n = Math.floor((4 * l) / 146097);
+  l = l - Math.floor((146097 * n + 3) / 4);
+  const i = Math.floor((4000 * (l + 1)) / 1461001);
+  l = l - Math.floor((1461 * i) / 4) + 31;
+  const j = Math.floor((80 * l) / 2447);
+  const day = l - Math.floor((2447 * j) / 80);
+  l = Math.floor(j / 11);
+  const month = j + 2 - 12 * l;
+  const year = 100 * (n - 49) + i + l;
+  return { year, month, day };
+}
+
+function filterOldChats(rawText, maxAgeDays = MAX_AGE_DAYS) {
+  const limitDate = new Date();
+  limitDate.setHours(0, 0, 0, 0);
+  limitDate.setDate(limitDate.getDate() - maxAgeDays);
+
+  const lines = String(rawText || '').split('\n');
+  const filteredLines = [];
+  let keepCurrentMessage = true;
+
+  for (const line of lines) {
+    const msgDate = parseHeaderDate(line);
+    if (msgDate) {
+      keepCurrentMessage = msgDate >= limitDate;
+    }
+
+    if (keepCurrentMessage) {
+      filteredLines.push(line);
+    }
+  }
+
+  return filteredLines.join('\n');
+}
+
 function mergeStats(list = []) {
   return list.reduce(
     (acc, item) => ({
@@ -111,7 +130,7 @@ function mergeStats(list = []) {
       expiredCount: acc.expiredCount + Number(item?.expiredCount || 0),
       soldCount: acc.soldCount + Number(item?.soldCount || 0),
       listingCount: acc.listingCount + Number(item?.listingCount || 0),
-      requestCount: acc.requestCount + Number(item?.requestCount || 0),
+      requestCount: 0,
       directCount: acc.directCount + Number(item?.directCount || 0),
     }),
     {
@@ -159,15 +178,15 @@ export default function PasteMessageBox({ onAnalyze, loading = false }) {
     }
 
     const originalLength = form.rawText.length;
-    const filteredText = filterOldChats(form.rawText, 3);
+    const filteredText = filterOldChats(form.rawText, MAX_AGE_DAYS);
     const filteredLength = filteredText.length;
 
     if (filteredLength < originalLength) {
-      setFilterMessage('تم تنظيف واستبعاد المحادثات الأقدم من 3 أشهر تلقائيًا.');
+      setFilterMessage('تم استبعاد الرسائل الأقدم من 30 يومًا تلقائيًا قبل المعالجة.');
     }
 
     if (!filteredText.trim()) {
-      setLocalError('جميع المحادثات المرفقة أقدم من 3 أشهر. الرجاء رفع محادثات أحدث.');
+      setLocalError('جميع المحادثات المرفقة أقدم من 30 يومًا. الرجاء رفع محادثات أحدث.');
       return;
     }
 
@@ -193,7 +212,7 @@ export default function PasteMessageBox({ onAnalyze, loading = false }) {
       importMode: fileInfo ? 'file' : 'paste',
       fileName: fileInfo,
       fileType: fileInfo ? (fileInfo.toLowerCase().endsWith('.zip') ? 'zip' : 'txt') : 'text',
-      retentionDays: 15,
+      retentionDays: 30,
     };
 
     try {
@@ -287,8 +306,7 @@ export default function PasteMessageBox({ onAnalyze, loading = false }) {
             <div>
               <h3>إدخال المحادثات والملفات</h3>
               <p className="subtitle">
-                قم بلصق محادثات الواتساب أو رفع ملفات TXT و ZIP ليقوم الذكاء الاصطناعي
-                باستخراج العروض والطلبات منها على دفعات.
+                قم بلصق محادثات الواتساب أو رفع ملفات TXT و ZIP ليتم استخراج العروض العقارية الجديدة منها فقط.
               </p>
             </div>
           </div>
@@ -430,7 +448,7 @@ export default function PasteMessageBox({ onAnalyze, loading = false }) {
             ) : (
               <>
                 <span className="material-icons-outlined">auto_awesome</span>
-                استخراج وحفظ البيانات
+                استخراج وحفظ العروض
               </>
             )}
           </button>
@@ -444,266 +462,6 @@ export default function PasteMessageBox({ onAnalyze, loading = false }) {
           onChange={handleFileChange}
         />
       </div>
-
-      <style jsx>{`
-        .inputPanel {
-          background: white;
-          border-radius: 16px;
-          padding: 20px 25px;
-          border: 1px solid #edf2f7;
-          box-shadow: 0 4px 6px rgba(0, 0, 0, 0.02);
-          margin-bottom: 25px;
-        }
-
-        .panelHeader {
-          margin-bottom: 20px;
-          border-bottom: 1px solid #edf2f7;
-          padding-bottom: 15px;
-        }
-
-        .titleWrap {
-          display: flex;
-          align-items: flex-start;
-          gap: 12px;
-        }
-
-        .titleIcon {
-          color: var(--primary);
-          background: rgba(15, 118, 110, 0.1);
-          padding: 10px;
-          border-radius: 12px;
-          font-size: 24px;
-        }
-
-        .titleWrap h3 {
-          margin: 0 0 4px 0;
-          font-size: 18px;
-          font-weight: 800;
-          color: #1a202c;
-        }
-
-        .subtitle {
-          margin: 0;
-          color: #718096;
-          font-size: 14px;
-        }
-
-        .metaGrid {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-          gap: 15px;
-          margin-bottom: 20px;
-        }
-
-        .inputGroup label {
-          display: block;
-          margin-bottom: 6px;
-          color: #4a5568;
-          font-size: 13px;
-          font-weight: 700;
-        }
-
-        .inputWithIcon {
-          position: relative;
-          display: flex;
-          align-items: center;
-        }
-
-        .inputWithIcon .material-icons-outlined {
-          position: absolute;
-          right: 12px;
-          color: #a0aec0;
-          font-size: 18px;
-          pointer-events: none;
-        }
-
-        .inputControl {
-          width: 100%;
-          padding: 10px 40px 10px 12px;
-          border-radius: 10px;
-          border: 1px solid #e2e8f0;
-          font-family: inherit;
-          font-size: 14px;
-          color: #2d3748;
-          background: #fcfcfd;
-          transition: all 0.2s;
-        }
-
-        .inputControl:focus {
-          outline: none;
-          border-color: var(--primary);
-          box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.1);
-          background: white;
-        }
-
-        select.inputControl {
-          appearance: none;
-          background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23A0AEC0%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E');
-          background-repeat: no-repeat;
-          background-position: left 12px center;
-          background-size: 10px auto;
-          padding-left: 30px;
-        }
-
-        .textInputArea {
-          margin-bottom: 20px;
-        }
-
-        .textLabel {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          margin-bottom: 8px;
-          color: #4a5568;
-          font-size: 14px;
-          font-weight: 700;
-        }
-
-        .fileBadge {
-          display: inline-flex;
-          align-items: center;
-          gap: 4px;
-          background: rgba(15, 118, 110, 0.1);
-          color: var(--primary);
-          padding: 4px 10px;
-          border-radius: 8px;
-          font-size: 12px;
-          font-weight: 600;
-        }
-
-        .fileBadge .material-icons-outlined {
-          font-size: 14px;
-        }
-
-        .mainTextarea {
-          width: 100%;
-          min-height: 200px;
-          padding: 15px;
-          border-radius: 12px;
-          border: 1px solid #e2e8f0;
-          resize: vertical;
-          font-family: inherit;
-          font-size: 14px;
-          line-height: 1.8;
-          color: #2d3748;
-          background: #fcfcfd;
-          transition: all 0.2s;
-        }
-
-        .mainTextarea:focus {
-          outline: none;
-          border-color: var(--primary);
-          box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.1);
-          background: white;
-        }
-
-        .mainTextarea:disabled {
-          background: #f7fafc;
-          color: #a0aec0;
-          cursor: not-allowed;
-        }
-
-        .panelFooter {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          flex-wrap: wrap;
-          gap: 15px;
-          padding-top: 15px;
-          border-top: 1px solid #edf2f7;
-        }
-
-        .btnOutline {
-          display: inline-flex;
-          align-items: center;
-          gap: 6px;
-          padding: 10px 16px;
-          border-radius: 10px;
-          border: 1px solid #cbd5e0;
-          background: white;
-          color: #4a5568;
-          font-size: 14px;
-          font-weight: 600;
-          cursor: pointer;
-          transition: all 0.2s;
-        }
-
-        .btnOutline:hover:not(:disabled) {
-          background: #f7fafc;
-          color: #1a202c;
-          border-color: #a0aec0;
-        }
-
-        .btnOutline:disabled {
-          opacity: 0.6;
-          cursor: not-allowed;
-        }
-
-        .btnPrimary {
-          display: inline-flex;
-          align-items: center;
-          gap: 6px;
-          padding: 12px 24px;
-          border-radius: 10px;
-          border: none;
-          background: #1a202c;
-          color: white;
-          font-size: 15px;
-          font-weight: 700;
-          cursor: pointer;
-          transition: background 0.2s;
-        }
-
-        .btnPrimary:hover:not(:disabled) {
-          background: #2d3748;
-        }
-
-        .btnPrimary:disabled {
-          background: #a0aec0;
-          cursor: not-allowed;
-        }
-
-        .alertError,
-        .alertSuccess,
-        .alertInfo {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          padding: 12px;
-          border-radius: 10px;
-          font-size: 14px;
-          font-weight: 600;
-          margin-bottom: 15px;
-        }
-
-        .alertError {
-          color: #c53030;
-          background: #fff5f5;
-          border: 1px solid #fed7d7;
-        }
-
-        .alertSuccess {
-          color: #0f766e;
-          background: #f0fdfa;
-          border: 1px solid #ccfbf1;
-        }
-
-        .alertInfo {
-          color: #1e40af;
-          background: #eff6ff;
-          border: 1px solid #bfdbfe;
-        }
-
-        .spin {
-          animation: spin 1s linear infinite;
-        }
-
-        @keyframes spin {
-          100% {
-            transform: rotate(360deg);
-          }
-        }
-      `}</style>
     </>
   );
 }
