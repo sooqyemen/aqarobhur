@@ -1,7 +1,10 @@
 'use client';
 
 import Link from 'next/link';
+import { useEffect, useMemo, useState } from 'react';
 import { formatPriceSAR, statusBadge } from '@/lib/format';
+
+const VIDEO_EXTENSIONS = ['.mp4', '.mov', '.webm', '.m4v', '.avi', '.mkv', '.ogg', '.m3u8'];
 
 function timeAgoLabel(createdAt) {
   try {
@@ -20,7 +23,62 @@ function timeAgoLabel(createdAt) {
   }
 }
 
+function looksLikeVideo(url = '') {
+  const lower = String(url || '').toLowerCase();
+  return VIDEO_EXTENSIONS.some((ext) => lower.includes(ext));
+}
+
+function normalizeMediaEntry(entry, forcedKind = '') {
+  if (!entry) return null;
+
+  if (typeof entry === 'string') {
+    const url = entry.trim();
+    if (!url) return null;
+    return { url, kind: forcedKind || (looksLikeVideo(url) ? 'video' : 'image') };
+  }
+
+  if (typeof entry !== 'object') return null;
+
+  const url = String(entry.url || entry.src || entry.href || entry.downloadURL || entry.downloadUrl || '').trim();
+  if (!url) return null;
+
+  const rawKind = String(entry.kind || entry.type || entry.mediaType || forcedKind || '').trim().toLowerCase();
+  return { url, kind: rawKind === 'video' || looksLikeVideo(url) ? 'video' : 'image' };
+}
+
+function getListingMedia(item) {
+  const sources = [
+    ...(Array.isArray(item?.imagesMeta) ? item.imagesMeta : []),
+    ...(Array.isArray(item?.images) ? item.images : []),
+    ...(Array.isArray(item?.videos) ? item.videos.map((url) => ({ url, kind: 'video' })) : []),
+    ...(item?.coverImage ? [item.coverImage] : []),
+    ...(item?.image ? [item.image] : []),
+    ...(item?.imageUrl ? [item.imageUrl] : []),
+  ];
+
+  const out = [];
+  const seen = new Set();
+
+  for (const source of sources) {
+    const entry = normalizeMediaEntry(source);
+    const key = String(entry?.url || '').trim();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(entry);
+  }
+
+  return out;
+}
+
 export default function ListingCard({ item, compact = false }) {
+  const [coverFailed, setCoverFailed] = useState(false);
+
+  useEffect(() => {
+    setCoverFailed(false);
+  }, [item?.id, item?.imagesMeta, item?.images, item?.videos]);
+
+  const media = useMemo(() => getListingMedia(item), [item]);
+
   if (!item) return null;
 
   const safeId = item?.id || item?.docId || item?.listingId || item?._id || '';
@@ -36,7 +94,6 @@ export default function ListingCard({ item, compact = false }) {
     dealType,
     propertyType,
     status = 'available',
-    images = [],
     direct = false,
     createdAt,
   } = item;
@@ -44,13 +101,15 @@ export default function ListingCard({ item, compact = false }) {
   const isRent = dealType === 'rent';
   const displayPrice = formatPriceSAR(price);
   const detailLink = safeId ? `/listing/${encodeURIComponent(String(safeId))}` : '#';
-  const mainImage = Array.isArray(images) && images.length ? images[0] : null;
-  const hasMultipleImages = Array.isArray(images) && images.length > 1;
+  const coverEntry = media.find((entry) => entry.kind !== 'video') || media[0] || null;
+  const imageCount = media.filter((entry) => entry.kind !== 'video').length;
+  const hasMultipleImages = imageCount > 1;
   const timeText = timeAgoLabel(createdAt);
-
   const locationParts = [neighborhood, plan, part].filter(Boolean);
   const locationText = locationParts.join(' • ') || city || 'غير محدد';
   const specsText = [propertyType, area ? `${area} م²` : null].filter(Boolean).join(' • ');
+  const showPlaceholder = !coverEntry || coverFailed;
+  const isVideoCover = !showPlaceholder && coverEntry?.kind === 'video';
 
   const CardTag = safeId ? Link : 'article';
   const cardProps = safeId
@@ -62,16 +121,22 @@ export default function ListingCard({ item, compact = false }) {
       <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined" rel="stylesheet" />
 
       <CardTag {...cardProps}>
-        
-        {/* منطقة الصورة العلوية */}
         <div className="cardMedia">
-          {mainImage ? (
-            <img src={mainImage} alt={title} className="mediaImage" loading="lazy" />
-          ) : (
+          {showPlaceholder ? (
             <div className="mediaPlaceholder">
               <span className="material-icons-outlined">image_not_supported</span>
               <span>لا توجد صورة</span>
             </div>
+          ) : isVideoCover ? (
+            <video src={coverEntry.url} className="mediaImage" preload="metadata" muted playsInline />
+          ) : (
+            <img
+              src={coverEntry.url}
+              alt={title}
+              className="mediaImage"
+              loading="lazy"
+              onError={() => setCoverFailed(true)}
+            />
           )}
 
           <div className="mediaOverlays">
@@ -79,23 +144,21 @@ export default function ListingCard({ item, compact = false }) {
             {hasMultipleImages && (
               <div className="imageCountBadge">
                 <span className="material-icons-outlined">photo_library</span>
-                {images.length}
+                {imageCount}
               </div>
             )}
           </div>
-          
-          {/* علامة الإيجار أو البيع */}
+
           <div className={`dealBadge ${isRent ? 'rent' : 'sale'}`}>
-             {isRent ? 'للإيجار' : 'للبيع'}
+            {isRent ? 'للإيجار' : 'للبيع'}
           </div>
         </div>
 
-        {/* محتوى البطاقة */}
         <div className="cardBody">
           <div className="priceRow">
             <div className="priceText">
               {displayPrice}
-              {isRent && <span className="rentSuffix">/ شهري</span>}
+              {isRent && <span className="rentSuffix">/ سنوي</span>}
             </div>
           </div>
 
@@ -114,7 +177,6 @@ export default function ListingCard({ item, compact = false }) {
           )}
         </div>
 
-        {/* تذييل البطاقة */}
         <div className="cardFooter">
           <div className="metaInfo">
             {direct && <span className="directBadge"><span className="material-icons-outlined">verified</span> مباشر</span>}
@@ -146,7 +208,6 @@ export default function ListingCard({ item, compact = false }) {
 
           .listingCard.disabled { cursor: default; opacity: 0.9; }
 
-          /* الصورة ومحتوياتها */
           .cardMedia {
             position: relative;
             aspect-ratio: 16 / 11;
@@ -160,6 +221,8 @@ export default function ListingCard({ item, compact = false }) {
             height: 100%;
             object-fit: cover;
             transition: transform 0.4s ease;
+            display: block;
+            background: #f8fafc;
           }
           .listingCard:hover:not(.disabled) .mediaImage { transform: scale(1.05); }
 
@@ -233,7 +296,6 @@ export default function ListingCard({ item, compact = false }) {
           .dealBadge.sale { background: #3182ce; }
           .dealBadge.rent { background: #dd6b20; }
 
-          /* جسم البطاقة */
           .cardBody { padding: 16px; display: flex; flex-direction: column; gap: 10px; flex-grow: 1; }
           .compact .cardBody { padding: 12px; gap: 8px; }
 
@@ -246,10 +308,9 @@ export default function ListingCard({ item, compact = false }) {
 
           .locationRow, .specsRow { display: flex; align-items: center; gap: 6px; font-size: 13px; color: #4a5568; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
           .locationRow .material-icons-outlined, .specsRow .material-icons-outlined { font-size: 16px; color: #a0aec0; }
-          
+
           .specsRow { background: #f7fafc; padding: 6px 10px; border-radius: 8px; border: 1px solid #edf2f7; font-weight: 600; color: #2d3748; margin-top: 4px; }
 
-          /* تذييل البطاقة */
           .cardFooter { display: flex; justify-content: flex-end; padding: 12px 16px; border-top: 1px dashed #e2e8f0; background: #fcfcfd; margin-top: auto; }
           .compact .cardFooter { padding: 10px 12px; }
 
