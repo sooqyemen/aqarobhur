@@ -13,6 +13,7 @@ function resolveRetentionDays(payload = {}) {
   if (!Number.isFinite(raw)) return DEFAULT_RETENTION_DAYS;
   return clamp(Math.round(raw), 1, 30);
 }
+
 const SOLD_PATTERNS = [
   /تم البيع/i,
   /مباع/i,
@@ -22,8 +23,18 @@ const SOLD_PATTERNS = [
   /تأجر/i,
   /اتأجر/i,
 ];
-const REQUEST_PATTERNS = [/(?:^|\s)(?:مطلوب|أبغى|ابغى|أبحث|ابحث|أحتاج|احتاج)(?:\s|$)/i, /زبون/i, /عميل/i];
-const LISTING_HINT_PATTERNS = [/(?:للبيع|للإيجار|للايجار|أرض|نص\s*أرض|فيلا|شقة|عمارة|دور|محل)/i, /مطلوب\s*\d/i, /مساح(?:ة|ه)/i];
+
+const REQUEST_PATTERNS = [
+  /(?:^|\s)(?:مطلوب|أبغى|ابغى|أبحث|ابحث|أحتاج|احتاج)(?:\s|$)/i,
+  /زبون/i,
+  /عميل/i,
+];
+
+const LISTING_HINT_PATTERNS = [
+  /(?:للبيع|للإيجار|للايجار|أرض|نص\s*أرض|فيلا|شقة|عمارة|دور|محل)/i,
+  /مطلوب\s*\d/i,
+  /مساح(?:ة|ه)/i,
+];
 
 export async function POST(request) {
   try {
@@ -39,18 +50,25 @@ export async function POST(request) {
     const conversationTitle = deriveConversationTitle(payload.fileName || payload.source?.contactName || '');
     const messages = parseWhatsAppMessages(rawText);
     const groups = groupMessages(messages, conversationTitle);
+    const uniqueSenders = [...new Set(messages.map((m) => cleanString(m.sender)).filter(Boolean))];
+    const isGroupChat = uniqueSenders.length > 2;
 
     const analyzedGroups = [];
     const allItems = [];
 
-    for (const group of groups) {
+    for (let index = 0; index < groups.length; index += 1) {
+      const group = groups[index];
       const result = await analyzeGroup({
         group,
+        groupIndex: index,
+        allGroups: groups,
+        isGroupChat,
         payload,
         conversationTitle,
         retentionDays,
         now,
       });
+
       analyzedGroups.push(result);
       if (Array.isArray(result.items)) allItems.push(...result.items);
     }
@@ -79,7 +97,16 @@ export async function POST(request) {
   }
 }
 
-async function analyzeGroup({ group, payload, conversationTitle, retentionDays, now }) {
+async function analyzeGroup({
+  group,
+  groupIndex,
+  allGroups,
+  isGroupChat,
+  payload,
+  conversationTitle,
+  retentionDays,
+  now,
+}) {
   const source = buildSourceFromGroup(group, payload, conversationTitle);
   const groupText = cleanText(group.text);
   const timeMeta = buildTimeMeta(group, retentionDays, now);
@@ -110,7 +137,18 @@ async function analyzeGroup({ group, payload, conversationTitle, retentionDays, 
   }
 
   const items = offers
-    .map((offer) => normalizeOfferToItem({ offer, group, source, timeMeta, aiUsed }))
+    .map((offer) =>
+      normalizeOfferToItem({
+        offer,
+        group,
+        source,
+        timeMeta,
+        aiUsed,
+        isGroupChat,
+        groupIndex,
+        allGroups,
+      })
+    )
     .filter(Boolean);
 
   return { items };
@@ -318,7 +356,20 @@ function extractOfferFromSegment(segment, source) {
   const mapUrl = extractMapUrl(text);
   const direct = isDirect(text);
   const contactPhone = normalizeSaudiPhone(extractPhone(text) || source.contactPhone || '');
-  const confidence = scoreOffer({ propertyType, dealType, neighborhood, plan, part, plotNumber, area, price, streetDetails, direct, mapUrl, contactPhone });
+  const confidence = scoreOffer({
+    propertyType,
+    dealType,
+    neighborhood,
+    plan,
+    part,
+    plotNumber,
+    area,
+    price,
+    streetDetails,
+    direct,
+    mapUrl,
+    contactPhone,
+  });
 
   if (!propertyType && !area && !price && !neighborhood && !plan) return null;
 
@@ -343,7 +394,33 @@ function extractOfferFromSegment(segment, source) {
   };
 }
 
-function normalizeOfferToItem({ offer, group, source, timeMeta, aiUsed }) {
+function extractPhoneFromNearbyGroups(groupIndex, allGroups = []) {
+  const indexes = [groupIndex, groupIndex - 1, groupIndex + 1, groupIndex - 2, groupIndex + 2];
+
+  for (const idx of indexes) {
+    if (idx < 0 || idx >= allGroups.length) continue;
+
+    const candidate = allGroups[idx];
+    const phone =
+      extractPhone(candidate?.text || '') ||
+      extractPhone(candidate?.sender || '');
+
+    if (phone) return phone;
+  }
+
+  return '';
+}
+
+function normalizeOfferToItem({
+  offer,
+  group,
+  source,
+  timeMeta,
+  aiUsed,
+  isGroupChat = false,
+  groupIndex = 0,
+  allGroups = [],
+}) {
   const propertyType = cleanString(offer?.propertyType) || extractPropertyType(offer?.description || group.text) || 'عرض عقاري';
   const dealType = normalizeDealType(offer?.dealType || extractDealType(offer?.description || group.text) || 'sale');
   const neighborhood = normalizeNeighborhoodName(cleanString(offer?.neighborhood)) || extractNeighborhood(offer?.description || '') || '';
@@ -358,7 +435,16 @@ function normalizeOfferToItem({ offer, group, source, timeMeta, aiUsed }) {
   const direct = typeof offer?.direct === 'boolean' ? offer.direct : isDirect(offer?.description || group.text);
   const soldLike = !!offer?.soldLike || SOLD_PATTERNS.some((pattern) => pattern.test(cleanText(offer?.description || group.text)));
   const requestLike = !!offer?.requestLike;
-  const sourcePhone = normalizeSaudiPhone(cleanString(offer?.contactPhone) || source.contactPhone || extractPhone(offer?.description || group.text) || '');
+
+  const sourcePhone = normalizeSaudiPhone(
+    cleanString(offer?.contactPhone) ||
+    source.contactPhone ||
+    extractPhone(offer?.description || group.text) ||
+    extractPhone(group?.sender || '') ||
+    extractPhoneFromNearbyGroups(groupIndex, allGroups) ||
+    ''
+  );
+
   const description = buildDescription({
     text: offer?.description || group.text,
     streetDetails,
@@ -370,8 +456,27 @@ function normalizeOfferToItem({ offer, group, source, timeMeta, aiUsed }) {
   if (!timeMeta.isFresh) return null;
   if (!price && !area && !propertyType && !neighborhood && !plan) return null;
 
+  if (isGroupChat && !sourcePhone) {
+    return null;
+  }
+
   const confidence = clamp(
-    Number.isFinite(Number(offer?.confidence)) ? Number(offer.confidence) : scoreOffer({ propertyType, dealType, neighborhood, plan, part, plotNumber, area, price, streetDetails, direct, mapUrl, contactPhone: sourcePhone }),
+    Number.isFinite(Number(offer?.confidence))
+      ? Number(offer.confidence)
+      : scoreOffer({
+          propertyType,
+          dealType,
+          neighborhood,
+          plan,
+          part,
+          plotNumber,
+          area,
+          price,
+          streetDetails,
+          direct,
+          mapUrl,
+          contactPhone: sourcePhone,
+        }),
     0,
     1,
   );
@@ -398,7 +503,13 @@ function normalizeOfferToItem({ offer, group, source, timeMeta, aiUsed }) {
 
   const duplicateKey = buildDuplicateKey({ listing, sourcePhone, timeMeta });
   const extractionStatus = confidence >= 0.72 ? 'auto_saved' : 'needs_review';
-  const summary = buildSummaryLine({ listing, source: { ...source, contactPhone: sourcePhone } });
+  const summary = buildSummaryLine({
+    listing,
+    source: {
+      ...source,
+      contactPhone: sourcePhone,
+    },
+  });
 
   return {
     recordType: 'listing',
@@ -414,6 +525,7 @@ function normalizeOfferToItem({ offer, group, source, timeMeta, aiUsed }) {
     source: {
       ...source,
       contactPhone: sourcePhone,
+      isGroupChat,
     },
     groupMeta: {
       sender: group.sender || '',
