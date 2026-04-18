@@ -17,9 +17,31 @@ const MAX_FILES = 30;
 // === دوال مساعدة ===
 
 function getListingMedia(item) {
-  if (Array.isArray(item?.imagesMeta) && item.imagesMeta.length > 0) return item.imagesMeta;
-  if (Array.isArray(item?.images) && item.images.length > 0) return item.images.map(url => ({ url, kind: 'image' }));
-  return [];
+  const all = [
+    ...(Array.isArray(item?.imagesMeta) ? item.imagesMeta : []),
+    ...(Array.isArray(item?.images) ? item.images.map((url) => ({ url, kind: 'image' })) : []),
+    ...(Array.isArray(item?.videos) ? item.videos.map((url) => ({ url, kind: 'video' })) : []),
+  ];
+
+  const seen = new Set();
+  return all
+    .map((entry) => {
+      if (!entry) return null;
+      const url = cleanString(entry?.url || entry);
+      if (!url) return null;
+      const kind = isVideo({ ...entry, url }) ? 'video' : 'image';
+      const normalized = {
+        url,
+        refPath: cleanString(entry?.refPath),
+        name: cleanString(entry?.name),
+        kind,
+      };
+      const key = normalized.refPath || normalized.url;
+      if (seen.has(key)) return null;
+      seen.add(key);
+      return normalized;
+    })
+    .filter(Boolean);
 }
 
 function cleanString(value) { return String(value || '').trim(); }
@@ -43,6 +65,15 @@ function mediaEqual(a, b) {
   if (!a || !b) return false;
   if (a.refPath && b.refPath) return a.refPath === b.refPath;
   return a.url === b.url;
+}
+
+
+function splitMediaUrls(media = []) {
+  const entries = Array.isArray(media) ? media.filter((item) => item?.url) : [];
+  return {
+    images: entries.filter((item) => !isVideo(item)).map((item) => item.url),
+    videos: entries.filter((item) => isVideo(item)).map((item) => item.url),
+  };
 }
 
 function mapListingToForm(item) {
@@ -167,12 +198,26 @@ export default function AdminListingEditPage() {
   }, [success, error]);
 
   const syncMediaToDoc = useCallback(async (nextMedia, { message = '' } = {}) => {
+    const normalizedMedia = Array.isArray(nextMedia) ? nextMedia.filter((item) => item?.url) : [];
+    const { images, videos } = splitMediaUrls(normalizedMedia);
+
     await adminUpdateListing(listingId, {
-      imagesMeta: nextMedia,
-      images: nextMedia.map((item) => item.url),
+      imagesMeta: normalizedMedia,
+      images,
+      videos,
     });
-    setMedia(nextMedia);
-    setListing((prev) => (prev ? { ...prev, imagesMeta: nextMedia, images: nextMedia.map((item) => item.url) } : prev));
+
+    setMedia(normalizedMedia);
+    setListing((prev) => (
+      prev
+        ? {
+            ...prev,
+            imagesMeta: normalizedMedia,
+            images,
+            videos,
+          }
+        : prev
+    ));
     setSelectedKeys([]);
     if (message) setSuccess(message);
   }, [listingId]);

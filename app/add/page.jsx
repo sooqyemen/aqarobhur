@@ -775,6 +775,18 @@ export default function AddListingPage() {
     setAuthErr('');
 
     try {
+      const mediaEntries = Array.isArray(uploader.media)
+        ? uploader.media.filter((item) => item?.url)
+        : [];
+      const imageUrls = mediaEntries
+        .filter((item) => String(item?.kind || '').toLowerCase() !== 'video')
+        .map((item) => item.url)
+        .filter(Boolean);
+      const videoUrls = mediaEntries
+        .filter((item) => String(item?.kind || '').toLowerCase() === 'video')
+        .map((item) => item.url)
+        .filter(Boolean);
+
       const payload = {
         dealType: form.dealType || 'sale',
         propertyType: form.propertyType || 'أرض',
@@ -791,9 +803,9 @@ export default function AddListingPage() {
         contactPhone: String(form.contactPhone || '').trim(),
         lat: toNum(form.lat),
         lng: toNum(form.lng),
-        images: uploader.urls.length ? uploader.urls : [],
-        imagesMeta: uploader.media.length ? uploader.media : [],
-        updatedAt: new Date(),
+        imagesMeta: mediaEntries,
+        images: imageUrls,
+        videos: videoUrls,
       };
 
       if (!payload.title) throw new Error('اكتب عنوان الإعلان.');
@@ -807,7 +819,7 @@ export default function AddListingPage() {
     } finally {
       setSaving(false);
     }
-  }, [form, uploader.urls, uploader.media]);
+  }, [form, uploader.media]);
 
   if (firebaseErr) {
     return (
