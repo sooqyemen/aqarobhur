@@ -7,6 +7,12 @@ const DEFAULT_RETENTION_DAYS = 30;
 const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
 
 const KNOWN_NEIGHBORHOODS = [...NEIGHBORHOODS].sort((a, b) => b.length - a.length);
+
+function resolveRetentionDays(payload = {}) {
+  const raw = Number(payload?.retentionDays ?? payload?.maxAgeDays ?? DEFAULT_RETENTION_DAYS);
+  if (!Number.isFinite(raw)) return DEFAULT_RETENTION_DAYS;
+  return clamp(Math.round(raw), 1, 30);
+}
 const SOLD_PATTERNS = [
   /تم البيع/i,
   /مباع/i,
