@@ -216,7 +216,11 @@ export default function ListingCard({ item, compact = false }) {
             border-bottom: 1px solid #edf2f7;
           }
 
+          /* 🔧 ضمان ملء الصورة للمساحة بشكل سليم في كافة المتصفحات */
           .mediaImage {
+            position: absolute;
+            top: 0;
+            left: 0;
             width: 100%;
             height: 100%;
             object-fit: cover;
@@ -224,9 +228,13 @@ export default function ListingCard({ item, compact = false }) {
             display: block;
             background: #f8fafc;
           }
+          
           .listingCard:hover:not(.disabled) .mediaImage { transform: scale(1.05); }
 
           .mediaPlaceholder {
+            position: absolute;
+            top: 0;
+            left: 0;
             width: 100%;
             height: 100%;
             display: flex;
