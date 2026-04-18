@@ -5,7 +5,7 @@ import { formatPriceSAR } from '@/lib/format';
 
 const FILTERS = [
   { value: 'all', label: 'الكل', icon: 'apps' },
-  { value: 'internal_ready', label: 'جاهز داخليًا', icon: 'inventory_2' },
+  { value: 'auto_saved', label: 'محفوظ داخليًا', icon: 'inventory_2' },
   { value: 'needs_review', label: 'للمراجعة', icon: 'rule' },
   { value: 'expired', label: 'منتهي', icon: 'event_busy' },
   { value: 'sold', label: 'مباع/محجوز', icon: 'sell' },
@@ -374,7 +374,7 @@ export default function ExtractionReviewTable({
                   </details>
 
                   <div className="cardActions">
-                    {item.extractionStatus !== 'internal_ready' &&
+                    {item.extractionStatus !== 'auto_saved' &&
                     item.extractionStatus !== 'ignored' &&
                     item.extractionStatus !== 'expired' &&
                     item.extractionStatus !== 'sold' ? (
@@ -573,7 +573,7 @@ function Badge({ text, kind = 'gray', icon }) {
 
 function statusLabel(value) {
   switch (value) {
-    case 'internal_ready': return 'جاهز داخليًا';
+    case 'auto_saved': return 'محفوظ داخليًا';
     case 'needs_review': return 'يحتاج مراجعة';
     case 'possible_duplicate': return 'مكرر محتمل';
     case 'ignored': return 'متجاهل';
@@ -585,7 +585,7 @@ function statusLabel(value) {
 
 function statusKind(value) {
   switch (value) {
-    case 'internal_ready': return 'green';
+    case 'auto_saved': return 'green';
     case 'needs_review': return 'blue';
     case 'possible_duplicate': return 'warning';
     case 'ignored': return 'gray';

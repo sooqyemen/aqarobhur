@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { extractSearchFilters } from '@/lib/searchUtils';
 import { fetchListings } from '@/lib/listings';
 
-const WHATSAPP_NUMBER = String(process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || '966597520693').replace(/\D/g, '');
+const WHATSAPP_NUMBER = String(process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || '').replace(/\D/g, '');
 
 export async function POST(request) {
   try {
@@ -18,13 +18,13 @@ export async function POST(request) {
       filters,
       onlyPublic: false,
       includeLegacy: false,
-      max: 180,
+      max: 120,
     });
 
     const ranked = rankListings(results, question, filters);
-    const best = ranked.slice(0, 6);
+    const best = ranked.slice(0, 5);
     const answer = buildAnswer(best, question, filters);
-    const whatsappLink = buildWhatsAppLink(question, best);
+    const whatsappLink = buildWhatsAppLink(question);
 
     return NextResponse.json({
       ok: true,
@@ -35,9 +35,7 @@ export async function POST(request) {
       answer,
       whatsappLink,
       ctaText:
-        best.length
-          ? 'هذه النتائج من قاعدة العروض الداخلية. إذا رغبت بالمتابعة اختر واتساب وسننسق لك العرض المناسب دون عرض بيانات المصدر للعامة.'
-          : 'لم أجد عرضًا مطابقًا الآن. سجّل اسمك ورقم جوالك في الطلب وسنوفر لك المناسب بأقرب وقت.',
+        'هل ناسبك أي من هذه العروض؟ لا تتردد بالتواصل معنا مباشرة عبر واتساب وسنكمل لك التفاصيل وننسق لك العرض المناسب.',
     });
   } catch (error) {
     return NextResponse.json(
@@ -54,10 +52,7 @@ function rankListings(items = [], question = '', filters = {}) {
     .filter(Boolean)
     .filter((item) => {
       if (!item) return false;
-      const status = String(item.status || '').trim();
-      if (status === 'sold') return false;
-      if (isExpired(item)) return false;
-      if (item.isFresh === false) return false;
+      if (String(item.status || '').trim() === 'sold') return false;
       return true;
     })
     .map((item) => ({
@@ -109,18 +104,14 @@ function computeScore(item, q, filters) {
     if (price >= Number(filters.priceMin)) score += 5;
   }
 
-  if (String(item.status || '') === 'hidden' || item.internalOnly || item.visibility === 'internal') {
-    score += 4;
-  }
-
   return score;
 }
 
-function buildAnswer(items) {
+function buildAnswer(items, question, filters) {
   if (!items.length) {
     return [
       'حالياً لم أجد عرضاً مطابقاً تماماً لطلبك في قاعدة العروض الداخلية.',
-      'يسعدنا نخدمك بشكل أدق إذا سجلت الطلب مع رقم الجوال وسنتواصل معك ونوفر لك البدائل المناسبة.',
+      'يسعدنا نخدمك بشكل أدق إذا تواصلت معنا عبر واتساب وسنبحث لك عن بدائل مناسبة مباشرة.',
     ].join(' ');
   }
 
@@ -173,8 +164,6 @@ function toSafeClientListing(item) {
     id: item.id || '',
     title: buildTitle(item),
     neighborhood: item.neighborhood || '',
-    plan: item.plan || '',
-    part: item.part || '',
     propertyType: item.propertyType || '',
     dealType: item.dealType || '',
     price: item.price || null,
@@ -185,31 +174,17 @@ function toSafeClientListing(item) {
   };
 }
 
-function buildWhatsAppLink(question, items = []) {
+function buildWhatsAppLink(question) {
   if (!WHATSAPP_NUMBER) return '';
-  const top = items[0];
-  const topTitle = top ? buildTitle(top) : 'لا يوجد عرض مطابق تمامًا';
 
   const text = [
     'السلام عليكم',
     'سبق أن طلبت عبر العقاري الذكي:',
     question,
-    `أفضل نتيجة ظهرت لي: ${topTitle}`,
     'وأرغب في متابعة العروض المناسبة.',
   ].join('\n');
 
   return `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(text)}`;
-}
-
-function isExpired(item) {
-  try {
-    if (!item?.expiresAt) return false;
-    const d = new Date(item.expiresAt);
-    if (Number.isNaN(d.getTime())) return false;
-    return d.getTime() < Date.now();
-  } catch (_) {
-    return false;
-  }
 }
 
 function normalize(value) {

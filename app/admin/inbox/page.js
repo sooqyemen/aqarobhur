@@ -13,7 +13,7 @@ import {
   saveInboxEntry,
   updateExtractedItemStatus,
   deleteExtractedItemEverywhere,
-  deleteExtractedItemsBulk,
+  deleteExtractedItemsBulk, 
 } from '@/lib/inboxService';
 
 export default function AdminInboxPage() {
@@ -27,8 +27,8 @@ export default function AdminInboxPage() {
   const load = useCallback(async () => {
     try {
       const [entries, extracted] = await Promise.all([
-        fetchInboxEntries(40),
-        fetchExtractedItems(120),
+        fetchInboxEntries(40), 
+        fetchExtractedItems(120)
       ]);
       setRecentEntries(entries || []);
       setItems(extracted || []);
@@ -51,34 +51,38 @@ export default function AdminInboxPage() {
     setError('');
     setSummary('');
     try {
-      const res = await fetch('/api/ai/extract', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
+const res = await fetch('/api/ai/extract', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify(payload),
+});
 
-      const analysis = await res.json();
+const analysis = await res.json();
 
-      if (!res.ok) {
-        throw new Error(analysis?.error || 'فشل تحليل النص.');
-      }
-
+if (!res.ok) {
+  throw new Error(analysis?.error || 'فشل الذكاء الاصطناعي في تحليل النص.');
+}      
       const inboxEntryId = await saveInboxEntry({
         ...payload,
         parsedText: analysis.parsedText || '',
         aiSummary: analysis.summary || '',
         aiStats: analysis.stats || null,
-        status: 'processed',
+        status: analysis.stats?.reviewCount ? 'review' : 'processed',
       });
 
-      const savedItems = await saveExtractedItems({
-        inboxEntryId,
-        items: analysis.items || [],
+      const savedItems = await saveExtractedItems({ 
+        inboxEntryId, 
+        items: analysis.items || [] 
       });
 
-      const readyItems = savedItems.filter((item) => item.extractionStatus === 'internal_ready');
+      const autoSaved = savedItems.filter(
+        (item) => item.extractionStatus === 'auto_saved' && 
+        (item.recordType === 'listing' || item.recordType === 'request')
+      );
 
-      for (const item of readyItems) {
+      for (const item of autoSaved) {
         try {
           const promoted = await promoteExtractedItem(item);
           await updateExtractedItemStatus(item.id, 'auto_saved', {
@@ -86,26 +90,27 @@ export default function AdminInboxPage() {
             promotedDocId: promoted?.id || '',
             promotedCollection: promoted?.collection || '',
           });
-        } catch {
-          await updateExtractedItemStatus(item.id, 'needs_review', {
-            reason: 'فشل الاعتماد الداخلي التلقائي. يرجى المراجعة اليدوية.',
+        } catch (promoteErr) {
+          console.error("Auto-promote failed for item:", item.id, promoteErr);
+          await updateExtractedItemStatus(item.id, 'needs_review', { 
+            reason: 'فشل النشر التلقائي. يرجى المراجعة اليدوية.' 
           });
         }
       }
 
       const stats = analysis.stats || {};
-      const savedCount = savedItems.length;
-      setSummary(`اكتمل التحليل: تم استخراج ${stats.listingCount || savedCount} عرض جديد، واعتماد ${readyItems.length} عرض داخليًا.`);
-      await load();
+      setSummary(`اكتمل التحليل: تم استخراج ${stats.totalGroups} عرض. (حفظ داخلي تلقائي: ${stats.autoSavedCount} | مراجعة يدوية: ${stats.reviewCount})`);
+      
+      await load(); 
     } catch (err) {
-      setError(err?.message || 'فشل تحليل النص.');
+      setError(err?.message || 'فشل الذكاء الاصطناعي في تحليل النص.');
     } finally {
       setLoading(false);
     }
   }
 
-  const updateItemLocally = (itemId, newStatus, patch = {}) => {
-    setItems((prev) => prev.map((it) => it.id === itemId ? { ...it, extractionStatus: newStatus, ...patch } : it));
+  const updateItemLocally = (itemId, newStatus) => {
+    setItems(prev => prev.map(it => it.id === itemId ? { ...it, extractionStatus: newStatus } : it));
   };
 
   async function handleApprove(item) {
@@ -118,13 +123,10 @@ export default function AdminInboxPage() {
         promotedDocId: promoted?.id || '',
         promotedCollection: promoted?.collection || '',
       });
-      updateItemLocally(item.id, 'auto_saved', {
-        promotedDocId: promoted?.id || '',
-        promotedCollection: promoted?.collection || '',
-      });
-      setSummary('تم اعتماد العرض داخليًا وإتاحته للعقاري الذكي.');
+      updateItemLocally(item.id, 'auto_saved');
+      setSummary('تم اعتماد العرض وحفظه داخليًا للعقاري الذكي بنجاح.');
     } catch (err) {
-      setError(err?.message || 'فشل اعتماد العنصر. يرجى المحاولة مرة أخرى.');
+      setError('فشل اعتماد العنصر. يرجى المحاولة مرة أخرى.');
       await load();
     } finally {
       setIsActionLoading(false);
@@ -136,7 +138,7 @@ export default function AdminInboxPage() {
     try {
       await updateExtractedItemStatus(item.id, 'ignored');
       updateItemLocally(item.id, 'ignored');
-    } catch {
+    } catch (err) {
       setError('فشل تحديث حالة العنصر.');
     } finally {
       setIsActionLoading(false);
@@ -144,13 +146,13 @@ export default function AdminInboxPage() {
   }
 
   async function handleDelete(item) {
-    if (!window.confirm('حذف نهائي؟ سيتم مسح العرض من الوارد ومن قاعدة البيانات الداخلية.')) return;
+    if (!window.confirm('حذف نهائي؟ سيتم حذف العرض من الوارد ومن قاعدة البيانات الداخلية.')) return;
     setIsActionLoading(true);
     try {
       await deleteExtractedItemEverywhere(item);
-      setItems((prev) => prev.filter((i) => i.id !== item.id));
-      setSummary('تم حذف العرض وكل ما يتعلق به نهائيًا.');
-    } catch {
+      setItems(prev => prev.filter(i => i.id !== item.id));
+      setSummary('تم حذف العنصر وكل ما يتعلق به نهائياً.');
+    } catch (err) {
       setError('تعذر الحذف. يرجى مراجعة صلاحيات النظام.');
     } finally {
       setIsActionLoading(false);
@@ -162,10 +164,10 @@ export default function AdminInboxPage() {
     setIsActionLoading(true);
     try {
       await deleteExtractedItemsBulk(selectedItems);
-      const deletedIds = selectedItems.map((i) => i.id);
-      setItems((prev) => prev.filter((i) => !deletedIds.includes(i.id)));
+      const deletedIds = selectedItems.map(i => i.id);
+      setItems(prev => prev.filter(i => !deletedIds.includes(i.id)));
       setSummary(`تم حذف ${selectedItems.length} عنصر بنجاح.`);
-    } catch {
+    } catch (err) {
       setError('حدث خطأ أثناء الحذف الجماعي.');
     } finally {
       setIsActionLoading(false);
@@ -182,28 +184,30 @@ export default function AdminInboxPage() {
   return (
     <AdminGuard title="صندوق الوارد الذكي">
       <AdminShell title="معالجة الوارد العقاري">
-        {error && <div>{error}</div>}
-        {summary && <div>{summary}</div>}
+        
+        {error && <div className="alert alertError"><span className="material-icons-outlined">error</span> {error}</div>}
+        {summary && <div className="alert alertSuccess"><span className="material-icons-outlined">verified</span> {summary}</div>}
 
         <div className="statsGrid">
-          <div>إجمالي العروض المستخرجة: {stats.total}</div>
-          <div>يحتاج مراجعة: {stats.review}</div>
-          <div>معتمد داخليًا: {stats.autoSaved}</div>
-          <div>متجاهل: {stats.ignored}</div>
+          <StatCard icon="analytics" label="إجمالي المستخرجات" value={stats.total} color="var(--primary)" />
+          <StatCard icon="pending_actions" label="يحتاج مراجعة" value={stats.review} color="#dd6b20" highlight={stats.review > 0} />
+          <StatCard icon="task_alt" label="تم الاعتماد" value={stats.autoSaved} color="#38a169" />
+          <StatCard icon="auto_delete" label="متجاهل" value={stats.ignored} color="#718096" />
         </div>
 
         <div className="mainLayout">
           <div className="workspaceArea">
             <PasteMessageBox onAnalyze={handleAnalyze} loading={loading} />
+            
             <div style={{ position: 'relative' }}>
               {isActionLoading && <div className="actionLoadingOverlay" />}
-              <ExtractionReviewTable
-                items={items}
-                onApprove={handleApprove}
-                onIgnore={handleIgnore}
-                onDelete={handleDelete}
-                onBulkDelete={handleBulkDelete}
-                onRefresh={load}
+              <ExtractionReviewTable 
+                items={items} 
+                onApprove={handleApprove} 
+                onIgnore={handleIgnore} 
+                onDelete={handleDelete} 
+                onBulkDelete={handleBulkDelete} 
+                onRefresh={load} 
               />
             </div>
           </div>
@@ -211,12 +215,14 @@ export default function AdminInboxPage() {
           <aside className="sidebarArea">
             <div className="card recentCard">
               <div className="cardHeader">
+                <span className="material-icons-outlined">history</span>
                 <h3>آخر الإدخالات</h3>
               </div>
               <div className="entriesList">
                 {recentEntries.map((entry) => (
                   <div key={entry.id} className="entryItem">
                     <div className="entryTitle">
+                      <span className="material-icons-outlined">chat</span>
                       {entry.fileName || entry.source?.contactName || 'نص يدوي'}
                     </div>
                     <div className="entrySummary">{entry.aiSummary || 'جاري المعالجة...'}</div>
@@ -228,6 +234,55 @@ export default function AdminInboxPage() {
           </aside>
         </div>
       </AdminShell>
+
+      <style jsx>{`
+        .alert { display: flex; align-items: center; gap: 10px; padding: 15px; border-radius: 12px; margin-bottom: 20px; font-weight: 700; animation: slideDown 0.3s; }
+        .alertError { background: #fff5f5; color: #c53030; border: 1px solid #fed7d7; }
+        .alertSuccess { background: #f0fff4; color: #2f855a; border: 1px solid #c6f6d5; }
+        
+        .statsGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 15px; margin-bottom: 25px; }
+        
+        .mainLayout { display: grid; grid-template-columns: 1fr; gap: 20px; }
+        @media (min-width: 1024px) { .mainLayout { grid-template-columns: 2fr 1.1fr; } }
+        
+        .actionLoadingOverlay { position: absolute; inset: 0; background: rgba(255,255,255,0.4); z-index: 10; border-radius: 12px; cursor: progress; }
+
+        .card { background: white; border-radius: 16px; border: 1px solid #e2e8f0; }
+        .recentCard { height: fit-content; max-height: 850px; display: flex; flex-direction: column; }
+        .cardHeader { display: flex; align-items: center; gap: 10px; padding: 18px; border-bottom: 1px solid #edf2f7; background: #fcfcfd; }
+        .cardHeader h3 { margin: 0; font-size: 16px; font-weight: 800; }
+
+        .entriesList { padding: 15px; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; }
+        .entryItem { padding: 12px; border-radius: 10px; border: 1px solid #f1f5f9; background: #f8fafc; }
+        .entryTitle { display: flex; align-items: center; gap: 8px; font-weight: 800; color: #2d3748; font-size: 14px; margin-bottom: 4px; }
+        .entrySummary { color: #718096; font-size: 12px; line-height: 1.5; }
+        
+        .emptyState { text-align: center; color: #cbd5e0; padding: 40px 10px; font-size: 14px; }
+        @keyframes slideDown { from { transform: translateY(-10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+      `}</style>
     </AdminGuard>
+  );
+}
+
+function StatCard({ icon, label, value, color, highlight }) {
+  return (
+    <>
+      <div className={`statCard ${highlight ? 'pulse' : ''}`}>
+        <div className="iconBox" style={{ color: color, background: `${color}15` }}>
+            <span className="material-icons-outlined">{icon}</span>
+        </div>
+        <div className="infoBox">
+            <div className="val" style={{ color: highlight ? '#dd6b20' : '#1a202c' }}>{value}</div>
+            <div className="lab">{label}</div>
+        </div>
+      </div>
+      <style jsx>{`
+        .statCard { display: flex; align-items: center; gap: 15px; background: white; border-radius: 16px; padding: 18px; border: 1px solid #e2e8f0; }
+        .statCard.pulse { border: 2px solid #dd6b20; }
+        .iconBox { width: 48px; height: 48px; border-radius: 10px; display: flex; align-items: center; justify-content: center; }
+        .val { font-size: 24px; font-weight: 900; line-height: 1; }
+        .lab { color: #718096; font-size: 13px; font-weight: 700; margin-top: 4px; }
+      `}</style>
+    </>
   );
 }
