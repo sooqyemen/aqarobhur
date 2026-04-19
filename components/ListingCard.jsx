@@ -20,15 +20,9 @@ function timeAgoLabel(createdAt) {
   }
 }
 
-function firstChar(name) {
-  const s = (name || '').trim();
-  return s ? s[0] : 'م';
-}
-
 export default function ListingCard({ item, compact = false }) {
   if (!item) return null;
 
-  // ✅ تأمين الـID (عشان ما يطلع /unknown)
   const safeId = item?.id || item?.docId || item?.listingId || item?._id || '';
 
   const {
@@ -45,265 +39,227 @@ export default function ListingCard({ item, compact = false }) {
     images = [],
     direct = false,
     createdAt,
-    sellerName,
-    ownerName,
-    contactName,
   } = item;
 
   const isRent = dealType === 'rent';
   const displayPrice = formatPriceSAR(price);
-
-  // ✅ لا نفتح رابط إذا ما فيه ID صحيح
   const detailLink = safeId ? `/listing/${encodeURIComponent(String(safeId))}` : '#';
-
-  // ✅ بدون placeholder file لتجنب 404
-  const mainImage = images?.[0] || null;
-  const hasMultipleImages = (images?.length || 0) > 1;
-
-  const locationText =
-    city ||
-    neighborhood ||
-    [neighborhood, plan, part].filter(Boolean).join(' • ') ||
-    'غير محدد';
-
+  const mainImage = Array.isArray(images) && images.length ? images[0] : null;
+  const hasMultipleImages = Array.isArray(images) && images.length > 1;
   const timeText = timeAgoLabel(createdAt);
 
-  const userName = sellerName || ownerName || contactName || 'المالك';
+  const locationParts = [neighborhood, plan, part].filter(Boolean);
+  const locationText = locationParts.join(' • ') || city || 'غير محدد';
+  const specsText = [propertyType, area ? `${area} م²` : null].filter(Boolean).join(' • ');
 
-  const CardTag = safeId ? Link : 'div';
+  const CardTag = safeId ? Link : 'article';
   const cardProps = safeId
-    ? { href: detailLink, className: 'harajCard' }
-    : { className: 'harajCard disabled', role: 'article', 'aria-label': title };
+    ? { href: detailLink, className: `listingCard ${compact ? 'compact' : ''}` }
+    : { className: `listingCard ${compact ? 'compact' : ''} disabled`, role: 'article', 'aria-label': title };
 
   return (
-    <CardTag {...cardProps}>
-      <div className="harajCardRow">
-        <div className="harajThumb" aria-hidden="true">
-          <div
-            className="harajThumbImg"
-            style={
-              mainImage
-                ? { backgroundImage: `url(${mainImage})` }
-                : { backgroundImage: 'linear-gradient(135deg, rgba(214,179,91,0.18), rgba(255,255,255,0.06))' }
-            }
-          />
-          {hasMultipleImages && <div className="harajImgCount">+{images.length}</div>}
+    <>
+      <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined" rel="stylesheet" />
+
+      <CardTag {...cardProps}>
+        
+        {/* منطقة الصورة العلوية */}
+        <div className="cardMedia">
+          {mainImage ? (
+            <img src={mainImage} alt={title} className="mediaImage" loading="lazy" />
+          ) : (
+            <div className="mediaPlaceholder">
+              <span className="material-icons-outlined">image_not_supported</span>
+              <span>لا توجد صورة</span>
+            </div>
+          )}
+
+          <div className="mediaOverlays">
+            <div className="statusBadgeWrap">{statusBadge(status)}</div>
+            {hasMultipleImages && (
+              <div className="imageCountBadge">
+                <span className="material-icons-outlined">photo_library</span>
+                {images.length}
+              </div>
+            )}
+          </div>
+          
+          {/* علامة الإيجار أو البيع */}
+          <div className={`dealBadge ${isRent ? 'rent' : 'sale'}`}>
+             {isRent ? 'للإيجار' : 'للبيع'}
+          </div>
         </div>
 
-        <div className="harajInfo">
-          <div className="harajTitle" title={title}>
-            {title}
-          </div>
-
-          <div className="harajPriceRow">
-            <div className="harajPrice">
+        {/* محتوى البطاقة */}
+        <div className="cardBody">
+          <div className="priceRow">
+            <div className="priceText">
               {displayPrice}
-              {isRent && <span className="harajRent"> / شهري</span>}
-            </div>
-            <div className="harajStatus">{statusBadge(status)}</div>
-          </div>
-
-          <div className="harajMeta">
-            <div className="harajMetaItem" title={locationText}>
-              <span className="harajIco">📍</span>
-              <span className="harajTxt">{locationText}</span>
-            </div>
-            <div className="harajMetaItem">
-              <span className="harajIco">🕒</span>
-              <span className="harajTxt">{timeText}</span>
+              {isRent && <span className="rentSuffix">/ شهري</span>}
             </div>
           </div>
 
-          <div className="harajBottom">
-            <div className="harajUser">
-              <span className="harajAvatar">{firstChar(userName)}</span>
-              <span className="harajUserName">{userName}</span>
-            </div>
+          <h3 className="cardTitle" title={title}>{title}</h3>
 
-            {direct && <span className="harajDirect">مباشر</span>}
+          <div className="locationRow" title={locationText}>
+            <span className="material-icons-outlined">place</span>
+            {locationText}
           </div>
 
-          {(propertyType || area) && (
-            <div className="harajSub">
-              {[propertyType, area ? `${area} م²` : null].filter(Boolean).join(' • ')}
+          {specsText && (
+            <div className="specsRow">
+              <span className="material-icons-outlined">straighten</span>
+              {specsText}
             </div>
           )}
         </div>
-      </div>
 
-      <style jsx>{`
-        .harajCard {
-          display: block;
-          text-decoration: none;
-          color: inherit;
-          width: 100%;
-        }
-        .harajCard.disabled {
-          cursor: default;
-          opacity: 0.85;
-        }
+        {/* تذييل البطاقة */}
+        <div className="cardFooter">
+          <div className="metaInfo">
+            {direct && <span className="directBadge"><span className="material-icons-outlined">verified</span> مباشر</span>}
+            <span className="timeBadge"><span className="material-icons-outlined">schedule</span> {timeText}</span>
+          </div>
+        </div>
 
-        /* ✅ أسماء كلاسات فريدة لتجنب تعارض CSS المشروع */
-        .harajCardRow {
-          direction: ltr; /* الصورة يسار */
-          display: flex;
-          gap: 12px;
-          align-items: stretch;
-          background: var(--card, #fff);
-          border: 1px solid var(--border, rgba(0,0,0,0.08));
-          border-radius: 14px;
-          padding: 12px;
-          box-shadow: var(--shadow, 0 6px 16px rgba(0,0,0,0.06));
-        }
+        <style jsx>{`
+          .listingCard {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            width: 100%;
+            background: white;
+            border-radius: 18px;
+            overflow: hidden;
+            border: 1px solid #e2e8f0;
+            text-decoration: none;
+            color: inherit;
+            box-shadow: 0 4px 6px rgba(15, 23, 42, 0.02);
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+          }
 
-        .harajThumb {
-          flex: 0 0 118px;
-          height: 92px;
-          border-radius: 12px;
-          overflow: hidden;
-          border: 1px solid var(--border, rgba(0,0,0,0.06));
-          background: rgba(0,0,0,0.04);
-          position: relative;
-        }
-        .harajThumbImg {
-          width: 100%;
-          height: 100%;
-          background-size: cover;
-          background-position: center;
-        }
-        .harajImgCount {
-          position: absolute;
-          left: 8px;
-          top: 8px;
-          background: rgba(0,0,0,0.65);
-          color: #fff;
-          font-size: 12px;
-          font-weight: 900;
-          padding: 3px 8px;
-          border-radius: 999px;
-          border: 1px solid rgba(255,255,255,0.15);
-          backdrop-filter: blur(8px);
-        }
+          .listingCard:hover:not(.disabled) {
+            transform: translateY(-4px);
+            box-shadow: 0 12px 24px rgba(15, 23, 42, 0.08);
+            border-color: #cbd5e0;
+          }
 
-        .harajInfo {
-          direction: rtl;
-          flex: 1;
-          min-width: 0;
-          display: flex;
-          flex-direction: column;
-          gap: 6px;
-        }
+          .listingCard.disabled { cursor: default; opacity: 0.9; }
 
-        .harajTitle {
-          font-size: 16px;
-          font-weight: 900;
-          color: #18a86b; /* أخضر قريب من حراج */
-          line-height: 1.3;
-          display: -webkit-box;
-          -webkit-line-clamp: 2;
-          -webkit-box-orient: vertical;
-          overflow: hidden;
-        }
+          /* الصورة ومحتوياتها */
+          .cardMedia {
+            position: relative;
+            aspect-ratio: 16 / 11;
+            background: #f8fafc;
+            overflow: hidden;
+            border-bottom: 1px solid #edf2f7;
+          }
 
-        .harajPriceRow {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 10px;
-        }
-        .harajPrice {
-          font-size: 15px;
-          font-weight: 900;
-          color: #1e6fd9; /* أزرق قريب من حراج */
-          white-space: nowrap;
-        }
-        .harajRent {
-          font-size: 12px;
-          font-weight: 800;
-          color: var(--muted, rgba(0,0,0,0.55));
-        }
-        .harajStatus {
-          flex: 0 0 auto;
-        }
+          .mediaImage {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transition: transform 0.4s ease;
+          }
+          .listingCard:hover:not(.disabled) .mediaImage { transform: scale(1.05); }
 
-        .harajMeta {
-          display: flex;
-          gap: 14px;
-          flex-wrap: wrap;
-          color: var(--muted, rgba(0,0,0,0.55));
-          font-size: 12.5px;
-          font-weight: 700;
-        }
-        .harajMetaItem {
-          display: inline-flex;
-          align-items: center;
-          gap: 6px;
-          min-width: 0;
-        }
-        .harajTxt {
-          display: -webkit-box;
-          -webkit-line-clamp: 1;
-          -webkit-box-orient: vertical;
-          overflow: hidden;
-        }
+          .mediaPlaceholder {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            color: #a0aec0;
+            background: linear-gradient(135deg, #f7fafc, #edf2f7);
+            font-size: 13px;
+            font-weight: 600;
+          }
+          .mediaPlaceholder .material-icons-outlined { font-size: 32px; opacity: 0.5; }
 
-        .harajBottom {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 10px;
-          margin-top: 2px;
-        }
-        .harajUser {
-          display: inline-flex;
-          align-items: center;
-          gap: 8px;
-          color: var(--muted, rgba(0,0,0,0.65));
-          font-weight: 800;
-          font-size: 12.5px;
-          min-width: 0;
-        }
-        .harajAvatar {
-          width: 26px;
-          height: 26px;
-          border-radius: 999px;
-          background: rgba(0,0,0,0.06);
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          font-weight: 900;
-        }
-        .harajUserName {
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-        }
-        .harajDirect {
-          font-size: 12px;
-          font-weight: 900;
-          padding: 4px 10px;
-          border-radius: 999px;
-          background: rgba(214,179,91,0.14);
-          border: 1px solid rgba(214,179,91,0.25);
-          white-space: nowrap;
-        }
+          .mediaOverlays {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            right: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            pointer-events: none;
+          }
 
-        .harajSub {
-          font-size: 12px;
-          font-weight: 800;
-          color: var(--muted, rgba(0,0,0,0.5));
-          display: -webkit-box;
-          -webkit-line-clamp: 1;
-          -webkit-box-orient: vertical;
-          overflow: hidden;
-          margin-top: -2px;
-        }
+          .statusBadgeWrap :global(.badge) {
+            display: inline-flex;
+            align-items: center;
+            padding: 4px 10px;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 800;
+            background: rgba(255, 255, 255, 0.95);
+            color: #1a202c;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            backdrop-filter: blur(4px);
+          }
+          .statusBadgeWrap :global(.badge.ok) { color: #2f855a; }
+          .statusBadgeWrap :global(.badge.warn) { color: #dd6b20; }
+          .statusBadgeWrap :global(.badge.sold) { color: #c53030; }
 
-        @media (max-width: 600px) {
-          .harajThumb { flex: 0 0 110px; height: 86px; }
-          .harajTitle { font-size: 15px; }
-        }
-      `}</style>
-    </CardTag>
+          .imageCountBadge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 4px 8px;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 700;
+            color: white;
+            background: rgba(26, 32, 44, 0.7);
+            backdrop-filter: blur(4px);
+          }
+          .imageCountBadge .material-icons-outlined { font-size: 14px; }
+
+          .dealBadge {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            padding: 4px 10px;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 800;
+            color: white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+          }
+          .dealBadge.sale { background: #3182ce; }
+          .dealBadge.rent { background: #dd6b20; }
+
+          /* جسم البطاقة */
+          .cardBody { padding: 16px; display: flex; flex-direction: column; gap: 10px; flex-grow: 1; }
+          .compact .cardBody { padding: 12px; gap: 8px; }
+
+          .priceRow { display: flex; align-items: center; justify-content: space-between; }
+          .priceText { font-size: 20px; font-weight: 900; color: #2f855a; display: flex; align-items: baseline; gap: 4px; }
+          .compact .priceText { font-size: 18px; }
+          .rentSuffix { font-size: 12px; font-weight: 700; color: #718096; }
+
+          .cardTitle { margin: 0; font-size: 15px; font-weight: 800; color: #1a202c; line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: 44px; }
+
+          .locationRow, .specsRow { display: flex; align-items: center; gap: 6px; font-size: 13px; color: #4a5568; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+          .locationRow .material-icons-outlined, .specsRow .material-icons-outlined { font-size: 16px; color: #a0aec0; }
+          
+          .specsRow { background: #f7fafc; padding: 6px 10px; border-radius: 8px; border: 1px solid #edf2f7; font-weight: 600; color: #2d3748; margin-top: 4px; }
+
+          /* تذييل البطاقة */
+          .cardFooter { display: flex; justify-content: flex-end; padding: 12px 16px; border-top: 1px dashed #e2e8f0; background: #fcfcfd; margin-top: auto; }
+          .compact .cardFooter { padding: 10px 12px; }
+
+          .metaInfo { display: flex; align-items: center; justify-content: flex-end; gap: 8px; width: 100%; }
+          .directBadge, .timeBadge { display: flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 700; padding: 4px 8px; border-radius: 6px; }
+          .directBadge { background: #ebf8ff; color: #2b6cb0; }
+          .timeBadge { background: #edf2f7; color: #718096; }
+          .directBadge .material-icons-outlined, .timeBadge .material-icons-outlined { font-size: 13px; }
+        `}</style>
+      </CardTag>
+    </>
   );
 }
