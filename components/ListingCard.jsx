@@ -66,7 +66,17 @@ export default function ListingCard({ item, compact = false }) {
         {/* منطقة الصورة العلوية */}
         <div className="cardMedia">
           {mainImage ? (
-            <img src={mainImage} alt={title} className="mediaImage" loading="lazy" />
+            <img
+              src={mainImage}
+              alt={title}
+              className="mediaImage"
+              loading="lazy"
+              onError={(e) => {
+                // عند فشل تحميل الصورة (رابط خاطئ أو محذوف) استبدلها بصورة افتراضية
+                e.currentTarget.src = '/placeholder-house.jpg';
+                e.currentTarget.onerror = null; // منع تكرار الخطأ إذا فشلت الصورة البديلة
+              }}
+            />
           ) : (
             <div className="mediaPlaceholder">
               <span className="material-icons-outlined">image_not_supported</span>
