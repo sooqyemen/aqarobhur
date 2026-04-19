@@ -1,5 +1,265 @@
 'use client';
+
 import Link from 'next/link';
 import { formatPriceSAR, statusBadge } from '@/lib/format';
-function timeAgoLabel(createdAt){try{const d=createdAt?.toDate?.()||(createdAt instanceof Date?createdAt:null);if(!d)return'حديث';const diff=Date.now()-d.getTime();const min=Math.floor(diff/60000);if(min<60)return min<1?'حديث':`قبل ${min} دقيقة`;const hr=Math.floor(min/60);if(hr<24)return`قبل ${hr} ساعة`;const day=Math.floor(hr/24);return`قبل ${day} يوم`;}catch{return'حديث';}}
-export default function ListingCard({item,compact=false}){if(!item)return null;const safeId=item?.id||item?.docId||item?.listingId||item?._id||'';const{title='عرض عقاري',price,neighborhood='',plan='',part='',city='',area,dealType,propertyType,status='available',images=[],direct=false,createdAt}=item;const mainImage=Array.isArray(images)&&images.length?images[0]:null;const locationText=[neighborhood,plan,part].filter(Boolean).join(' • ')||city||'الموقع غير محدد';const metaLine=[propertyType,area?`${area} م²`:null].filter(Boolean);const detailLink=safeId?`/listing/${encodeURIComponent(String(safeId))}`:'#';const timeText=timeAgoLabel(createdAt);const isRent=String(dealType||'').toLowerCase()==='rent';const Wrapper=safeId?Link:'article';const wrapperProps=safeId?{href:detailLink,className:`listingCardV2 ${compact?'compact':''}`}:{className:`listingCardV2 ${compact?'compact disabled':'disabled'}`};return(<Wrapper {...wrapperProps}><div className="listingCardMediaV2">{mainImage?<img src={mainImage} alt={title} className="listingCardImageV2" loading="lazy"/>:<div className="listingCardPlaceholderV2">لا توجد صورة متاحة</div>}<div className="listingCardTopRowV2"><div className="statusBadgeHolderV2">{statusBadge(status)}</div><div className={`dealTypeBadgeV2 ${isRent?'rent':'sale'}`}>{isRent?'إيجار':'بيع'}</div></div></div><div className="listingCardBodyV2"><div className="listingCardPriceRowV2"><strong className="listingCardPriceV2">{formatPriceSAR(price)}</strong>{isRent?<span className="listingCardPriceSuffixV2">سنوي</span>:null}</div><h3 className="listingCardTitleV2" title={title}>{title}</h3><p className="listingCardLocationV2" title={locationText}>{locationText}</p>{metaLine.length?<div className="listingCardMetaWrapV2">{metaLine.map((value)=><span key={value} className="listingMetaChipV2">{value}</span>)}</div>:null}</div><div className="listingCardFooterV2"><span className="listingFootTagV2">{timeText}</span>{direct?<span className="listingFootTagV2 highlight">مباشر</span>:null}</div><style jsx>{`.listingCardV2{display:flex;flex-direction:column;min-height:100%;background:#fff;border:1px solid #dbe5ef;border-radius:24px;overflow:hidden;box-shadow:0 10px 25px rgba(15,23,42,.05);transition:transform .22s ease,box-shadow .22s ease,border-color .22s ease}.listingCardV2:hover:not(.disabled){transform:translateY(-5px);box-shadow:0 20px 40px rgba(15,23,42,.1);border-color:rgba(15,118,110,.2)}.listingCardMediaV2{position:relative;aspect-ratio:16 / 10.4;background:linear-gradient(135deg,#eef4f8,#f8fbfd);overflow:hidden}.listingCardImageV2{width:100%;height:100%;object-fit:cover;transition:transform .34s ease}.listingCardV2:hover:not(.disabled) .listingCardImageV2{transform:scale(1.05)}.listingCardPlaceholderV2{width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:14px;font-weight:800}.listingCardTopRowV2{position:absolute;top:12px;left:12px;right:12px;display:flex;align-items:flex-start;justify-content:space-between;gap:10px}.statusBadgeHolderV2 :global(.badge){padding:7px 12px;border-radius:999px;background:rgba(255,255,255,.94);box-shadow:0 8px 16px rgba(15,23,42,.08);font-size:12px;font-weight:900}.dealTypeBadgeV2{min-height:34px;padding:0 12px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:900;color:#fff;box-shadow:0 12px 20px rgba(15,23,42,.14)}.dealTypeBadgeV2.sale{background:linear-gradient(135deg,#0f766e,#115e59)}.dealTypeBadgeV2.rent{background:linear-gradient(135deg,#c08f28,#a56b08)}.listingCardBodyV2{padding:18px 18px 14px;display:flex;flex-direction:column;gap:10px;flex:1}.compact .listingCardBodyV2{padding:14px;gap:8px}.listingCardPriceRowV2{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}.listingCardPriceV2{font-size:23px;line-height:1;color:#0f172a;font-weight:900}.listingCardPriceSuffixV2{color:#64748b;font-size:12px;font-weight:800}.listingCardTitleV2{margin:0;color:#0f172a;font-size:16px;font-weight:900;line-height:1.7;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;min-height:54px}.listingCardLocationV2{margin:0;color:#475569;font-size:13px;font-weight:700;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:1;overflow:hidden}.listingCardMetaWrapV2{display:flex;flex-wrap:wrap;gap:8px}.listingMetaChipV2{min-height:34px;padding:0 12px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;background:#f6fafc;border:1px solid #e2ebf2;color:#334155;font-size:12px;font-weight:800}.listingCardFooterV2{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:0 18px 18px;flex-wrap:wrap}.listingFootTagV2{min-height:32px;padding:0 11px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;background:#f8fafc;color:#64748b;border:1px solid #e2ebf2;font-size:12px;font-weight:800}.listingFootTagV2.highlight{background:rgba(15,118,110,.08);color:var(--primary);border-color:rgba(15,118,110,.16)}`}</style></Wrapper>)}
+
+function timeAgoLabel(createdAt) {
+  try {
+    const d = createdAt?.toDate?.() || (createdAt instanceof Date ? createdAt : null);
+    if (!d) return 'الآن';
+    const diff = Date.now() - d.getTime();
+    const min = Math.floor(diff / 60000);
+    if (min < 1) return 'الآن';
+    if (min < 60) return `قبل ${min} د`;
+    const hr = Math.floor(min / 60);
+    if (hr < 24) return `قبل ${hr} س`;
+    const day = Math.floor(hr / 24);
+    return `قبل ${day} يوم`;
+  } catch {
+    return 'الآن';
+  }
+}
+
+export default function ListingCard({ item, compact = false }) {
+  if (!item) return null;
+
+  const safeId = item?.id || item?.docId || item?.listingId || item?._id || '';
+
+  const {
+    title = 'عرض عقاري',
+    price,
+    neighborhood = '',
+    plan = '',
+    part = '',
+    city = '',
+    area,
+    dealType,
+    propertyType,
+    status = 'available',
+    images = [],
+    direct = false,
+    createdAt,
+  } = item;
+
+  const isRent = dealType === 'rent';
+  const displayPrice = formatPriceSAR(price);
+  const detailLink = safeId ? `/listing/${encodeURIComponent(String(safeId))}` : '#';
+  const mainImage = Array.isArray(images) && images.length ? images[0] : null;
+  const hasMultipleImages = Array.isArray(images) && images.length > 1;
+  const timeText = timeAgoLabel(createdAt);
+
+  const locationParts = [neighborhood, plan, part].filter(Boolean);
+  const locationText = locationParts.join(' • ') || city || 'غير محدد';
+  const specsText = [propertyType, area ? `${area} م²` : null].filter(Boolean).join(' • ');
+
+  const CardTag = safeId ? Link : 'article';
+  const cardProps = safeId
+    ? { href: detailLink, className: `listingCard ${compact ? 'compact' : ''}` }
+    : { className: `listingCard ${compact ? 'compact' : ''} disabled`, role: 'article', 'aria-label': title };
+
+  return (
+    <>
+      <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined" rel="stylesheet" />
+
+      <CardTag {...cardProps}>
+        
+        {/* منطقة الصورة العلوية */}
+        <div className="cardMedia">
+          {mainImage ? (
+            <img src={mainImage} alt={title} className="mediaImage" loading="lazy" />
+          ) : (
+            <div className="mediaPlaceholder">
+              <span className="material-icons-outlined">image_not_supported</span>
+              <span>لا توجد صورة</span>
+            </div>
+          )}
+
+          <div className="mediaOverlays">
+            <div className="statusBadgeWrap">{statusBadge(status)}</div>
+            {hasMultipleImages && (
+              <div className="imageCountBadge">
+                <span className="material-icons-outlined">photo_library</span>
+                {images.length}
+              </div>
+            )}
+          </div>
+          
+          {/* علامة الإيجار أو البيع */}
+          <div className={`dealBadge ${isRent ? 'rent' : 'sale'}`}>
+             {isRent ? 'للإيجار' : 'للبيع'}
+          </div>
+        </div>
+
+        {/* محتوى البطاقة */}
+        <div className="cardBody">
+          <div className="priceRow">
+            <div className="priceText">
+              {displayPrice}
+              {isRent && <span className="rentSuffix">/ شهري</span>}
+            </div>
+          </div>
+
+          <h3 className="cardTitle" title={title}>{title}</h3>
+
+          <div className="locationRow" title={locationText}>
+            <span className="material-icons-outlined">place</span>
+            {locationText}
+          </div>
+
+          {specsText && (
+            <div className="specsRow">
+              <span className="material-icons-outlined">straighten</span>
+              {specsText}
+            </div>
+          )}
+        </div>
+
+        {/* تذييل البطاقة */}
+        <div className="cardFooter">
+          <div className="metaInfo">
+            {direct && <span className="directBadge"><span className="material-icons-outlined">verified</span> مباشر</span>}
+            <span className="timeBadge"><span className="material-icons-outlined">schedule</span> {timeText}</span>
+          </div>
+        </div>
+
+        <style jsx>{`
+          .listingCard {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            width: 100%;
+            background: white;
+            border-radius: 18px;
+            overflow: hidden;
+            border: 1px solid #e2e8f0;
+            text-decoration: none;
+            color: inherit;
+            box-shadow: 0 4px 6px rgba(15, 23, 42, 0.02);
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+          }
+
+          .listingCard:hover:not(.disabled) {
+            transform: translateY(-4px);
+            box-shadow: 0 12px 24px rgba(15, 23, 42, 0.08);
+            border-color: #cbd5e0;
+          }
+
+          .listingCard.disabled { cursor: default; opacity: 0.9; }
+
+          /* الصورة ومحتوياتها */
+          .cardMedia {
+            position: relative;
+            aspect-ratio: 16 / 11;
+            background: #f8fafc;
+            overflow: hidden;
+            border-bottom: 1px solid #edf2f7;
+          }
+
+          .mediaImage {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transition: transform 0.4s ease;
+          }
+          .listingCard:hover:not(.disabled) .mediaImage { transform: scale(1.05); }
+
+          .mediaPlaceholder {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            color: #a0aec0;
+            background: linear-gradient(135deg, #f7fafc, #edf2f7);
+            font-size: 13px;
+            font-weight: 600;
+          }
+          .mediaPlaceholder .material-icons-outlined { font-size: 32px; opacity: 0.5; }
+
+          .mediaOverlays {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            right: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            pointer-events: none;
+          }
+
+          .statusBadgeWrap :global(.badge) {
+            display: inline-flex;
+            align-items: center;
+            padding: 4px 10px;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 800;
+            background: rgba(255, 255, 255, 0.95);
+            color: #1a202c;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            backdrop-filter: blur(4px);
+          }
+          .statusBadgeWrap :global(.badge.ok) { color: #2f855a; }
+          .statusBadgeWrap :global(.badge.warn) { color: #dd6b20; }
+          .statusBadgeWrap :global(.badge.sold) { color: #c53030; }
+
+          .imageCountBadge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 4px 8px;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 700;
+            color: white;
+            background: rgba(26, 32, 44, 0.7);
+            backdrop-filter: blur(4px);
+          }
+          .imageCountBadge .material-icons-outlined { font-size: 14px; }
+
+          .dealBadge {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            padding: 4px 10px;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 800;
+            color: white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+          }
+          .dealBadge.sale { background: #3182ce; }
+          .dealBadge.rent { background: #dd6b20; }
+
+          /* جسم البطاقة */
+          .cardBody { padding: 16px; display: flex; flex-direction: column; gap: 10px; flex-grow: 1; }
+          .compact .cardBody { padding: 12px; gap: 8px; }
+
+          .priceRow { display: flex; align-items: center; justify-content: space-between; }
+          .priceText { font-size: 20px; font-weight: 900; color: #2f855a; display: flex; align-items: baseline; gap: 4px; }
+          .compact .priceText { font-size: 18px; }
+          .rentSuffix { font-size: 12px; font-weight: 700; color: #718096; }
+
+          .cardTitle { margin: 0; font-size: 15px; font-weight: 800; color: #1a202c; line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: 44px; }
+
+          .locationRow, .specsRow { display: flex; align-items: center; gap: 6px; font-size: 13px; color: #4a5568; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+          .locationRow .material-icons-outlined, .specsRow .material-icons-outlined { font-size: 16px; color: #a0aec0; }
+          
+          .specsRow { background: #f7fafc; padding: 6px 10px; border-radius: 8px; border: 1px solid #edf2f7; font-weight: 600; color: #2d3748; margin-top: 4px; }
+
+          /* تذييل البطاقة */
+          .cardFooter { display: flex; justify-content: flex-end; padding: 12px 16px; border-top: 1px dashed #e2e8f0; background: #fcfcfd; margin-top: auto; }
+          .compact .cardFooter { padding: 10px 12px; }
+
+          .metaInfo { display: flex; align-items: center; justify-content: flex-end; gap: 8px; width: 100%; }
+          .directBadge, .timeBadge { display: flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 700; padding: 4px 8px; border-radius: 6px; }
+          .directBadge { background: #ebf8ff; color: #2b6cb0; }
+          .timeBadge { background: #edf2f7; color: #718096; }
+          .directBadge .material-icons-outlined, .timeBadge .material-icons-outlined { font-size: 13px; }
+        `}</style>
+      </CardTag>
+    </>
+  );
+}

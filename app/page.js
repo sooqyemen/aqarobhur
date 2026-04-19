@@ -1,10 +1,144 @@
 'use client';
+
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import ListingCard from '@/components/ListingCard';
 import NeighborhoodGrid from '@/components/NeighborhoodGrid';
 import { fetchLatestListings } from '@/lib/listings';
-import { FEATURED_NEIGHBORHOODS } from '@/lib/taxonomy';
 import { buildWhatsAppLink } from '@/components/WhatsAppBar';
-function ListingsState({ loading, error, items }){if(loading){return <div className="listing-grid">{[1,2,3,4].map((id)=><div key={id} className="skeleton-card homeSkeletonCard" />)}</div>;}if(error)return <div className="error-card">{error}</div>;if(!items.length)return <div className="empty-card">لا توجد عقارات منشورة حالياً في هذه الفئة.</div>;return <div className="listing-grid">{items.map((item,index)=><ListingCard key={item?.id||item?.docId||item?.slug||`listing-${index}`} item={item} />)}</div>;}
-export default function HomePage(){const[items,setItems]=useState([]);const[loading,setLoading]=useState(true);const[errorText,setErrorText]=useState('');const[activeTab,setActiveTab]=useState('all');const whatsappNumber=process.env.NEXT_PUBLIC_WHATSAPP_NUMBER||'966597520693';const whatsappLink=buildWhatsAppLink({phone:whatsappNumber,text:'السلام عليكم، أرغب في الاستفسار عن عروض عقار أبحر.'});useEffect(()=>{let active=true;async function load(){try{setLoading(true);setErrorText('');const result=await fetchLatestListings({n:8,onlyPublic:true,includeLegacy:true});if(!active)return;setItems(Array.isArray(result)?result:[]);}catch{if(!active)return;setItems([]);setErrorText('تعذر تحميل العقارات الآن، يرجى المحاولة لاحقاً.');}finally{if(active)setLoading(false);}}load();return()=>{active=false;};},[]);const filteredItems=useMemo(()=>{const safeItems=Array.isArray(items)?items.filter(Boolean):[];if(activeTab==='all')return safeItems;return safeItems.filter((item)=>String(item?.dealType||'').toLowerCase()===activeTab);},[items,activeTab]);const stats=useMemo(()=>{const all=Array.isArray(items)?items:[];return{total:all.length,sale:all.filter((item)=>String(item?.dealType||'').toLowerCase()==='sale').length,rent:all.filter((item)=>String(item?.dealType||'').toLowerCase()==='rent').length,direct:all.filter((item)=>!!item?.direct).length};},[items]);const featuredNeighborhoods=FEATURED_NEIGHBORHOODS.slice(0,6);return(<div className="homeLanding"><section className="homeHeroV2"><div className="container homeHeroGridV2"><div className="homeHeroTextV2"><span className="homeHeroBadgeV2">منصة عقارية متخصصة في أبحر الشمالية وشمال جدة</span><h1 className="homeHeroTitleV2">عروض عقارية أوضح،<br/>وتجربة تصفح أهدأ وأكثر احترافية.</h1><p className="homeHeroDescV2">استعرض الأراضي والفلل والشقق بسرعة، انتقل بين الأحياء بسهولة، وأرسل طلبك العقاري مباشرة لفريق عقار أبحر.</p><div className="homeHeroActionsV2"><Link href="/listings" className="heroPrimaryBtnV2">استكشف العقارات</Link><Link href="/map" className="heroSecondaryBtnV2">افتح الخريطة العقارية</Link></div><div className="heroStatsRowV2"><div className="heroStatCardV2"><strong>{stats.total}</strong><span>عروض حديثة</span></div><div className="heroStatCardV2"><strong>{stats.sale}</strong><span>للبيع</span></div><div className="heroStatCardV2"><strong>{stats.rent}</strong><span>للإيجار</span></div><div className="heroStatCardV2"><strong>{stats.direct}</strong><span>مباشر</span></div></div></div><div className="homeHeroPanelV2"><div className="heroFilterCardV2"><div className="heroFilterTopV2"><div><h2>ابدأ من المسار المناسب</h2><p>اختر نوع الطلب أو اذهب مباشرة إلى صفحة العروض.</p></div></div><div className="heroTabsV2"><button type="button" className={`heroTabV2 ${activeTab==='all'?'active':''}`} onClick={()=>setActiveTab('all')}>الكل</button><button type="button" className={`heroTabV2 ${activeTab==='sale'?'active':''}`} onClick={()=>setActiveTab('sale')}>بيع</button><button type="button" className={`heroTabV2 ${activeTab==='rent'?'active':''}`} onClick={()=>setActiveTab('rent')}>إيجار</button></div><Link href={`/listings${activeTab!=='all'?`?dealType=${activeTab}`:''}`} className="heroExploreBtnV2">عرض النتائج الحالية</Link><div className="heroMiniLinksV2"><Link href="/marketing-request" className="heroMiniCardV2"><strong>تسويق العقار</strong><span>إرسال طلب تسويق وبدء المتابعة</span></Link><Link href="/ejar-request" className="heroMiniCardV2"><strong>توثيق الإيجار</strong><span>طلب عقد إلكتروني عبر منصة إيجار</span></Link><Link href="/request" className="heroMiniCardV2"><strong>طلب عقاري</strong><span>أرسل مواصفاتك وسنبحث لك عن المناسب</span></Link></div></div></div></div></section><section className="container quickNeighborhoodsV2"><div className="sectionHeadV2"><div><h2>أحياء مطلوبة باستمرار</h2><p>انتقل مباشرة إلى الأحياء الأكثر تداولاً في الموقع.</p></div><Link href="/neighborhoods" className="plainPillLinkV2">جميع الأحياء</Link></div><div className="quickNeighborhoodTrackV2">{featuredNeighborhoods.map((item)=><Link key={item.key} href={`/listings?neighborhood=${encodeURIComponent(item.label)}`} className="quickNeighborhoodCardV2"><strong>{item.label}</strong><span>استعرض العروض</span></Link>)}</div></section><section className="container homeServicesV2"><div className="sectionHeadV2 centerOnMobile"><div><h2>خدمات أساسية بشكل أوضح</h2><p>قسمنا المسارات الرئيسية حتى يصل الزائر للخدمة المناسبة بأقل تشتيت.</p></div></div><div className="homeServiceGridV2"><Link href="/marketing-request" className="serviceCardV2"><span className="serviceTagV2">تسويق</span><h3>تسويق عقارك باحترافية</h3><p>استقبال تفاصيل العقار والبدء في التسويق بطريقة مرتبة وواضحة.</p></Link><Link href="/ejar-request" className="serviceCardV2"><span className="serviceTagV2">إيجار</span><h3>توثيق عقود الإيجار</h3><p>واجهة أبسط لطلبات التوثيق ومتابعة العقود الإلكترونية.</p></Link><Link href="/request" className="serviceCardV2"><span className="serviceTagV2">بحث</span><h3>أرسل طلبك العقاري</h3><p>حدد مواصفاتك ودع الفريق يتابع معك الخيارات المناسبة.</p></Link></div></section><div className="container"><NeighborhoodGrid title="استكشف أحياء شمال جدة" showViewAll /></div><section className="container latestListingsSectionV2"><div className="sectionHeadV2"><div><h2>أحدث العروض العقارية</h2><p>بطاقات أوضح ومسافات أهدأ لتصفح أسهل على الجوال والكمبيوتر.</p></div><Link href="/listings" className="plainPillLinkV2">عرض الكل</Link></div><ListingsState loading={loading} error={errorText} items={filteredItems} /></section><section className="container homeCtaSectionV2"><div className="homeCtaCardV2"><div><h2>هل لديك استفسار سريع؟</h2><p>تواصل مباشرة عبر الواتساب للحصول على رد أسرع أو لإرسال طلبك العقاري.</p></div><a href={whatsappLink} target="_blank" rel="noopener noreferrer" className="heroPrimaryBtnV2">تحدث معنا عبر الواتساب</a></div></section></div>)}
+
+function ListingsState({ loading, error, items }) {
+  if (loading) {
+    return (
+      <div className="listing-grid">
+        {[1, 2, 3, 4].map((id) => (
+          <div key={id} className="skeleton-card" />
+        ))}
+      </div>
+    );
+  }
+  if (error) return <div className="error-card">{error}</div>;
+  if (!items.length) return <div className="empty-card">لا توجد عقارات منشورة حاليًا في هذه الفئة.</div>;
+  
+  return (
+    <div className="listing-grid">
+      {items.map((item, index) => (
+        <ListingCard key={item?.id || item?.docId || item?.slug || `listing-${index}`} item={item} />
+      ))}
+    </div>
+  );
+}
+
+export default function HomePage() {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [errorText, setErrorText] = useState('');
+  const [activeTab, setActiveTab] = useState('all'); 
+
+  // استخدام رقم عقار أبحر بدلاً من رقم الفنار
+  const whatsappNumber = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || '966597520693';
+  const whatsappLink = buildWhatsAppLink({
+    phone: whatsappNumber,
+    text: 'السلام عليكم، أرغب في الاستفسار عن عروض عقار أبحر.',
+  });
+
+  useEffect(() => {
+    let active = true;
+    async function load() {
+      try {
+        setLoading(true); setErrorText('');
+        const result = await fetchLatestListings({ n: 8, onlyPublic: true, includeLegacy: true });
+        if (!active) return;
+        setItems(Array.isArray(result) ? result : []);
+      } catch {
+        if (!active) return;
+        setErrorText('تعذر تحميل العقارات الآن، يرجى المحاولة لاحقاً.');
+        setItems([]);
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+    load();
+    return () => { active = false; };
+  }, []);
+
+  const filteredItems = useMemo(() => {
+    const safeItems = Array.isArray(items) ? items.filter(Boolean) : [];
+    if (activeTab === 'all') return safeItems;
+    return safeItems.filter(item => item.dealType === activeTab);
+  }, [items, activeTab]);
+
+  return (
+    <>
+      <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined" rel="stylesheet" />
+      
+      <div>
+        <section className="home-hero-section">
+          <div className="home-hero-overlay"></div>
+          <div className="container home-hero-content">
+            
+            <div className="search-container">
+              <div className="search-tabs">
+                <button className={`tab-btn ${activeTab === 'all' ? 'active' : ''}`} onClick={() => setActiveTab('all')}>الكل</button>
+                <button className={`tab-btn ${activeTab === 'sale' ? 'active' : ''}`} onClick={() => setActiveTab('sale')}>للبـيع</button>
+                <button className={`tab-btn ${activeTab === 'rent' ? 'active' : ''}`} onClick={() => setActiveTab('rent')}>للإيجار</button>
+              </div>
+              <div>
+                 <Link href={`/listings?dealType=${activeTab !== 'all' ? activeTab : ''}`} className="main-search-btn">
+                    استكشف العقارات المتاحة الآن
+                    <span className="material-icons-outlined">search</span>
+                 </Link>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <div className="container home-content-body">
+            <section className="features-grid">
+                <div className="feature-card">
+                    <div className="feature-icon-container"><span className="material-icons-outlined">handshake</span></div>
+                    <h3>تسويق عقارك باحترافية</h3>
+                    <p>نصدر لك عقد وساطة رسمي عبر منصة الهيئة، ونتولى تسويق عقارك.</p>
+                    <Link href="/marketing-request" className="feature-link">طلب تسويق <span className="material-icons-outlined">arrow_back</span></Link>
+                </div>
+                <div className="feature-card">
+                    <div className="feature-icon-container"><span className="material-icons-outlined">assignment</span></div>
+                    <h3>توثيق عقود الإيجار</h3>
+                    <p>نوفر خدمة إصدار وتوثيق عقود الإيجار الإلكترونية في منصة إيجار.</p>
+                    <Link href="/ejar-request" className="feature-link">طلب عقد <span className="material-icons-outlined">arrow_back</span></Link>
+                </div>
+                <div className="feature-card">
+                    <div className="feature-icon-container"><span className="material-icons-outlined">manage_search</span></div>
+                    <h3>أرسل طلبك العقاري</h3>
+                    <p>أرسل مواصفات طلبك وسنقوم بالبحث وتوفير الخيارات المناسبة لك.</p>
+                    <Link href="/request" className="feature-link">تقديم طلب <span className="material-icons-outlined">arrow_back</span></Link>
+                </div>
+            </section>
+
+            <NeighborhoodGrid title="استكشف أبرز أحياء شمال جدة" showViewAll />
+
+            <section style={{ marginBottom: '50px' }}>
+              <div className="section-header">
+                <div>
+                    <h2>أحدث العروض العقارية</h2>
+                    <p>اكتشف أحدث الشقق، الفلل، والأراضي المدرجة حديثاً</p>
+                </div>
+                <Link href="/listings" className="nb-view-btn">عرض كافة العقارات</Link>
+              </div>
+              <ListingsState loading={loading} error={errorText} items={filteredItems} />
+            </section>
+
+            <section className="cta-section">
+                <div>
+                    <h2 style={{ margin: '0 0 10px' }}>هل لديك استفسار سريع؟</h2>
+                    <p style={{ margin: 0, color: 'var(--muted)' }}>نحن هنا لخدمتك، تواصل معنا الآن مباشرة عبر الواتساب.</p>
+                </div>
+                <a href={whatsappLink} target="_blank" rel="noopener noreferrer" className="whatsapp-cta-btn">
+                    تحدث معنا عبر الواتساب
+                </a>
+            </section>
+        </div>
+      </div>
+    </>
+  );
+}

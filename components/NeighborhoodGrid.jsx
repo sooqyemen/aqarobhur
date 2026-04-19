@@ -1,4 +1,35 @@
 'use client';
+
 import Link from 'next/link';
 import { NEIGHBORHOODS } from '@/lib/taxonomy';
-export default function NeighborhoodGrid({ title='تصفح حسب الحي', showViewAll=true }){const list=Array.isArray(NEIGHBORHOODS)?NEIGHBORHOODS:[];if(!list.length)return null;return(<section className="nbModernSection"><div className="nbModernHeader"><div><h2 className="nbModernTitle">{title}</h2><p className="nbModernSubtitle">انتقل بسرعة إلى الحي الذي يهمك وشاهد العروض المرتبطة به مباشرة.</p></div>{showViewAll?<Link href="/neighborhoods" className="nbModernViewAll">عرض الكل</Link>:null}</div><div className="nbModernScroller"><div className="nbModernTrack">{list.map((name)=><Link key={name} href={`/listings?neighborhood=${encodeURIComponent(name)}`} className="nbModernChip"><span className="nbModernDot"/>{name}</Link>)}</div></div><style jsx>{`.nbModernSection{margin:44px 0}.nbModernHeader{display:flex;align-items:end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:18px}.nbModernTitle{margin:0;font-size:clamp(22px,2.6vw,30px);line-height:1.2;font-weight:900;color:#0f172a}.nbModernSubtitle{margin:6px 0 0;color:#64748b;font-size:14px;font-weight:700}.nbModernViewAll{min-height:42px;padding:0 16px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;background:#fff;border:1px solid #dce7f1;color:var(--primary);font-size:13px;font-weight:900}.nbModernScroller{overflow-x:auto;margin:0 -4px;padding:4px;scrollbar-width:none}.nbModernScroller::-webkit-scrollbar{display:none}.nbModernTrack{width:max-content;display:flex;align-items:center;gap:12px;padding-bottom:8px}.nbModernChip{min-height:52px;padding:0 18px;border-radius:999px;display:inline-flex;align-items:center;gap:10px;background:#fff;border:1px solid #dbe5ef;box-shadow:0 8px 18px rgba(15,23,42,.04);color:#0f172a;font-size:14px;font-weight:800;white-space:nowrap;transition:.2s ease}.nbModernChip:hover{transform:translateY(-2px);border-color:rgba(15,118,110,.18);color:var(--primary);box-shadow:0 14px 24px rgba(15,23,42,.08)}.nbModernDot{width:8px;height:8px;border-radius:50%;background:linear-gradient(135deg,var(--primary),#0d9488);flex-shrink:0}`}</style></section>)}
+
+export default function NeighborhoodGrid({ title = 'تصفح حسب الحي', showViewAll = true }) {
+  const list = Array.isArray(NEIGHBORHOODS) ? NEIGHBORHOODS : [];
+  
+  if (list.length === 0) return null;
+
+  return (
+    <section className="nb-section">
+      <div className="nb-header">
+        <div>
+          <h2 className="nb-title">{title}</h2>
+          <p className="nb-subtitle">اختر الحي لاستعراض العقارات المتاحة فيه</p>
+        </div>
+        {showViewAll && (
+          <Link href="/neighborhoods" className="nb-view-btn">عرض الكل</Link>
+        )}
+      </div>
+
+      <div className="nb-scroll-area">
+        <div className="nb-chips-wrapper">
+          {list.map((name) => (
+            <Link key={name} href={`/listings?neighborhood=${encodeURIComponent(name)}`} className="nb-chip">
+              <span className="dot"></span>
+              {name}
+            </Link>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
