@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { formatPriceSAR, statusBadge } from '@/lib/format';
+import { getCoverMedia, getMediaCount, isVideoLike } from '@/lib/media';
 
 function timeAgoLabel(createdAt) {
   try {
@@ -36,7 +37,6 @@ export default function ListingCard({ item, compact = false }) {
     dealType,
     propertyType,
     status = 'available',
-    images = [],
     direct = false,
     createdAt,
   } = item;
@@ -44,8 +44,11 @@ export default function ListingCard({ item, compact = false }) {
   const isRent = dealType === 'rent';
   const displayPrice = formatPriceSAR(price);
   const detailLink = safeId ? `/listing/${encodeURIComponent(String(safeId))}` : '#';
-  const mainImage = Array.isArray(images) && images.length ? images[0] : null;
-  const hasMultipleImages = Array.isArray(images) && images.length > 1;
+  const coverMedia = getCoverMedia(item);
+  const coverUrl = coverMedia?.url || '';
+  const coverIsVideo = isVideoLike(coverMedia);
+  const mediaCount = getMediaCount(item);
+  const hasMultipleMedia = mediaCount > 1;
   const timeText = timeAgoLabel(createdAt);
 
   const locationParts = [neighborhood, plan, part].filter(Boolean);
@@ -62,50 +65,47 @@ export default function ListingCard({ item, compact = false }) {
       <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined" rel="stylesheet" />
 
       <CardTag {...cardProps}>
-        
-        {/* منطقة الصورة العلوية */}
         <div className="cardMedia">
-          {mainImage ? (
-            <img
-              src={mainImage}
-              alt={title}
-              className="mediaImage"
-              loading="lazy"
-              onError={(e) => {
-                // عند فشل تحميل الصورة (رابط خاطئ أو محذوف) استبدلها بصورة افتراضية
-                e.currentTarget.src = '/placeholder-house.jpg';
-                e.currentTarget.onerror = null; // منع تكرار الخطأ إذا فشلت الصورة البديلة
-              }}
-            />
+          {coverUrl ? (
+            coverIsVideo ? (
+              <video src={coverUrl} className="mediaImage" muted playsInline preload="metadata" />
+            ) : (
+              <img src={coverUrl} alt={title} className="mediaImage" loading="lazy" />
+            )
           ) : (
             <div className="mediaPlaceholder">
               <span className="material-icons-outlined">image_not_supported</span>
-              <span>لا توجد صورة</span>
+              <span>لا توجد وسائط</span>
             </div>
           )}
 
           <div className="mediaOverlays">
             <div className="statusBadgeWrap">{statusBadge(status)}</div>
-            {hasMultipleImages && (
+            {hasMultipleMedia ? (
               <div className="imageCountBadge">
                 <span className="material-icons-outlined">photo_library</span>
-                {images.length}
+                {mediaCount}
               </div>
-            )}
+            ) : null}
           </div>
-          
-          {/* علامة الإيجار أو البيع */}
+
+          {coverIsVideo ? (
+            <div className="videoBadge">
+              <span className="material-icons-outlined">play_circle</span>
+              فيديو
+            </div>
+          ) : null}
+
           <div className={`dealBadge ${isRent ? 'rent' : 'sale'}`}>
-             {isRent ? 'للإيجار' : 'للبيع'}
+            {isRent ? 'للإيجار' : 'للبيع'}
           </div>
         </div>
 
-        {/* محتوى البطاقة */}
         <div className="cardBody">
           <div className="priceRow">
             <div className="priceText">
               {displayPrice}
-              {isRent && <span className="rentSuffix">/ شهري</span>}
+              {isRent && <span className="rentSuffix">/ سنوي</span>}
             </div>
           </div>
 
@@ -124,7 +124,6 @@ export default function ListingCard({ item, compact = false }) {
           )}
         </div>
 
-        {/* تذييل البطاقة */}
         <div className="cardFooter">
           <div className="metaInfo">
             {direct && <span className="directBadge"><span className="material-icons-outlined">verified</span> مباشر</span>}
@@ -156,7 +155,6 @@ export default function ListingCard({ item, compact = false }) {
 
           .listingCard.disabled { cursor: default; opacity: 0.9; }
 
-          /* الصورة ومحتوياتها */
           .cardMedia {
             position: relative;
             aspect-ratio: 16 / 11;
@@ -170,6 +168,8 @@ export default function ListingCard({ item, compact = false }) {
             height: 100%;
             object-fit: cover;
             transition: transform 0.4s ease;
+            display: block;
+            background: #0f172a;
           }
           .listingCard:hover:not(.disabled) .mediaImage { transform: scale(1.05); }
 
@@ -215,7 +215,8 @@ export default function ListingCard({ item, compact = false }) {
           .statusBadgeWrap :global(.badge.warn) { color: #dd6b20; }
           .statusBadgeWrap :global(.badge.sold) { color: #c53030; }
 
-          .imageCountBadge {
+          .imageCountBadge,
+          .videoBadge {
             display: inline-flex;
             align-items: center;
             gap: 4px;
@@ -227,7 +228,14 @@ export default function ListingCard({ item, compact = false }) {
             background: rgba(26, 32, 44, 0.7);
             backdrop-filter: blur(4px);
           }
-          .imageCountBadge .material-icons-outlined { font-size: 14px; }
+          .imageCountBadge .material-icons-outlined,
+          .videoBadge .material-icons-outlined { font-size: 14px; }
+
+          .videoBadge {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+          }
 
           .dealBadge {
             position: absolute;
@@ -243,7 +251,6 @@ export default function ListingCard({ item, compact = false }) {
           .dealBadge.sale { background: #3182ce; }
           .dealBadge.rent { background: #dd6b20; }
 
-          /* جسم البطاقة */
           .cardBody { padding: 16px; display: flex; flex-direction: column; gap: 10px; flex-grow: 1; }
           .compact .cardBody { padding: 12px; gap: 8px; }
 
@@ -256,10 +263,9 @@ export default function ListingCard({ item, compact = false }) {
 
           .locationRow, .specsRow { display: flex; align-items: center; gap: 6px; font-size: 13px; color: #4a5568; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
           .locationRow .material-icons-outlined, .specsRow .material-icons-outlined { font-size: 16px; color: #a0aec0; }
-          
+
           .specsRow { background: #f7fafc; padding: 6px 10px; border-radius: 8px; border: 1px solid #edf2f7; font-weight: 600; color: #2d3748; margin-top: 4px; }
 
-          /* تذييل البطاقة */
           .cardFooter { display: flex; justify-content: flex-end; padding: 12px 16px; border-top: 1px dashed #e2e8f0; background: #fcfcfd; margin-top: auto; }
           .compact .cardFooter { padding: 10px 12px; }
 

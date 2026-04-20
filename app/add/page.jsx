@@ -10,6 +10,7 @@ import { isAdminUser } from '@/lib/admin';
 import { adminCreateListing } from '@/lib/listings';
 import { DEAL_TYPES, NEIGHBORHOODS, PROPERTY_CLASSES, PROPERTY_TYPES, STATUS_OPTIONS } from '@/lib/taxonomy';
 import { formatPriceSAR, statusBadge } from '@/lib/format';
+import { formatFileSize, getMediaKind, isVideoLike, validateSelectedFiles } from '@/lib/media';
 
 const MAX_FILES = 30;
 const JEDDAH_BOUNDS = { north: 22.0, south: 21.0, east: 39.5, west: 39.0 };
@@ -316,6 +317,9 @@ function MapPicker({ lat, lng, onChange }) {
 function useUploader(storage) {
   const [queue, setQueue] = useState([]);
   const [uploading, setUploading] = useState(false);
+  const [issues, setIssues] = useState([]);
+
+  const clearIssues = useCallback(() => setIssues([]), []);
 
   const removeAt = useCallback(
     async (idx) => {
@@ -333,38 +337,64 @@ function useUploader(storage) {
 
   const addFiles = useCallback(
     async (files) => {
-      if (!storage) return;
-
-      const list = Array.from(files || []);
-      if (!list.length) return;
+      if (!storage) {
+        setIssues([{ name: 'Firebase Storage', reason: 'التخزين غير مهيأ. تأكد من متغيرات NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET وباقي إعدادات Firebase.' }]);
+        return;
+      }
 
       const available = Math.max(0, MAX_FILES - queue.length);
-      const picked = list.slice(0, available);
-      if (!picked.length) return;
+      const incoming = Array.from(files || []);
+      if (!incoming.length || available <= 0) {
+        if (incoming.length && available <= 0) {
+          setIssues([{ name: 'الملفات', reason: `تم الوصول إلى الحد الأقصى وهو ${MAX_FILES} ملف.` }]);
+        }
+        return;
+      }
+
+      const { accepted, rejected } = validateSelectedFiles(incoming.slice(0, available), { maxFiles: available });
+      const issueList = rejected.map((entry) => ({
+        name: String(entry?.file?.name || 'ملف'),
+        reason: entry?.reason || 'تعذر قبول الملف',
+      }));
+      setIssues(issueList);
+      if (!accepted.length) return;
 
       setUploading(true);
 
-      for (const file of picked) {
+      for (const file of accepted) {
         const safeName = String(file.name || 'file').replace(/[^\w.\-]+/g, '_');
-        // تم تغيير مسار المجلد ليكون خاص بعقار أبحر
+        const kind = getMediaKind(file);
         const refPath = `aqarobhur_images/listings/draft_${Date.now()}_${Math.random().toString(16).slice(2)}_${safeName}`;
         const refObj = storageRef(storage, refPath);
         let tempKey = '';
 
         setQueue((prev) => {
           tempKey = `${Date.now()}_${Math.random().toString(16).slice(2)}`;
-          return [...prev, { key: tempKey, name: file.name || 'file', progress: 0, url: '', refPath, kind: String(file.type || '').startsWith('video/') ? 'video' : 'image' }];
+          return [
+            ...prev,
+            {
+              key: tempKey,
+              name: file.name || 'file',
+              progress: 0,
+              url: '',
+              refPath,
+              kind,
+              size: Number(file.size || 0),
+            },
+          ];
         });
 
         await new Promise((resolve) => {
-          const task = uploadBytesResumable(refObj, file);
+          const task = uploadBytesResumable(refObj, file, file?.type ? { contentType: file.type } : undefined);
           task.on(
             'state_changed',
             (snap) => {
               const pct = snap.totalBytes ? Math.round((snap.bytesTransferred / snap.totalBytes) * 100) : 0;
               setQueue((prev) => prev.map((x) => (x.key === tempKey ? { ...x, progress: pct } : x)));
             },
-            () => {
+            (error) => {
+              const msg = String(error?.code || error?.message || 'تعذر رفع الملف');
+              setIssues((prev) => [...prev, { name: file.name || 'file', reason: msg }]);
               setQueue((prev) => prev.filter((x) => x.key !== tempKey));
               resolve();
             },
@@ -373,6 +403,7 @@ function useUploader(storage) {
                 const url = await getDownloadURL(task.snapshot.ref);
                 setQueue((prev) => prev.map((x) => (x.key === tempKey ? { ...x, url, progress: 100 } : x)));
               } catch {
+                setIssues((prev) => [...prev, { name: file.name || 'file', reason: 'تم رفع الملف لكن تعذر استخراج رابط العرض.' }]);
                 setQueue((prev) => prev.filter((x) => x.key !== tempKey));
               }
               resolve();
@@ -389,11 +420,11 @@ function useUploader(storage) {
   const media = useMemo(
     () => queue
       .filter((q) => q.url)
-      .map((q) => ({ url: q.url, refPath: q.refPath || '', name: q.name || '', kind: q.kind || 'image' })),
+      .map((q) => ({ url: q.url, refPath: q.refPath || '', name: q.name || '', kind: q.kind || 'image', size: q.size || null })),
     [queue]
   );
   const urls = useMemo(() => media.map((q) => q.url).filter(Boolean), [media]);
-  return { queue, setQueue, uploading, addFiles, removeAt, urls, media };
+  return { queue, setQueue, uploading, addFiles, removeAt, urls, media, issues, clearIssues };
 }
 
 function StepHeader({ step, setStep }) {
@@ -429,7 +460,7 @@ function ReviewRow({ label, value }) {
 
 function CreateListingForm({ form, setForm, onSave, onReset, busy, createdId, uploader, saveErr }) {
   const [step, setStep] = useState('basic');
-  const { queue, uploading, addFiles, removeAt } = uploader;
+  const { queue, uploading, addFiles, removeAt, issues, clearIssues } = uploader;
   const pricePreview = form.price ? formatPriceSAR(Number(form.price)) : '';
 
   const stepIndex = FORM_STEPS.findIndex((s) => s.key === step);
@@ -582,29 +613,77 @@ function CreateListingForm({ form, setForm, onSave, onReset, busy, createdId, up
 
       {step === 'media' ? (
         <div style={{ marginTop: 12 }}>
-          <Field label="رفع صور أو فيديو" hint={`حد أقصى ${MAX_FILES} ملف`}>
+          <Field label="رفع صور أو فيديو" hint={`حد أقصى ${MAX_FILES} ملف — الصور حتى 15MB والفيديو حتى 120MB`}>
             <label className="btn btnPrimary" style={{ cursor: 'pointer' }}>
               اختر ملفات
-              <input type="file" multiple accept="image/*,video/*" onChange={(e) => addFiles(e.target.files)} style={{ display: 'none' }} />
+              <input
+                type="file"
+                multiple
+                accept="image/*,video/*"
+                onChange={(e) => {
+                  addFiles(e.target.files);
+                  e.target.value = '';
+                }}
+                style={{ display: 'none' }}
+              />
             </label>
 
-            {queue.length ? (
-              <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {queue.map((q, idx) => (
-                  <div key={`${q.name}_${idx}`} className="card" style={{ padding: 12 }}>
-                    <div className="row" style={{ justifyContent: 'space-between', gap: 10, alignItems: 'center' }}>
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ fontWeight: 900, overflow: 'hidden', textOverflow: 'ellipsis' }}>{q.name}</div>
-                        <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>{q.url ? 'تم الرفع' : `جاري الرفع: ${q.progress || 0}%`}</div>
-                      </div>
-                      <button className="btn" type="button" onClick={() => removeAt(idx)} style={{ fontSize: 12 }}>حذف</button>
+            {issues.length ? (
+              <div className="card" style={{ marginTop: 10, padding: 12, borderColor: 'rgba(220,38,38,.2)', background: 'rgba(220,38,38,.05)' }}>
+                <div style={{ fontWeight: 900, marginBottom: 6 }}>ملفات لم يتم قبولها أو رفعها:</div>
+                <div style={{ display: 'grid', gap: 6 }}>
+                  {issues.map((issue, idx) => (
+                    <div key={`${issue.name}_${idx}`} style={{ fontSize: 13 }}>
+                      <strong>{issue.name}</strong> — {issue.reason}
                     </div>
+                  ))}
+                </div>
+                <button className="btn" type="button" onClick={clearIssues} style={{ marginTop: 10, fontSize: 12 }}>إخفاء الرسائل</button>
+              </div>
+            ) : null}
 
-                    <div style={{ marginTop: 8, height: 10, borderRadius: 999, background: 'rgba(15, 118, 110, 0.22)', overflow: 'hidden' }}>
-                      <div style={{ width: `${Math.min(100, q.progress || 0)}%`, height: '100%', background: 'var(--primary)', borderRadius: 999 }} />
+            {queue.length ? (
+              <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 12 }}>
+                {queue.map((q, idx) => {
+                  const isVideo = isVideoLike(q);
+                  return (
+                    <div key={q.key || `${q.name}_${idx}`} className="card" style={{ padding: 10, overflow: 'hidden' }}>
+                      <div style={{ position: 'relative', aspectRatio: '1 / 1', borderRadius: 14, overflow: 'hidden', background: '#f8fafc', border: '1px solid var(--border)' }}>
+                        {q.url ? (
+                          isVideo ? (
+                            <video src={q.url} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', background: '#111827' }} muted playsInline preload="metadata" controls />
+                          ) : (
+                            <img src={q.url} alt={q.name || 'preview'} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} loading="lazy" />
+                          )
+                        ) : (
+                          <div style={{ width: '100%', height: '100%', display: 'grid', placeItems: 'center', color: 'var(--muted)', fontWeight: 900 }}>
+                            جاري الرفع…
+                          </div>
+                        )}
+
+                        <div style={{ position: 'absolute', top: 8, right: 8, padding: '5px 8px', borderRadius: 999, background: 'rgba(15,23,42,.65)', color: '#fff', fontSize: 11, fontWeight: 900 }}>
+                          {isVideo ? 'فيديو' : 'صورة'}
+                        </div>
+                      </div>
+
+                      <div style={{ marginTop: 10, minWidth: 0 }}>
+                        <div style={{ fontWeight: 900, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{q.name}</div>
+                        <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+                          {q.url ? 'تم الرفع' : `جاري الرفع: ${q.progress || 0}%`} {q.size ? `• ${formatFileSize(q.size)}` : ''}
+                        </div>
+                      </div>
+
+                      <div style={{ marginTop: 8, height: 8, borderRadius: 999, background: 'rgba(15, 118, 110, 0.18)', overflow: 'hidden' }}>
+                        <div style={{ width: `${Math.min(100, q.progress || 0)}%`, height: '100%', background: 'var(--primary)', borderRadius: 999 }} />
+                      </div>
+
+                      <div className="row" style={{ justifyContent: 'space-between', gap: 8, marginTop: 10, alignItems: 'center' }}>
+                        <div className="muted" style={{ fontSize: 12 }}>{idx === 0 ? 'سيظهر كغلاف إذا لم تغيّر الترتيب لاحقًا.' : 'وسيط إضافي'}</div>
+                        <button className="btn" type="button" onClick={() => removeAt(idx)} style={{ fontSize: 12 }}>حذف</button>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             ) : (
               <div className="muted" style={{ marginTop: 10, fontSize: 12 }}>لم يتم اختيار ملفات بعد.</div>
@@ -738,6 +817,7 @@ export default function AddListingPage() {
     setAuthErr('');
     setForm(initialForm);
     uploader.setQueue([]);
+    uploader.clearIssues?.();
   }, [initialForm, uploader]);
 
   const login = async (e) => {

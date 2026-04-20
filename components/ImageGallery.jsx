@@ -1,29 +1,44 @@
-// components/ImageGallery.jsx
 'use client';
 
-import { useState, useRef } from 'react';
-
-function getMediaType(src) {
-  const videoExtensions = ['.mp4', '.webm', '.ogg', '.mov', '.avi', '.mkv'];
-  const lowerSrc = String(src || '').toLowerCase();
-  return videoExtensions.some(ext => lowerSrc.includes(ext)) ? 'video' : 'image';
-}
+import { useMemo, useRef, useState } from 'react';
+import { isVideoLike } from '@/lib/media';
 
 export default function ImageGallery({ images = [], title }) {
+  const media = useMemo(() => {
+    if (Array.isArray(images) && images.length && typeof images[0] !== 'string' && typeof images[0] === 'object') {
+      return images
+        .map((entry) => ({
+          url: String(entry?.url || '').trim(),
+          kind: isVideoLike(entry) ? 'video' : 'image',
+          refPath: String(entry?.refPath || '').trim(),
+        }))
+        .filter((entry) => entry.url);
+    }
+
+    return (Array.isArray(images) ? images : [])
+      .map((entry) => ({
+        url: String(entry || '').trim(),
+        kind: isVideoLike(entry) ? 'video' : 'image',
+        refPath: '',
+      }))
+      .filter((entry) => entry.url);
+  }, [images]);
+
   const [activeIndex, setActiveIndex] = useState(0);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const touchStartX = useRef(0);
   const touchEndX = useRef(0);
 
-  if (!images.length) {
+  if (!media.length) {
     return <div className="emptyMedia">لا توجد وسائط لهذا الإعلان.</div>;
   }
 
-  const activeSrc = images[activeIndex];
-  const activeType = getMediaType(activeSrc);
+  const activeEntry = media[Math.min(activeIndex, media.length - 1)] || media[0];
+  const activeSrc = activeEntry.url;
+  const activeType = activeEntry.kind;
 
-  const goPrev = () => setActiveIndex((prev) => (prev - 1 + images.length) % images.length);
-  const goNext = () => setActiveIndex((prev) => (prev + 1) % images.length);
+  const goPrev = () => setActiveIndex((prev) => (prev - 1 + media.length) % media.length);
+  const goNext = () => setActiveIndex((prev) => (prev + 1) % media.length);
 
   const handleTouchStart = (e) => {
     touchStartX.current = e.changedTouches[0]?.clientX || 0;
@@ -40,73 +55,51 @@ export default function ImageGallery({ images = [], title }) {
     <>
       <div className="galleryCard card">
         <div className="mainImageWrap" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
-          <button
-            type="button"
-            className="navBtn navPrev desktopOnly"
-            onClick={goPrev}
-            aria-label="الوسيط السابق"
-          >
+          <button type="button" className="navBtn navPrev desktopOnly" onClick={goPrev} aria-label="الوسيط السابق">
             ‹
           </button>
 
-          <button
-            type="button"
-            className="imageButton"
-            onClick={() => setLightboxOpen(true)}
-            aria-label="فتح الوسيط"
-          >
-            {activeType === 'video' ? (
-              <video
-                src={activeSrc}
-                controls
-                className="mainImage"
-                playsInline
-                muted
-                autoPlay={false}
-              />
-            ) : (
-              // eslint-disable-next-line @next/next/no-img-element
+          {activeType === 'video' ? (
+            <div className="mediaFrame">
+              <video src={activeSrc} controls className="mainImage" playsInline preload="metadata" />
+              <button type="button" className="zoomBtn" onClick={() => setLightboxOpen(true)} aria-label="فتح الفيديو">
+                ⤢
+              </button>
+            </div>
+          ) : (
+            <button type="button" className="imageButton" onClick={() => setLightboxOpen(true)} aria-label="فتح الصورة">
               <img src={activeSrc} alt={title || 'صورة العقار'} className="mainImage" />
-            )}
-          </button>
+            </button>
+          )}
 
-          <button
-            type="button"
-            className="navBtn navNext desktopOnly"
-            onClick={goNext}
-            aria-label="الوسيط التالي"
-          >
+          <button type="button" className="navBtn navNext desktopOnly" onClick={goNext} aria-label="الوسيط التالي">
             ›
           </button>
 
-          {images.length > 1 && (
-            <div className="mobileSwipeHint">اسحب يمين أو يسار للتنقل بين الوسائط</div>
-          )}
+          {media.length > 1 && <div className="mobileSwipeHint">اسحب يمين أو يسار للتنقل بين الوسائط</div>}
+          {activeType === 'video' ? <div className="typeBadge">فيديو</div> : null}
         </div>
 
-        {images.length > 1 && (
+        {media.length > 1 && (
           <div className="thumbsScroller">
             <div className="thumbsRow">
-              {images.map((src, idx) => {
-                const type = getMediaType(src);
+              {media.map((entry, idx) => {
+                const type = entry.kind;
+                const key = entry.refPath || entry.url || String(idx);
                 return (
                   <button
-                    key={`${src}-${idx}`}
+                    key={key}
                     className={`thumbBtn ${idx === activeIndex ? 'active' : ''}`}
                     onClick={() => setActiveIndex(idx)}
                     aria-label={`عرض الوسيط ${idx + 1}`}
                   >
                     {type === 'video' ? (
-                      <video
-                        src={src}
-                        className="thumbImage"
-                        muted
-                        playsInline
-                        preload="metadata"
-                      />
+                      <div className="thumbVideoWrap">
+                        <video src={entry.url} className="thumbImage" muted playsInline preload="metadata" />
+                        <span className="thumbVideoIcon">▶</span>
+                      </div>
                     ) : (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={src} alt={`وسيط ${idx + 1}`} className="thumbImage" />
+                      <img src={entry.url} alt={`وسيط ${idx + 1}`} className="thumbImage" />
                     )}
                   </button>
                 );
@@ -122,42 +115,22 @@ export default function ImageGallery({ images = [], title }) {
             ×
           </button>
 
-          {images.length > 1 && (
-            <button
-              className="lightboxNav lightboxPrev"
-              onClick={(e) => { e.stopPropagation(); goPrev(); }}
-              aria-label="السابق"
-            >
+          {media.length > 1 && (
+            <button className="lightboxNav lightboxPrev" onClick={(e) => { e.stopPropagation(); goPrev(); }} aria-label="السابق">
               ‹
             </button>
           )}
 
-          <div
-            className="lightboxImageWrap"
-            onClick={(e) => e.stopPropagation()}
-            onTouchStart={handleTouchStart}
-            onTouchEnd={handleTouchEnd}
-          >
+          <div className="lightboxImageWrap" onClick={(e) => e.stopPropagation()} onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
             {activeType === 'video' ? (
-              <video
-                src={activeSrc}
-                controls
-                className="lightboxImage"
-                playsInline
-                autoPlay
-              />
+              <video src={activeSrc} controls className="lightboxImage" playsInline autoPlay preload="metadata" />
             ) : (
-              // eslint-disable-next-line @next/next/no-img-element
               <img src={activeSrc} alt={title || 'صورة العقار'} className="lightboxImage" />
             )}
           </div>
 
-          {images.length > 1 && (
-            <button
-              className="lightboxNav lightboxNext"
-              onClick={(e) => { e.stopPropagation(); goNext(); }}
-              aria-label="التالي"
-            >
+          {media.length > 1 && (
+            <button className="lightboxNav lightboxNext" onClick={(e) => { e.stopPropagation(); goNext(); }} aria-label="التالي">
               ›
             </button>
           )}
@@ -180,21 +153,48 @@ export default function ImageGallery({ images = [], title }) {
           justify-content: center;
           touch-action: pan-y;
         }
-        .imageButton {
+        .imageButton,
+        .mediaFrame {
           width: 100%;
           height: 100%;
           display: block;
           border: 0;
           background: transparent;
           padding: 0;
-          cursor: zoom-in;
         }
+        .imageButton { cursor: zoom-in; }
         .mainImage {
           width: 100%;
           height: 100%;
           display: block;
           object-fit: contain;
           background: #fff;
+        }
+        .zoomBtn {
+          position: absolute;
+          top: 14px;
+          left: 14px;
+          z-index: 4;
+          width: 38px;
+          height: 38px;
+          border-radius: 999px;
+          border: 1px solid rgba(255,255,255,.55);
+          background: rgba(15, 23, 42, .48);
+          color: white;
+          cursor: pointer;
+          backdrop-filter: blur(6px);
+        }
+        .typeBadge {
+          position: absolute;
+          bottom: 14px;
+          left: 14px;
+          padding: 7px 10px;
+          border-radius: 999px;
+          background: rgba(15, 23, 42, .65);
+          color: #fff;
+          font-size: 12px;
+          font-weight: 800;
+          pointer-events: none;
         }
         .mobileSwipeHint {
           position: absolute;
@@ -258,38 +258,70 @@ export default function ImageGallery({ images = [], title }) {
         }
         .thumbBtn {
           width: 92px;
-          height: 72px;
-          flex: 0 0 auto;
-          border: 1px solid var(--border);
+          height: 92px;
           border-radius: 14px;
+          border: 1px solid var(--border);
           background: #fff;
-          padding: 0;
           overflow: hidden;
+          padding: 0;
           cursor: pointer;
+          flex: 0 0 auto;
         }
         .thumbBtn.active {
           border-color: rgba(15, 118, 110, 0.85);
           box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.18);
         }
-        .thumbImage {
+        .thumbImage,
+        .thumbVideoWrap {
           width: 100%;
           height: 100%;
           object-fit: cover;
           display: block;
+          position: relative;
+          background: #0f172a;
+        }
+        .thumbVideoIcon {
+          position: absolute;
+          left: 50%;
+          top: 50%;
+          transform: translate(-50%, -50%);
+          color: white;
+          background: rgba(15, 23, 42, .5);
+          width: 28px;
+          height: 28px;
+          border-radius: 999px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 13px;
+          pointer-events: none;
         }
         .lightbox {
           position: fixed;
           inset: 0;
+          background: rgba(15, 23, 42, 0.88);
           z-index: 1000;
-          background: rgba(0, 0, 0, 0.88);
           display: flex;
           align-items: center;
           justify-content: center;
-          padding: 24px;
+          padding: 20px;
+        }
+        .lightboxClose {
+          position: absolute;
+          top: 14px;
+          left: 14px;
+          width: 44px;
+          height: 44px;
+          border: 0;
+          border-radius: 999px;
+          background: rgba(255,255,255,.12);
+          color: #fff;
+          font-size: 30px;
+          cursor: pointer;
         }
         .lightboxImageWrap {
-          width: min(96vw, 1200px);
-          height: min(88vh, 900px);
+          width: min(100%, 1200px);
+          height: min(86vh, 900px);
           display: flex;
           align-items: center;
           justify-content: center;
@@ -299,53 +331,29 @@ export default function ImageGallery({ images = [], title }) {
           max-height: 100%;
           object-fit: contain;
           display: block;
-        }
-        .lightboxClose {
-          position: absolute;
-          top: 18px;
-          left: 18px;
-          width: 46px;
-          height: 46px;
-          border: 0;
-          border-radius: 999px;
-          background: rgba(255, 255, 255, 0.16);
-          color: #fff;
-          font-size: 30px;
-          cursor: pointer;
+          background: transparent;
         }
         .lightboxNav {
           position: absolute;
           top: 50%;
           transform: translateY(-50%);
-          width: 52px;
-          height: 52px;
-          border: 0;
+          width: 48px;
+          height: 48px;
           border-radius: 999px;
-          background: rgba(255, 255, 255, 0.16);
+          border: 1px solid rgba(255,255,255,.2);
+          background: rgba(255,255,255,.08);
           color: #fff;
-          font-size: 34px;
+          font-size: 32px;
           cursor: pointer;
         }
         .lightboxPrev { right: 20px; }
         .lightboxNext { left: 20px; }
 
-        @media (max-width: 640px) {
-          .mainImageWrap {
-            min-height: 260px;
-            height: 56vw;
-            max-height: 420px;
-            border-radius: 14px;
-          }
+        @media (max-width: 900px) {
           .desktopOnly { display: none; }
           .mobileSwipeHint { display: block; }
-          .thumbBtn { width: 78px; height: 62px; }
-          .emptyMedia { min-height: 180px; }
-          .lightbox { padding: 10px; }
-          .lightboxImageWrap { width: 100%; height: 78vh; }
-          .lightboxNav { width: 44px; height: 44px; font-size: 30px; }
-          .lightboxPrev { right: 10px; }
-          .lightboxNext { left: 10px; }
-          .lightboxClose { top: 10px; left: 10px; }
+          .mainImageWrap { min-height: 260px; height: min(72vw, 440px); }
+          .thumbBtn { width: 78px; height: 78px; }
         }
       `}</style>
     </>

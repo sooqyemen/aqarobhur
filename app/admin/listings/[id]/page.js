@@ -10,6 +10,7 @@ import AdminShell from '@/components/admin/AdminShell';
 import { formatPriceSAR, statusBadge } from '@/lib/format';
 import { getFirebase } from '@/lib/firebaseClient';
 import { fetchListingById, adminUpdateListing, adminDeleteListing } from '@/lib/listings';
+import { collectMediaEntries, getMediaKind, isVideoLike, validateSelectedFiles } from '@/lib/media';
 import { DEAL_TYPES, NEIGHBORHOODS, PROPERTY_CLASSES, PROPERTY_TYPES, STATUS_OPTIONS } from '@/lib/taxonomy';
 
 const MAX_FILES = 30;
@@ -17,31 +18,7 @@ const MAX_FILES = 30;
 // === دوال مساعدة ===
 
 function getListingMedia(item) {
-  const all = [
-    ...(Array.isArray(item?.imagesMeta) ? item.imagesMeta : []),
-    ...(Array.isArray(item?.images) ? item.images.map((url) => ({ url, kind: 'image' })) : []),
-    ...(Array.isArray(item?.videos) ? item.videos.map((url) => ({ url, kind: 'video' })) : []),
-  ];
-
-  const seen = new Set();
-  return all
-    .map((entry) => {
-      if (!entry) return null;
-      const url = cleanString(entry?.url || entry);
-      if (!url) return null;
-      const kind = isVideo({ ...entry, url }) ? 'video' : 'image';
-      const normalized = {
-        url,
-        refPath: cleanString(entry?.refPath),
-        name: cleanString(entry?.name),
-        kind,
-      };
-      const key = normalized.refPath || normalized.url;
-      if (seen.has(key)) return null;
-      seen.add(key);
-      return normalized;
-    })
-    .filter(Boolean);
+  return collectMediaEntries(item);
 }
 
 function cleanString(value) { return String(value || '').trim(); }
@@ -53,10 +30,7 @@ function toNum(value) {
 }
 
 function isVideo(entry) {
-  const kind = cleanString(entry?.kind).toLowerCase();
-  if (kind === 'video') return true;
-  const url = cleanString(entry?.url).toLowerCase();
-  return ['.mp4', '.mov', '.webm', '.m4v'].some((ext) => url.includes(ext));
+  return isVideoLike(entry);
 }
 
 function safeFileName(file) { return cleanString(file?.name || 'file').replace(/[^\w.\-]+/g, '_'); }
@@ -309,30 +283,49 @@ export default function AdminListingEditPage() {
   };
 
   const uploadFiles = async (event) => {
-    const files = Array.from(event.target.files || []).slice(0, MAX_FILES);
-    if (!files.length) return;
+    if (!storage) {
+      setError('التخزين غير مهيأ. تأكد من إعدادات Firebase Storage قبل الرفع.');
+      return;
+    }
+
+    const rawFiles = Array.from(event.target.files || []);
+    const freeSlots = Math.max(0, MAX_FILES - media.length);
+    if (!rawFiles.length || freeSlots <= 0) {
+      if (freeSlots <= 0) setError(`الحد الأقصى للوسائط هو ${MAX_FILES} ملف.`);
+      return;
+    }
+
+    const { accepted, rejected } = validateSelectedFiles(rawFiles.slice(0, freeSlots), { maxFiles: freeSlots });
+    if (rejected.length) {
+      const preview = rejected.slice(0, 3).map((entry) => `${entry.file?.name || 'ملف'}: ${entry.reason}`).join(' — ');
+      setError(`بعض الملفات رُفضت: ${preview}`);
+    } else {
+      setError('');
+    }
+    if (!accepted.length) return;
 
     setIsUploading(true);
     setUploadProgress(0);
-    setError('');
     setSuccess('');
 
     try {
       const uploaded = [];
       let completedFiles = 0;
 
-      for (const file of files) {
+      for (const file of accepted) {
         const path = `aqarobhur_images/listings/${listingId}/${Date.now()}_${Math.random().toString(16).slice(2)}_${safeFileName(file)}`;
         const refObj = storageRef(storage, path);
-        const task = uploadBytesResumable(refObj, file);
+        const task = uploadBytesResumable(refObj, file, file?.type ? { contentType: file.type } : undefined);
 
         await new Promise((resolve, reject) => {
-          task.on('state_changed', 
+          task.on(
+            'state_changed',
             (snapshot) => {
-               const progress = ((completedFiles + (snapshot.bytesTransferred / snapshot.totalBytes)) / files.length) * 100;
-               setUploadProgress(Math.round(progress));
-            }, 
-            reject, 
+              const ratio = snapshot.totalBytes ? snapshot.bytesTransferred / snapshot.totalBytes : 0;
+              const progress = ((completedFiles + ratio) / accepted.length) * 100;
+              setUploadProgress(Math.round(progress));
+            },
+            reject,
             resolve
           );
         });
@@ -342,9 +335,10 @@ export default function AdminListingEditPage() {
           url,
           refPath: path,
           name: cleanString(file.name),
-          kind: cleanString(file.type).startsWith('video/') ? 'video' : 'image',
+          kind: getMediaKind(file),
+          size: Number(file.size || 0),
         });
-        
+
         completedFiles++;
       }
 
@@ -352,7 +346,8 @@ export default function AdminListingEditPage() {
       await syncMediaToDoc(next, { message: `تم رفع وإضافة ${uploaded.length} ملف(ات) للإعلان بنجاح.` });
       if (fileInputRef.current) fileInputRef.current.value = '';
     } catch (e) {
-      setError('حدث خطأ أثناء رفع الملفات، قد يكون حجم الملف كبيراً جداً.');
+      const msg = String(e?.code || e?.message || '');
+      setError(msg ? `حدث خطأ أثناء رفع الملفات: ${msg}` : 'حدث خطأ أثناء رفع الملفات.');
     } finally {
       setIsUploading(false);
       setUploadProgress(0);

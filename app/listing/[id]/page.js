@@ -8,22 +8,15 @@ import { buildWhatsAppLink } from '@/components/WhatsAppBar';
 import { fetchListingById } from '@/lib/listings';
 import { formatPriceSAR } from '@/lib/format';
 import {
-  getSafeImages,
   normalizePhoneDigits,
   normalizeDealTypeLabel,
   isFiniteCoord,
   normalizeStatusLabel
 } from '@/lib/listingUtils';
+import { collectMediaEntries } from '@/lib/media';
 
 import HeroSection from '@/components/HeroSection';
 import ImageGallery from '@/components/ImageGallery';
-
-// دمج الصور والفيديوهات (إذا كان لديك حقل videos)
-function getAllMedia(item) {
-  const images = Array.isArray(item?.images) ? item.images.filter(Boolean) : [];
-  const videos = Array.isArray(item?.videos) ? item.videos.filter(Boolean) : [];
-  return [...images, ...videos];
-}
 
 export default function ListingDetailsPage({ params }) {
   const routeParams = useParams();
@@ -64,7 +57,7 @@ export default function ListingDetailsPage({ params }) {
     return () => { live = false; };
   }, [id]);
 
-  const media = useMemo(() => getAllMedia(item), [item]);
+  const media = useMemo(() => collectMediaEntries(item), [item]);
   const dealTypeLabel = useMemo(() => normalizeDealTypeLabel(item?.dealType), [item]);
 
   const contactPhone = useMemo(() => {
