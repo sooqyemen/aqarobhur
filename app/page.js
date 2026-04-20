@@ -1,3 +1,4 @@
+\
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
@@ -19,7 +20,7 @@ function ListingsState({ loading, error, items }) {
   }
   if (error) return <div className="error-card">{error}</div>;
   if (!items.length) return <div className="empty-card">لا توجد عقارات منشورة حاليًا في هذه الفئة.</div>;
-  
+
   return (
     <div className="listing-grid">
       {items.map((item, index) => (
@@ -35,7 +36,6 @@ export default function HomePage() {
   const [errorText, setErrorText] = useState('');
   const [activeTab, setActiveTab] = useState('all'); 
 
-  // استخدام رقم عقار أبحر بدلاً من رقم الفنار
   const whatsappNumber = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || '966597520693';
   const whatsappLink = buildWhatsAppLink({
     phone: whatsappNumber,
@@ -47,7 +47,7 @@ export default function HomePage() {
     async function load() {
       try {
         setLoading(true); setErrorText('');
-        const result = await fetchLatestListings({ n: 8, onlyPublic: true, includeLegacy: true });
+        const result = await fetchLatestListings({ n: 8, onlyPublic: true, includeLegacy: false });
         if (!active) return;
         setItems(Array.isArray(result) ? result : []);
       } catch {
@@ -71,12 +71,12 @@ export default function HomePage() {
   return (
     <>
       <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined" rel="stylesheet" />
-      
+
       <div>
         <section className="home-hero-section">
           <div className="home-hero-overlay"></div>
           <div className="container home-hero-content">
-            
+
             <div className="search-container">
               <div className="search-tabs">
                 <button className={`tab-btn ${activeTab === 'all' ? 'active' : ''}`} onClick={() => setActiveTab('all')}>الكل</button>

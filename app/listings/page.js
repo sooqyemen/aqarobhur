@@ -1,3 +1,4 @@
+\
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
@@ -78,7 +79,7 @@ export default function ListingsPage() {
       try {
         setLoading(true);
         setErr('');
-        const res = await fetchListings({ filters, onlyPublic: true, includeLegacy: true, max: 240 });
+        const res = await fetchListings({ filters, onlyPublic: true, includeLegacy: false, max: 240 });
         if (active) setItems(res || []);
       } catch {
         if (active) setErr('تعذر تحميل العروض حالياً.');

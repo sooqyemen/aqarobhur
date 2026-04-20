@@ -1,8 +1,10 @@
+\
 'use client';
 
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { formatPriceSAR, statusBadge } from '@/lib/format';
-import { getCoverMedia, getMediaCount, isVideoLike } from '@/lib/media';
+import { collectMediaEntries, isVideoLike } from '@/lib/media';
 
 function timeAgoLabel(createdAt) {
   try {
@@ -24,6 +26,8 @@ function timeAgoLabel(createdAt) {
 export default function ListingCard({ item, compact = false }) {
   if (!item) return null;
 
+  const [failedMediaKeys, setFailedMediaKeys] = useState([]);
+
   const safeId = item?.id || item?.docId || item?.listingId || item?._id || '';
 
   const {
@@ -44,16 +48,39 @@ export default function ListingCard({ item, compact = false }) {
   const isRent = dealType === 'rent';
   const displayPrice = formatPriceSAR(price);
   const detailLink = safeId ? `/listing/${encodeURIComponent(String(safeId))}` : '#';
-  const coverMedia = getCoverMedia(item);
+
+  const allMedia = useMemo(() => collectMediaEntries(item), [item]);
+
+  const availableMedia = useMemo(() => {
+    if (!failedMediaKeys.length) return allMedia;
+    const failed = new Set(failedMediaKeys);
+    return allMedia.filter((entry) => {
+      const key = entry?.refPath || entry?.url;
+      return key && !failed.has(key);
+    });
+  }, [allMedia, failedMediaKeys]);
+
+  const coverMedia = useMemo(() => {
+    if (!availableMedia.length) return null;
+    const firstImage = availableMedia.find((entry) => !isVideoLike(entry));
+    return firstImage || availableMedia[0] || null;
+  }, [availableMedia]);
+
   const coverUrl = coverMedia?.url || '';
   const coverIsVideo = isVideoLike(coverMedia);
-  const mediaCount = getMediaCount(item);
+  const mediaCount = allMedia.length;
   const hasMultipleMedia = mediaCount > 1;
   const timeText = timeAgoLabel(createdAt);
 
   const locationParts = [neighborhood, plan, part].filter(Boolean);
   const locationText = locationParts.join(' • ') || city || 'غير محدد';
   const specsText = [propertyType, area ? `${area} م²` : null].filter(Boolean).join(' • ');
+
+  const markMediaAsFailed = (entry) => {
+    const key = entry?.refPath || entry?.url;
+    if (!key) return;
+    setFailedMediaKeys((prev) => (prev.includes(key) ? prev : [...prev, key]));
+  };
 
   const CardTag = safeId ? Link : 'article';
   const cardProps = safeId
@@ -68,9 +95,22 @@ export default function ListingCard({ item, compact = false }) {
         <div className="cardMedia">
           {coverUrl ? (
             coverIsVideo ? (
-              <video src={coverUrl} className="mediaImage" muted playsInline preload="metadata" />
+              <video
+                src={coverUrl}
+                className="mediaImage"
+                muted
+                playsInline
+                preload="metadata"
+                onError={() => markMediaAsFailed(coverMedia)}
+              />
             ) : (
-              <img src={coverUrl} alt={title} className="mediaImage" loading="lazy" />
+              <img
+                src={coverUrl}
+                alt={title}
+                className="mediaImage"
+                loading="lazy"
+                onError={() => markMediaAsFailed(coverMedia)}
+              />
             )
           ) : (
             <div className="mediaPlaceholder">
