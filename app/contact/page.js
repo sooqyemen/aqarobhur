@@ -76,7 +76,8 @@ export default function ContactPage() {
                 <span className="material-icons-outlined">location_on</span>
                 <h3>موقعنا</h3>
                 <p>جدة - حي أبحر الشمالية</p>
-                <a href="https://maps.google.com/?q=21.712,39.107" target="_blank" rel="noopener noreferrer" className="cardLink">افتح الخريطة</a>
+                {/* تم تحديث رابط زر الخريطة هنا */}
+                <a href="https://maps.app.goo.gl/beujkMW6Z6ogPhoE8?g_st=ic" target="_blank" rel="noopener noreferrer" className="cardLink">افتح الخريطة</a>
               </div>
             </div>
           </div>
@@ -87,9 +88,10 @@ export default function ContactPage() {
           <div className="container">
             <div className="mapFormGrid">
               <div className="mapCard">
+                {/* تم تحديث رابط الخريطة المضمنة هنا */}
                 <iframe
                   title="موقع مكتب عقار أبحر"
-                  src="https://maps.google.com/maps?q=21.712,39.107&hl=ar&z=14&output=embed"
+                  src="https://maps.app.goo.gl/beujkMW6Z6ogPhoE8?g_st=ic"
                   width="100%"
                   height="100%"
                   style={{ border: 0 }}
