@@ -78,7 +78,8 @@ export default function ListingsPage() {
       try {
         setLoading(true);
         setErr('');
-        const res = await fetchListings({ filters, onlyPublic: true, includeLegacy: false, max: 240 });
+        // التعديل هنا: دمج الإعلانات القديمة ورفع الحد الأقصى إلى 1000 إعلان
+        const res = await fetchListings({ filters, onlyPublic: true, includeLegacy: true, max: 1000 });
         if (active) setItems(res || []);
       } catch {
         if (active) setErr('تعذر تحميل العروض حالياً.');
