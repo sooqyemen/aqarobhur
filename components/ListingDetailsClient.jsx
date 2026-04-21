@@ -1,200 +1,218 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import Link from 'next/link';
+import React, { useState } from 'react';
 
-import { buildWhatsAppLink } from '@/components/WhatsAppBar';
-import { formatPriceSAR } from '@/lib/format';
-import {
-  normalizePhoneDigits,
-  normalizeDealTypeLabel,
-  isFiniteCoord,
-  normalizeStatusLabel
-} from '@/lib/listingUtils';
-import { collectMediaEntries } from '@/lib/media';
+export default function ListingDetailsClient({ listing = {} }) {
+  const [activeImage, setActiveImage] = useState(0);
 
-import HeroSection from '@/components/HeroSection';
-import ImageGallery from '@/components/ImageGallery';
-
-export default function ListingDetailsClient({ item }) {
-  const [shareMsg, setShareMsg] = useState('');
-
-  const media = useMemo(() => collectMediaEntries(item), [item]);
-  const dealTypeLabel = useMemo(() => normalizeDealTypeLabel(item?.dealType), [item]);
-
-  const contactPhone = useMemo(() => {
-    const directPhone = item?.phone || item?.contactPhone || item?.mobile || item?.whatsapp || '';
-    return normalizePhoneDigits(directPhone || '966597520693');
-  }, [item]);
-
-  const whatsappHref = useMemo(() => {
-    if (!item) return '';
-    const text = [
-      'السلام عليكم، أرغب في الاستفسار عن هذا العرض:',
-      item.title || 'عرض عقاري',
-      `السعر: ${formatPriceSAR(item.price)}`,
-      `الحي: ${item.neighborhood || '—'}`,
-      item.licenseNumber ? `رقم الترخيص: ${item.licenseNumber}` : '',
-      typeof window !== 'undefined' ? `الرابط: ${window.location.href}` : '',
-    ].filter(Boolean).join('\n');
-
-    return buildWhatsAppLink({ phone: contactPhone, text });
-  }, [item, contactPhone]);
-
-  const handleShare = async () => {
-    const shareUrl = typeof window !== 'undefined' ? window.location.href : '';
-    if (navigator.share) {
-      await navigator.share({ title: item?.title, url: shareUrl });
-    } else {
-      await navigator.clipboard.writeText(shareUrl);
-      setShareMsg('تم نسخ الرابط بنجاح.');
-      setTimeout(() => setShareMsg(''), 2500);
-    }
+  // داتا افتراضية للتجربة والتوضيح في حال عدم توفر البيانات
+  const data = {
+    title: listing.title || 'فيلا فاخرة بتصميم مودرن وتشطيبات راقية',
+    price: listing.price || 2500000,
+    area: listing.area || 350,
+    propertyType: listing.propertyType || 'فيلا',
+    dealType: listing.dealType || 'sale',
+    neighborhood: listing.neighborhood || 'حي الشراع',
+    plan: listing.plan || '505',
+    part: listing.part || 'أ',
+    streetWidth: listing.streetWidth || 20,
+    facade: listing.facade || 'شمالية',
+    dimensions: listing.dimensions || '14x25',
+    description: listing.description || 'فيلا بتصميم عصري وتشطيبات VIP. تتميز بموقع استراتيجي بالقرب من الخدمات الرئيسية والمدارس. تحتوي على مسابح، مصعد، وتكييف مركزي. جاهزة للسكن الفوري، بناء شخصي وإشراف هندسي متكامل.',
+    images: listing.images?.length > 0 ? listing.images : [
+      '/placeholder-image.jpg',
+      '/placeholder-image.jpg',
+      '/placeholder-image.jpg'
+    ],
+    contactPhone: listing.contactPhone || '0500000000',
+    direct: listing.direct ?? true,
+    plotNumber: listing.plotNumber || '142',
   };
 
-  if (!item) return <div className="container stateContainer">العرض غير موجود.</div>;
-
-  const hasMapCoordinates = isFiniteCoord(item.lat) && isFiniteCoord(item.lng);
+  const formatPrice = (price) => {
+    if (!price) return 'السعر غير محدد';
+    return new Intl.NumberFormat('ar-SA').format(price) + ' ر.س';
+  };
 
   return (
-    <div className="container listingPageWrap">
-      <style jsx>{`
-        /* الأساسيات */
-        .container { max-width: 1200px; margin: 0 auto; padding: 0 16px; width: 100%; box-sizing: border-box; }
-        .listingPageWrap { padding: 20px 0; }
-        .stateContainer { padding: 50px 20px; text-align: center; font-size: 18px; }
-        .topNavRow { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 24px; flex-wrap: wrap; }
-        .backLink, .shareBtn { padding: 10px 20px; background: #fff; border: 1px solid var(--border); border-radius: 12px; font-weight: 700; color: var(--text); cursor: pointer; transition: all 0.2s; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; }
-        .backLink:hover, .shareBtn:hover { border-color: var(--primary); color: var(--primary); }
-        .shareMsg { background: #e6f7e6; color: var(--success); padding: 10px; border-radius: 12px; margin-bottom: 16px; text-align: center; font-weight: 600; }
-        .contentGrid { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(300px, 1fr); gap: 24px; align-items: start; }
-        .mainCol, .sideCol { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
-        .sectionCard { background: var(--card); padding: 24px; border-radius: var(--radius); border: 1px solid var(--border); box-shadow: var(--shadow-sm); }
-        .sectionHeading { font-size: 22px; font-weight: 900; margin: 0 0 20px 0; color: var(--text); display: flex; align-items: center; gap: 10px; }
-        .descriptionText { white-space: pre-wrap; line-height: 1.9; color: var(--text); font-size: 16px; word-break: break-word; }
-        .customDetailsGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
-        .detailItem { background: var(--bg-soft); padding: 16px; border-radius: 14px; border: 1px solid var(--border); }
-        .detailLabel { display: block; font-size: 13px; color: var(--muted); font-weight: 700; margin-bottom: 6px; }
-        .detailValue { display: block; font-size: 18px; font-weight: 900; color: var(--text); }
-        .whatsappBigBtn { display: flex; width: 100%; background: #25D366; color: #fff; font-size: 18px; border: none; padding: 16px; border-radius: 16px; font-weight: 700; align-items: center; justify-content: center; gap: 8px; text-decoration: none; margin-top: 20px; transition: 0.2s; }
-        .whatsappBigBtn:hover { background: #1da851; }
-        .mapContainer { width: 100%; height: 350px; border-radius: 16px; overflow: hidden; background: #f1f5f9; border: 1px solid var(--border); }
-        .mapContainer iframe { width: 100%; height: 100%; border: none; }
-        .noMapData { padding: 40px 20px; text-align: center; background: var(--bg-soft); border-radius: 16px; border: 1px dashed var(--border-strong); color: var(--muted); font-weight: 600; }
-        .stickyMap { position: sticky; top: 100px; }
-        @media (max-width: 900px) { .contentGrid { grid-template-columns: 1fr; } .stickyMap { position: static; } }
-        @media (max-width: 640px) { .listingPageWrap { padding: 10px 0; } .topNavRow { flex-wrap: wrap; } .backLink, .shareBtn { flex: 1 1 40%; padding: 12px 10px; font-size: 14px; text-align: center; } .sectionCard { padding: 16px; border-radius: 18px; } .sectionHeading { font-size: 18px; margin-bottom: 16px; } .customDetailsGrid { grid-template-columns: 1fr 1fr; gap: 8px; } .detailItem { padding: 12px; } .detailValue { font-size: 16px; } .whatsappBigBtn { font-size: 16px; padding: 14px; } .mapContainer { height: 250px; } .descriptionText { font-size: 15px; } }
-        * { word-break: break-word; overflow-wrap: break-word; } img, video { max-width: 100%; height: auto; }
-      `}</style>
+    <>
+      <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined" rel="stylesheet" />
+      
+      <div className="min-h-screen bg-slate-50 py-8 lg:py-12 font-sans" dir="rtl">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          
+          {/* مسار التصفح (Breadcrumb) */}
+          <nav className="flex items-center gap-2 text-sm text-slate-500 mb-6">
+            <span className="cursor-pointer hover:text-slate-900 transition">الرئيسية</span>
+            <span className="material-icons-outlined text-sm">chevron_left</span>
+            <span className="cursor-pointer hover:text-slate-900 transition">{data.neighborhood}</span>
+            <span className="material-icons-outlined text-sm">chevron_left</span>
+            <span className="text-slate-900 font-semibold">{data.propertyType} {data.dealType === 'sale' ? 'للبيع' : 'للإيجار'}</span>
+          </nav>
 
-      <div className="topNavRow">
-        <Link href="/listings" className="backLink">
-          → العودة للعروض
-        </Link>
-        <button onClick={handleShare} className="shareBtn">
-          مشاركة الإعلان
-        </button>
-      </div>
-
-      {shareMsg && <div className="shareMsg">{shareMsg}</div>}
-
-      <HeroSection item={item} whatsappHref={whatsappHref} />
-
-      <div className="contentGrid">
-        <div className="mainCol">
-          <div className="sectionCard">
-            <h2 className="sectionHeading">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{color: 'var(--primary)'}}><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
-              أهم التفاصيل
-            </h2>
-
-            <div className="customDetailsGrid">
-              <div className="detailItem">
-                <span className="detailLabel">حالة العرض</span>
-                <span className="detailValue" style={{color: 'var(--success)'}}>{normalizeStatusLabel(item)}</span>
+          {/* العنوان والسعر (Header) */}
+          <div className="flex flex-col md:flex-row md:justify-between md:align-end gap-6 mb-8">
+            <div>
+              <div className="flex items-center gap-3 mb-3">
+                <span className="bg-teal-100 text-teal-800 text-xs font-bold px-3 py-1 rounded-full">
+                  {data.dealType === 'sale' ? 'للبيع' : 'للإيجار'}
+                </span>
+                {data.direct && (
+                  <span className="bg-amber-100 text-amber-800 text-xs font-bold px-3 py-1 rounded-full flex items-center gap-1">
+                    <span className="material-icons-outlined text-[14px]">verified</span> مباشر
+                  </span>
+                )}
               </div>
-              <div className="detailItem">
-                <span className="detailLabel">السعر</span>
-                <span className="detailValue">{formatPriceSAR(item.price)}</span>
-              </div>
-              <div className="detailItem">
-                <span className="detailLabel">نوع العقار</span>
-                <span className="detailValue">{item.propertyType}</span>
-              </div>
-              <div className="detailItem">
-                <span className="detailLabel">المساحة</span>
-                <span className="detailValue">{item.area ? `${item.area} م²` : 'غير محدد'}</span>
-              </div>
-              {item.streetWidth && (
-                <div className="detailItem">
-                  <span className="detailLabel">عرض الشارع</span>
-                  <span className="detailValue">{item.streetWidth} متر</span>
-                </div>
-              )}
-              {item.licenseNumber && (
-                <div className="detailItem">
-                  <span className="detailLabel">رقم الترخيص</span>
-                  <span className="detailValue">{item.licenseNumber}</span>
-                </div>
-              )}
+              <h1 className="text-2xl md:text-4xl font-extrabold text-slate-900 leading-tight mb-2">
+                {data.title}
+              </h1>
+              <p className="text-slate-500 flex items-center gap-2 text-sm md:text-base">
+                <span className="material-icons-outlined">location_on</span>
+                {data.neighborhood} {data.plan ? ` - مخطط ${data.plan}` : ''} {data.part ? ` - جزء ${data.part}` : ''}
+              </p>
             </div>
-
-            <a href={whatsappHref} target="_blank" rel="noopener noreferrer" className="whatsappBigBtn">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
-              تواصل للاستفسار عبر واتساب
-            </a>
-          </div>
-
-          <div className="sectionCard">
-            <h2 className="sectionHeading">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{color: 'var(--primary)'}}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
-              وصف العقار
-            </h2>
-            <div className="descriptionText">
-              {item.description || 'لا يوجد وصف مضاف لهذا الإعلان.'}
+            
+            <div className="md:text-left shrink-0">
+              <p className="text-sm text-slate-500 mb-1">السعر المطلوب</p>
+              <div className="text-3xl md:text-4xl font-extrabold text-teal-700">
+                {formatPrice(data.price)}
+              </div>
+              {data.area && data.price && (
+                <p className="text-sm text-slate-400 mt-1">
+                  ≈ {Math.round(data.price / data.area).toLocaleString('ar-SA')} ر.س / م²
+                </p>
+              )}
             </div>
           </div>
 
-          <ImageGallery images={media} title={item.title} />
-        </div>
-
-        <div className="sideCol">
-          <div className={`sectionCard ${hasMapCoordinates ? 'stickyMap' : ''}`}>
-            <h2 className="sectionHeading">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{color: 'var(--primary)'}}><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
-              موقع العقار
-            </h2>
-
-            {hasMapCoordinates ? (
-              <>
-                <div className="mapContainer">
-                  <iframe
-                    title="موقع العقار"
-                    src={`https://maps.google.com/maps?q=${item.lat},${item.lng}&hl=ar&z=15&output=embed`}
-                    allowFullScreen
-                    loading="lazy"
-                    referrerPolicy="no-referrer-when-downgrade"
-                  ></iframe>
-                </div>
-                <a
-                  href={`https://www.google.com/maps/search/?api=1&query=${item.lat},${item.lng}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="whatsappBigBtn"
-                  style={{ background: 'var(--primary)', marginTop: '16px' }}
+          {/* معرض الصور */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-10 h-[300px] md:h-[500px]">
+            <div className="md:col-span-3 rounded-2xl overflow-hidden bg-slate-200 relative group">
+              <img 
+                src={data.images[activeImage]} 
+                alt="العقار" 
+                className="w-full h-full object-cover transition duration-500 group-hover:scale-105"
+              />
+            </div>
+            <div className="hidden md:flex flex-col gap-4 h-full">
+              {data.images.slice(0, 3).map((img, idx) => (
+                <div 
+                  key={idx} 
+                  onClick={() => setActiveImage(idx)}
+                  className={`flex-1 rounded-xl overflow-hidden bg-slate-200 cursor-pointer border-2 transition ${activeImage === idx ? 'border-teal-500 opacity-100' : 'border-transparent opacity-70 hover:opacity-100'}`}
                 >
-                  فتح في خرائط جوجل
-                </a>
-              </>
-            ) : (
-              <div className="noMapData">
-                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{margin: '0 auto 10px', opacity: 0.5}}><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><line x1="9" y1="10" x2="15" y2="10"></line><line x1="12" y1="7" x2="12" y2="13"></line></svg>
-                <p>الإحداثيات غير متوفرة لهذا العرض</p>
+                  <img src={img} alt="" className="w-full h-full object-cover" />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 relative">
+            
+            {/* المحتوى الرئيسي (يمين) */}
+            <div className="lg:col-span-2 space-y-8">
+              
+              {/* بطاقات الميزات السريعة */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <HighlightCard icon="square_foot" label="المساحة" value={`${data.area} م²`} />
+                <HighlightCard icon="home_work" label="نوع العقار" value={data.propertyType} />
+                <HighlightCard icon="add_road" label="عرض الشارع" value={data.streetWidth ? `${data.streetWidth} م` : 'غير محدد'} />
+                <HighlightCard icon="explore" label="الواجهة" value={data.facade || 'غير محدد'} />
               </div>
-            )}
+
+              {/* قسم الوصف */}
+              <div className="bg-white rounded-2xl p-6 md:p-8 shadow-sm border border-slate-100">
+                <h2 className="text-xl font-bold text-slate-900 mb-4 flex items-center gap-2">
+                  <span className="material-icons-outlined text-teal-600">description</span>
+                  تفاصيل ووصف العقار
+                </h2>
+                <div className="text-slate-600 leading-relaxed whitespace-pre-wrap text-base">
+                  {data.description}
+                </div>
+              </div>
+
+              {/* قسم المواصفات التفصيلية */}
+              <div className="bg-white rounded-2xl p-6 md:p-8 shadow-sm border border-slate-100">
+                <h2 className="text-xl font-bold text-slate-900 mb-6 flex items-center gap-2">
+                  <span className="material-icons-outlined text-teal-600">list_alt</span>
+                  المواصفات الفنية
+                </h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-y-4 gap-x-8">
+                  <DetailRow label="الحي" value={data.neighborhood} />
+                  <DetailRow label="المخطط" value={data.plan} />
+                  <DetailRow label="الجزء" value={data.part} />
+                  <DetailRow label="رقم القطعة" value={data.plotNumber} />
+                  <DetailRow label="الأبعاد" value={data.dimensions} />
+                  <DetailRow label="رقم المعلن" value={listing.licenseNumber || 'مرخص'} />
+                </div>
+              </div>
+            </div>
+
+            {/* الشريط الجانبي - تواصل (يسار) */}
+            <div className="lg:col-span-1">
+              <div className="sticky top-8 bg-white rounded-2xl p-6 md:p-8 shadow-lg border border-slate-100">
+                <div className="text-center mb-6">
+                  <div className="w-20 h-20 bg-teal-50 text-teal-600 rounded-full flex items-center justify-center mx-auto mb-4 border-4 border-white shadow-sm">
+                    <span className="material-icons-outlined text-4xl">real_estate_agent</span>
+                  </div>
+                  <h3 className="text-lg font-bold text-slate-900">مسؤول المبيعات</h3>
+                  <p className="text-sm text-slate-500">مكتب لؤلؤة المنار للعقارات</p>
+                </div>
+
+                <div className="space-y-4 mt-8">
+                  <a 
+                    href={`https://wa.me/966${data.contactPhone.replace(/^0/, '')}`} 
+                    target="_blank" 
+                    rel="noreferrer"
+                    className="w-full flex items-center justify-center gap-2 bg-[#25D366] hover:bg-[#1ebd5a] text-white py-4 rounded-xl font-bold transition shadow-sm"
+                  >
+                    <span className="material-icons-outlined">chat</span>
+                    تواصل عبر واتساب
+                  </a>
+                  <a 
+                    href={`tel:${data.contactPhone}`}
+                    className="w-full flex items-center justify-center gap-2 bg-slate-900 hover:bg-slate-800 text-white py-4 rounded-xl font-bold transition shadow-sm"
+                  >
+                    <span className="material-icons-outlined">call</span>
+                    إتصل الآن
+                  </a>
+                  <button className="w-full flex items-center justify-center gap-2 bg-white border-2 border-slate-200 hover:border-slate-300 text-slate-700 py-3.5 rounded-xl font-bold transition">
+                    <span className="material-icons-outlined">share</span>
+                    مشاركة العرض
+                  </button>
+                </div>
+
+                <div className="mt-6 pt-6 border-t border-slate-100 text-center text-xs text-slate-400">
+                  رقم المرجع: #{listing.id || 'AQR-001'}
+                </div>
+              </div>
+            </div>
+
           </div>
         </div>
       </div>
+    </>
+  );
+}
+
+// مكون فرعي للبطاقات الصغيرة
+function HighlightCard({ icon, label, value }) {
+  return (
+    <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex flex-col items-center justify-center text-center transition hover:shadow-md">
+      <span className="material-icons-outlined text-teal-600 text-3xl mb-2 bg-teal-50 p-2 rounded-xl">{icon}</span>
+      <span className="text-xs text-slate-500 font-medium mb-1">{label}</span>
+      <span className="text-sm font-bold text-slate-900">{value}</span>
+    </div>
+  );
+}
+
+// مكون فرعي لسطر التفاصيل
+function DetailRow({ label, value }) {
+  if (!value) return null;
+  return (
+    <div className="flex justify-between items-center py-3 border-b border-slate-50 last:border-0">
+      <span className="text-slate-500 text-sm font-medium">{label}</span>
+      <span className="text-slate-900 text-sm font-bold text-left">{value}</span>
     </div>
   );
 }
