@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { normalizeSaudiPhone } from '@/lib/contactUtils';
 import { NEIGHBORHOODS, normalizeNeighborhoodName } from '@/lib/taxonomy';
 
-const MODEL = process.env.OPENAI_MODEL || 'gpt-5.4';
+const MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini'; // يفضل استخدام gpt-4o-mini أو النموذج المتوفر لديك
 const DEFAULT_RETENTION_DAYS = 30;
 const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
 
@@ -158,19 +158,22 @@ async function extractOffersWithOpenAI({ groupText, group, source, retentionDays
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return [];
 
+  // تم تحسين أوامر التوجيه (Prompt) لتفهم العقار السعودي بشكل أدق
   const systemPrompt = [
-    'أنت محلل وارد عقاري سعودي لمدينة جدة.',
-    'مهمتك استخراج العروض العقارية فقط من الرسائل أو المحادثات، وليس الطلبات.',
-    'قد تحتوي الرسالة الواحدة على عدة عروض. يجب فصل كل عرض في عنصر مستقل.',
-    'لا تدمج أي حقل من عرض مع عرض آخر.',
-    'تجاهل الطلبات الصادرة من العملاء، والرسائل العامة، والعروض المباعة أو المحجوزة أو المؤجرة.',
-    'استخرج عروض البيع والإيجار فقط إذا كانت عروضًا فعلية معروضة.',
-    'إذا كان الحقل غير موجود فأرجعه null.',
-    'السعر يجب أن يكون رقمًا فقط بدون عملة، والمساحة رقمًا فقط بالمتر المربع.',
-    'نوع العقار يبقى بالعربية مثل: أرض، نص أرض، فيلا، شقة، عمارة، دور، محل.',
-    'نوع الصفقة يجب أن يكون sale أو rent.',
-    'إذا وجدت رابط خرائط ضعه في mapUrl.',
-    'إذا لم يكن هناك أي عرض صالح فأعد offers كمصفوفة فارغة.',
+    'أنت خبير ومحلل بيانات عقارية متخصص في السوق السعودي، وتحديداً مدينة جدة وأبحر.',
+    'مهمتك الأساسية هي استخراج العروض العقارية الفعلية من المحادثات (الواتساب)، وتجاهل الطلبات البحتة والرسائل العامة.',
+    'قواعد الاستخراج الدقيقة:',
+    '1. افصل كل عرض عقاري كعنصر مستقل في المصفوفة، ولا تدمج عرضين أبداً.',
+    '2. تجاهل العقارات المباعة، المحجوزة، أو المؤجرة.',
+    '3. الواجهة (facade): استخرجها إن وجدت (مثال: شمالية، شرقية، شمالية شرقية).',
+    '4. عرض الشارع (streetWidth): ابحث عن كلمة شارع واستخرج الرقم فقط (مثال: "شارع 16" يصبح 16، "شارعين 16 و 20" يكتب في streetDetails أما streetWidth يأخذ الشارع الأكبر).',
+    '5. المخطط (plan): اكتب اسم المخطط ورقم المخطط إن وجد (مثال: 505، جوهرة العروس، 29 ج س).',
+    '6. الجزء (part): ابحث عن الحروف أو الأجزاء (مثال: حرف أ، جزء د، 1أ).',
+    '7. المساحة (area): رقم فقط بدون وحدة.',
+    '8. السعر (price): رقم فقط، حوّل "مليون" إلى 1000000 و "ألف" إلى 1000.',
+    '9. نوع الصفقة (dealType): يجب أن يكون sale للبيع، أو rent للإيجار.',
+    '10. نوع العقار (propertyType): التزم بالتسميات: أرض، نص أرض، فيلا، شقة، عمارة، دور، محل.',
+    'إذا لم تجد المعلومة، أعد القيمة null ولا تخمن.'
   ].join('\n');
 
   const userPrompt = [
@@ -180,7 +183,7 @@ async function extractOffersWithOpenAI({ groupText, group, source, retentionDays
       timestamp: group.timestamp || '',
       retentionDays,
     })}`,
-    'النص:',
+    'النص المراد تحليله:',
     groupText,
   ].join('\n\n');
 
@@ -192,7 +195,7 @@ async function extractOffersWithOpenAI({ groupText, group, source, retentionDays
     },
     body: JSON.stringify({
       model: MODEL,
-      temperature: 0.1,
+      temperature: 0.1, // حرارة منخفضة لدقة أعلى
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
@@ -219,6 +222,7 @@ async function extractOffersWithOpenAI({ groupText, group, source, retentionDays
   return offers;
 }
 
+// تم توسيع هيكل البيانات ليدعم الحقول الدقيقة المطلوبة
 function extractionSchema() {
   return {
     type: 'object',
@@ -238,6 +242,8 @@ function extractionSchema() {
             plotNumber: { type: ['string', 'null'] },
             area: { type: ['number', 'null'] },
             price: { type: ['number', 'null'] },
+            streetWidth: { type: ['number', 'null'], description: "عرض الشارع الرئيسي بالرقم فقط" },
+            facade: { type: ['string', 'null'], description: "واجهة العقار، مثال: شرقية، شمالية" },
             streetDetails: { type: ['string', 'null'] },
             dimensions: { type: ['string', 'null'] },
             direct: { type: ['boolean', 'null'] },
@@ -257,6 +263,8 @@ function extractionSchema() {
             'plotNumber',
             'area',
             'price',
+            'streetWidth',
+            'facade',
             'streetDetails',
             'dimensions',
             'direct',
@@ -356,6 +364,11 @@ function extractOfferFromSegment(segment, source) {
   const mapUrl = extractMapUrl(text);
   const direct = isDirect(text);
   const contactPhone = normalizeSaudiPhone(extractPhone(text) || source.contactPhone || '');
+  
+  // الاحتياطي لا يستخرج الواجهة وعرض الشارع بدقة الذكاء، لذلك نضعهم Null هنا أو نستخرجهم لاحقاً
+  const facade = null; 
+  const streetWidth = null;
+
   const confidence = scoreOffer({
     propertyType,
     dealType,
@@ -366,6 +379,8 @@ function extractOfferFromSegment(segment, source) {
     area,
     price,
     streetDetails,
+    facade,
+    streetWidth,
     direct,
     mapUrl,
     contactPhone,
@@ -383,6 +398,8 @@ function extractOfferFromSegment(segment, source) {
     area,
     price,
     streetDetails,
+    facade,
+    streetWidth,
     dimensions,
     direct,
     mapUrl,
@@ -429,7 +446,12 @@ function normalizeOfferToItem({
   const plotNumber = cleanString(offer?.plotNumber) || extractPlotNumber(offer?.description || '') || '';
   const area = cleanNumber(offer?.area);
   const price = cleanNumber(offer?.price);
+  
+  // الحقول الجديدة المدعومة
+  const facade = cleanString(offer?.facade) || '';
+  const streetWidth = cleanNumber(offer?.streetWidth);
   const streetDetails = cleanString(offer?.streetDetails) || extractStreetDetails(offer?.description || '') || '';
+  
   const dimensions = cleanString(offer?.dimensions) || extractDimensions(offer?.description || '') || '';
   const mapUrl = cleanString(offer?.mapUrl) || extractMapUrl(offer?.description || '') || '';
   const direct = typeof offer?.direct === 'boolean' ? offer.direct : isDirect(offer?.description || group.text);
@@ -448,6 +470,8 @@ function normalizeOfferToItem({
   const description = buildDescription({
     text: offer?.description || group.text,
     streetDetails,
+    facade,
+    streetWidth,
     dimensions,
     mapUrl,
   });
@@ -473,6 +497,8 @@ function normalizeOfferToItem({
           area,
           price,
           streetDetails,
+          facade,
+          streetWidth,
           direct,
           mapUrl,
           contactPhone: sourcePhone,
@@ -492,11 +518,13 @@ function normalizeOfferToItem({
     area,
     price,
     direct,
+    facade,
+    streetWidth,
     streetDetails,
     dimensions,
     mapUrl,
     description,
-    status: 'hidden',
+    status: 'hidden', // <== هذا ما يضمن عدم نشره للعامة أبداً
     messageDate: timeMeta.messageDate,
     expiresAt: timeMeta.expiresAt,
   };
@@ -520,7 +548,7 @@ function normalizeOfferToItem({
     listing,
     rawText: cleanString(offer?.description || group.text),
     reason: aiUsed
-      ? 'تم الاستخراج عبر OpenAI مع منع دمج العروض المتعددة.'
+      ? 'تم الاستخراج بنجاح وفصل العروض وحفظها كمسودة للأرشيف الداخلي.'
       : 'تم الاستخراج بالقواعد الاحتياطية لأن استخراج OpenAI لم يتوفر.',
     source: {
       ...source,
@@ -597,7 +625,7 @@ function buildStats(groups, items) {
 
 function buildSummary({ conversationTitle, stats, groupsAnalyzed }) {
   const sourceLabel = conversationTitle || 'المحادثة';
-  return `تم تحليل ${groupsAnalyzed} رسالة/مقطع من ${sourceLabel}، واستخراج ${stats.listingCount} عرض صالح (${stats.autoSavedCount} حفظ داخلي تلقائي، ${stats.reviewCount} للمراجعة).`;
+  return `تم تحليل ${groupsAnalyzed} رسالة/مقطع من ${sourceLabel}، واستخراج ${stats.listingCount} مسودة محفوظة داخلياً (${stats.autoSavedCount} موثوق، ${stats.reviewCount} للمراجعة).`;
 }
 
 function dedupeItems(items) {
@@ -658,14 +686,20 @@ function buildDuplicateKey({ listing, sourcePhone, timeMeta }) {
   return hashString(normalizeFingerprintText(keyText));
 }
 
-function buildDescription({ text, streetDetails, dimensions, mapUrl }) {
+function buildDescription({ text, streetDetails, facade, streetWidth, dimensions, mapUrl }) {
   const lines = cleanText(text)
     .split(/\n+/)
     .map((line) => line.trim())
     .filter(Boolean)
     .filter((line) => !/^https?:\/\//i.test(line));
 
-  const extra = [streetDetails, dimensions].filter(Boolean).join(' — ');
+  const extra = [
+      streetDetails, 
+      facade ? `الواجهة: ${facade}` : '',
+      streetWidth ? `عرض الشارع: ${streetWidth}م` : '',
+      dimensions ? `الأبعاد: ${dimensions}` : ''
+  ].filter(Boolean).join(' — ');
+  
   if (extra) lines.push(extra);
   if (mapUrl) lines.push(`رابط الموقع: ${mapUrl}`);
   return Array.from(new Set(lines)).join('\n');
@@ -926,18 +960,20 @@ function isDirect(text) {
   return /مباشر|مباشرة|مبااشرة|مباشر\s+من\s+المالك/i.test(cleanText(text));
 }
 
+// تعديل خوارزمية التقييم لرفع قيمة العرض إذا استخرج الواجهة والشارع
 function scoreOffer(fields = {}) {
   let score = 0.25;
   if (fields.propertyType) score += 0.12;
   if (fields.dealType) score += 0.08;
   if (fields.neighborhood || fields.plan) score += 0.12;
   if (fields.plotNumber) score += 0.08;
-  if (Number.isFinite(Number(fields.area))) score += 0.14;
-  if (Number.isFinite(Number(fields.price))) score += 0.18;
-  if (fields.streetDetails) score += 0.06;
-  if (fields.direct) score += 0.05;
-  if (fields.mapUrl) score += 0.05;
-  if (fields.contactPhone) score += 0.05;
+  if (Number.isFinite(Number(fields.area))) score += 0.10; // تعديل الوزن
+  if (Number.isFinite(Number(fields.price))) score += 0.14; // تعديل الوزن
+  if (fields.streetDetails || fields.streetWidth) score += 0.08; // تمييز للشارع
+  if (fields.facade) score += 0.06; // تمييز للواجهة
+  if (fields.direct) score += 0.04;
+  if (fields.mapUrl) score += 0.04;
+  if (fields.contactPhone) score += 0.04;
   return clamp(score, 0, 0.99);
 }
 
