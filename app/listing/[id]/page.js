@@ -11,12 +11,75 @@ import {
   normalizePhoneDigits,
   normalizeDealTypeLabel,
   isFiniteCoord,
-  normalizeStatusLabel
+  normalizeStatusLabel,
+  getLocationText,
 } from '@/lib/listingUtils';
 import { collectMediaEntries } from '@/lib/media';
+import { getAreaSeoLinks, buildListingsHref } from '@/lib/areaCatalog';
 
 import HeroSection from '@/components/HeroSection';
 import ImageGallery from '@/components/ImageGallery';
+
+function numberOrNull(value) {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+function formatNumber(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return '—';
+  return n.toLocaleString('ar-SA');
+}
+
+function getPhoneHref(phone) {
+  const digits = normalizePhoneDigits(phone);
+  if (!digits) return '';
+  return `tel:+${digits}`;
+}
+
+function getPrimaryArea(item) {
+  return item?.neighborhood || item?.plan || '';
+}
+
+function getSeoLinksForListing(item) {
+  const areaName = getPrimaryArea(item);
+  const baseLinks = getAreaSeoLinks(areaName, 9);
+
+  const related = [];
+  if (item?.propertyType || item?.dealType || item?.neighborhood || item?.plan) {
+    related.push({
+      label: 'عروض مشابهة لهذا الإعلان',
+      href: buildListingsHref({
+        neighborhood: item?.neighborhood,
+        plan: item?.plan,
+        propertyType: item?.propertyType,
+        dealType: item?.dealType,
+      }),
+    });
+  }
+
+  const merged = [...related, ...baseLinks];
+  const seen = new Set();
+
+  return merged.filter((link) => {
+    if (!link?.label || !link?.href) return false;
+    const key = `${link.label}-${link.href}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).slice(0, 10);
+}
+
+function DetailItem({ label, value, highlight = false }) {
+  if (value === undefined || value === null || value === '') return null;
+
+  return (
+    <div className={`detailItem ${highlight ? 'highlight' : ''}`}>
+      <span className="detailLabel">{label}</span>
+      <span className="detailValue">{value}</span>
+    </div>
+  );
+}
 
 export default function ListingDetailsPage({ params }) {
   const routeParams = useParams();
@@ -65,13 +128,15 @@ export default function ListingDetailsPage({ params }) {
     return normalizePhoneDigits(directPhone || '966597520693');
   }, [item]);
 
+  const phoneHref = useMemo(() => getPhoneHref(contactPhone), [contactPhone]);
+
   const whatsappHref = useMemo(() => {
     if (!item) return '';
     const text = [
       'السلام عليكم، أرغب في الاستفسار عن هذا العرض:',
       item.title || 'عرض عقاري',
       `السعر: ${formatPriceSAR(item.price)}`,
-      `الحي: ${item.neighborhood || '—'}`,
+      `الحي: ${item.neighborhood || item.plan || '—'}`,
       item.licenseNumber ? `رقم الترخيص: ${item.licenseNumber}` : '',
       typeof window !== 'undefined' ? `الرابط: ${window.location.href}` : '',
     ].filter(Boolean).join('\n');
@@ -95,11 +160,20 @@ export default function ListingDetailsPage({ params }) {
   if (!item) return <div className="container stateContainer">العرض غير موجود.</div>;
 
   const hasMapCoordinates = isFiniteCoord(item.lat) && isFiniteCoord(item.lng);
+  const area = numberOrNull(item.area);
+  const price = numberOrNull(item.price);
+  const pricePerMeter = area && price ? Math.round(price / area) : null;
+  const statusText = normalizeStatusLabel(item);
+  const locationText = getLocationText(item);
+  const seoLinks = getSeoLinksForListing(item);
+
+  const licenseNumber = item.licenseNumber || item.adLicenseNumber || item.license || '';
+  const brokerName = item.brokerName || item.officeName || item.agencyName || 'عقار أبحر';
+  const advertiserType = item.advertiserType || item.brokerType || 'وسيط عقاري';
 
   return (
     <div className="container listingPageWrap">
       <style jsx>{`
-        /* الأساسيات */
         .container {
           max-width: 1200px;
           margin: 0 auto;
@@ -107,28 +181,33 @@ export default function ListingDetailsPage({ params }) {
           width: 100%;
           box-sizing: border-box;
         }
+
         .listingPageWrap {
-          padding: 20px 0;
+          padding: 20px 0 96px;
         }
+
         .stateContainer {
           padding: 50px 20px;
           text-align: center;
           font-size: 18px;
         }
+
         .topNavRow {
           display: flex;
           justify-content: space-between;
           align-items: center;
           gap: 12px;
-          margin-bottom: 24px;
+          margin-bottom: 20px;
           flex-wrap: wrap;
         }
-        .backLink, .shareBtn {
-          padding: 10px 20px;
+
+        .backLink,
+        .shareBtn {
+          padding: 10px 18px;
           background: #fff;
           border: 1px solid var(--border);
           border-radius: 12px;
-          font-weight: 700;
+          font-weight: 800;
           color: var(--text);
           cursor: pointer;
           transition: all 0.2s;
@@ -138,28 +217,157 @@ export default function ListingDetailsPage({ params }) {
           justify-content: center;
           flex: 0 0 auto;
         }
-        .backLink:hover, .shareBtn:hover {
+
+        .backLink:hover,
+        .shareBtn:hover {
           border-color: var(--primary);
           color: var(--primary);
         }
+
         .shareMsg {
-          background: #e6f7e6;
-          color: var(--success);
+          background: #ecfdf5;
+          color: #047857;
           padding: 10px;
           border-radius: 12px;
           margin-bottom: 16px;
           text-align: center;
-          font-weight: 600;
+          font-weight: 800;
+        }
+
+        .premiumSummary {
+          margin: 18px 0 22px;
+          padding: 20px;
+          border-radius: 24px;
+          background:
+            radial-gradient(circle at top right, rgba(214, 179, 91, 0.16), transparent 32%),
+            linear-gradient(180deg, #ffffff, #f8fafc);
+          border: 1px solid rgba(226, 232, 240, 0.95);
+          box-shadow: 0 18px 42px rgba(15, 23, 42, 0.07);
+        }
+
+        .summaryHead {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 18px;
+          margin-bottom: 18px;
+        }
+
+        .summaryTitleWrap {
+          min-width: 0;
+        }
+
+        .summaryPills {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+          margin-bottom: 10px;
+        }
+
+        .miniPill {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          padding: 7px 10px;
+          border-radius: 999px;
+          background: #fff;
+          border: 1px solid rgba(226, 232, 240, 0.95);
+          color: #475569;
+          font-size: 12px;
+          font-weight: 900;
+        }
+
+        .miniPill.ok {
+          background: #ecfdf5;
+          color: #047857;
+          border-color: #bbf7d0;
+        }
+
+        .summaryTitle {
+          margin: 0;
+          color: #111827;
+          font-size: clamp(22px, 3.2vw, 34px);
+          font-weight: 950;
+          line-height: 1.35;
+        }
+
+        .summaryLocation {
+          margin-top: 9px;
+          color: #64748b;
+          font-size: 15px;
+          font-weight: 800;
+        }
+
+        .summaryPriceBox {
+          flex: 0 0 auto;
+          min-width: 230px;
+          padding: 16px;
+          border-radius: 20px;
+          background: #111827;
+          color: #fff;
+          text-align: center;
+        }
+
+        .summaryPriceLabel {
+          display: block;
+          color: rgba(255,255,255,.72);
+          font-size: 12px;
+          font-weight: 800;
+          margin-bottom: 6px;
+        }
+
+        .summaryPrice {
+          display: block;
+          font-size: 24px;
+          font-weight: 950;
+          line-height: 1.3;
+        }
+
+        .priceMeter {
+          display: block;
+          margin-top: 7px;
+          color: rgba(255,255,255,.78);
+          font-size: 13px;
+          font-weight: 800;
+        }
+
+        .summaryFacts {
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 12px;
+        }
+
+        .summaryFact {
+          padding: 14px;
+          border-radius: 16px;
+          background: #fff;
+          border: 1px solid rgba(226, 232, 240, 0.95);
+        }
+
+        .summaryFact span {
+          display: block;
+          color: #64748b;
+          font-size: 12px;
+          font-weight: 800;
+          margin-bottom: 6px;
+        }
+
+        .summaryFact strong {
+          display: block;
+          color: #111827;
+          font-size: 16px;
+          font-weight: 950;
         }
 
         .contentGrid {
           display: grid;
-          grid-template-columns: minmax(0, 1.6fr) minmax(300px, 1fr);
+          grid-template-columns: minmax(0, 1.6fr) minmax(320px, 0.85fr);
           gap: 24px;
           align-items: start;
         }
 
-        .mainCol, .sideCol {
+        .mainCol,
+        .sideCol {
           display: flex;
           flex-direction: column;
           gap: 20px;
@@ -167,18 +375,18 @@ export default function ListingDetailsPage({ params }) {
         }
 
         .sectionCard {
-          background: var(--card);
+          background: var(--card, #fff);
           padding: 24px;
-          border-radius: var(--radius);
-          border: 1px solid var(--border);
-          box-shadow: var(--shadow-sm);
+          border-radius: 22px;
+          border: 1px solid var(--border, #e2e8f0);
+          box-shadow: var(--shadow-sm, 0 10px 25px rgba(15, 23, 42, 0.06));
         }
 
         .sectionHeading {
-          font-size: 22px;
-          font-weight: 900;
-          margin: 0 0 20px 0;
-          color: var(--text);
+          font-size: 21px;
+          font-weight: 950;
+          margin: 0 0 18px 0;
+          color: var(--text, #111827);
           display: flex;
           align-items: center;
           gap: 10px;
@@ -186,67 +394,130 @@ export default function ListingDetailsPage({ params }) {
 
         .descriptionText {
           white-space: pre-wrap;
-          line-height: 1.9;
-          color: var(--text);
+          line-height: 1.95;
+          color: var(--text, #111827);
           font-size: 16px;
           word-break: break-word;
         }
 
-        .customDetailsGrid {
+        .detailsGrid {
           display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+          grid-template-columns: repeat(auto-fill, minmax(155px, 1fr));
           gap: 12px;
         }
 
         .detailItem {
-          background: var(--bg-soft);
-          padding: 16px;
-          border-radius: 14px;
-          border: 1px solid var(--border);
-        }
-        .detailLabel {
-          display: block;
-          font-size: 13px;
-          color: var(--muted);
-          font-weight: 700;
-          margin-bottom: 6px;
-        }
-        .detailValue {
-          display: block;
-          font-size: 18px;
-          font-weight: 900;
-          color: var(--text);
+          background: #f8fafc;
+          padding: 15px;
+          border-radius: 16px;
+          border: 1px solid #e2e8f0;
         }
 
-        .whatsappBigBtn {
+        .detailItem.highlight {
+          background: #fffaf0;
+          border-color: rgba(214, 179, 91, .45);
+        }
+
+        .detailLabel {
+          display: block;
+          font-size: 12px;
+          color: #64748b;
+          font-weight: 850;
+          margin-bottom: 7px;
+        }
+
+        .detailValue {
+          display: block;
+          font-size: 17px;
+          font-weight: 950;
+          color: #111827;
+          line-height: 1.45;
+        }
+
+        .trustList {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
+
+        .trustRow {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          padding: 13px 0;
+          border-bottom: 1px solid #eef2f7;
+        }
+
+        .trustRow:last-child {
+          border-bottom: 0;
+        }
+
+        .trustRow span {
+          color: #64748b;
+          font-weight: 800;
+          font-size: 13px;
+        }
+
+        .trustRow strong {
+          color: #111827;
+          font-weight: 950;
+          text-align: left;
+          direction: ltr;
+        }
+
+        .actionStack {
+          display: grid;
+          grid-template-columns: 1fr;
+          gap: 10px;
+        }
+
+        .actionBtnBig {
           display: flex;
           width: 100%;
-          background: #25D366;
-          color: #fff;
-          font-size: 18px;
+          min-height: 52px;
           border: none;
-          padding: 16px;
+          padding: 14px 16px;
           border-radius: 16px;
-          font-weight: 700;
+          font-size: 16px;
+          font-weight: 950;
           align-items: center;
           justify-content: center;
           gap: 8px;
           text-decoration: none;
-          margin-top: 20px;
           transition: 0.2s;
+          cursor: pointer;
         }
-        .whatsappBigBtn:hover {
-          background: #1da851;
+
+        .whatsappBtn {
+          background: #25d366;
+          color: #fff;
+        }
+
+        .callBtn {
+          background: #111827;
+          color: #fff;
+        }
+
+        .mapBtn {
+          background: var(--primary, #d6b35b);
+          color: #111827;
+        }
+
+        .actionBtnBig:hover {
+          transform: translateY(-1px);
+          filter: brightness(.98);
         }
 
         .mapContainer {
           width: 100%;
-          height: 350px;
-          border-radius: 16px;
+          height: 330px;
+          border-radius: 18px;
           overflow: hidden;
           background: #f1f5f9;
-          border: 1px solid var(--border);
+          border: 1px solid var(--border, #e2e8f0);
         }
+
         .mapContainer iframe {
           width: 100%;
           height: 100%;
@@ -254,79 +525,172 @@ export default function ListingDetailsPage({ params }) {
         }
 
         .noMapData {
-          padding: 40px 20px;
+          padding: 36px 20px;
           text-align: center;
-          background: var(--bg-soft);
-          border-radius: 16px;
-          border: 1px dashed var(--border-strong);
-          color: var(--muted);
-          font-weight: 600;
+          background: #f8fafc;
+          border-radius: 18px;
+          border: 1px dashed #cbd5e1;
+          color: #64748b;
+          font-weight: 800;
         }
 
-        .stickyMap {
+        .stickyBox {
           position: sticky;
-          top: 100px;
+          top: 96px;
         }
 
-        /* استجابة الجوال */
+        .seoLinksGrid {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 10px;
+        }
+
+        .seoLink {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          padding: 9px 12px;
+          border-radius: 999px;
+          background: #fff;
+          border: 1px solid #e2e8f0;
+          color: #334155;
+          text-decoration: none;
+          font-size: 13px;
+          font-weight: 850;
+          line-height: 1.5;
+        }
+
+        .seoLink:hover {
+          border-color: #d6b35b;
+          color: #111827;
+          background: #fffaf0;
+        }
+
+        .mobileBottomActions {
+          position: fixed;
+          right: 0;
+          left: 0;
+          bottom: 0;
+          z-index: 50;
+          display: none;
+          gap: 10px;
+          padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
+          background: rgba(255, 255, 255, .94);
+          border-top: 1px solid rgba(226, 232, 240, .95);
+          backdrop-filter: blur(12px);
+        }
+
+        .mobileBottomActions a {
+          min-height: 48px;
+          border-radius: 14px;
+          font-size: 15px;
+        }
+
         @media (max-width: 900px) {
           .contentGrid {
             grid-template-columns: 1fr;
           }
-          .stickyMap {
+
+          .stickyBox {
             position: static;
+          }
+
+          .summaryHead {
+            flex-direction: column;
+          }
+
+          .summaryPriceBox {
+            width: 100%;
+            min-width: 0;
+          }
+
+          .summaryFacts {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
           }
         }
 
         @media (max-width: 640px) {
           .listingPageWrap {
-            padding: 10px 0;
+            padding: 10px 0 90px;
           }
+
           .topNavRow {
             flex-wrap: wrap;
           }
-          .backLink, .shareBtn {
+
+          .backLink,
+          .shareBtn {
             flex: 1 1 40%;
             padding: 12px 10px;
             font-size: 14px;
             text-align: center;
           }
+
+          .premiumSummary {
+            padding: 16px;
+            border-radius: 20px;
+          }
+
+          .summaryFacts {
+            gap: 8px;
+          }
+
+          .summaryFact {
+            padding: 12px;
+          }
+
+          .summaryFact strong {
+            font-size: 15px;
+          }
+
           .sectionCard {
             padding: 16px;
             border-radius: 18px;
           }
+
           .sectionHeading {
             font-size: 18px;
             margin-bottom: 16px;
           }
-          .customDetailsGrid {
+
+          .detailsGrid {
             grid-template-columns: 1fr 1fr;
             gap: 8px;
           }
+
           .detailItem {
             padding: 12px;
           }
+
           .detailValue {
-            font-size: 16px;
+            font-size: 15px;
           }
-          .whatsappBigBtn {
-            font-size: 16px;
-            padding: 14px;
-          }
+
           .mapContainer {
             height: 250px;
           }
+
           .descriptionText {
             font-size: 15px;
           }
+
+          .mobileBottomActions {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+          }
+
+          .sideContactCard {
+            display: none;
+          }
         }
 
-        /* معالجة تجاوز النصوص */
         * {
           word-break: break-word;
           overflow-wrap: break-word;
         }
-        img, video {
+
+        img,
+        video {
           max-width: 100%;
           height: auto;
         }
@@ -343,73 +707,159 @@ export default function ListingDetailsPage({ params }) {
 
       {shareMsg && <div className="shareMsg">{shareMsg}</div>}
 
-      <HeroSection item={item} whatsappHref={whatsappHref} />
+      <ImageGallery images={media} title={item.title} />
+
+      <section className="premiumSummary">
+        <div className="summaryHead">
+          <div className="summaryTitleWrap">
+            <div className="summaryPills">
+              <span className="miniPill ok">{statusText}</span>
+              {dealTypeLabel && <span className="miniPill">{dealTypeLabel}</span>}
+              {item.direct && <span className="miniPill">مباشر</span>}
+              {licenseNumber && <span className="miniPill">مرخص</span>}
+            </div>
+
+            <h1 className="summaryTitle">{item.title || 'عرض عقاري'}</h1>
+            <div className="summaryLocation">{locationText}</div>
+          </div>
+
+          <div className="summaryPriceBox">
+            <span className="summaryPriceLabel">السعر</span>
+            <strong className="summaryPrice">
+              {formatPriceSAR(item.price)}
+              {String(item?.dealType || '').toLowerCase() === 'rent' && (
+                <span> / سنوي</span>
+              )}
+            </strong>
+            {pricePerMeter && (
+              <span className="priceMeter">
+                {formatNumber(pricePerMeter)} ر.س / م²
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div className="summaryFacts">
+          <div className="summaryFact">
+            <span>نوع العقار</span>
+            <strong>{item.propertyType || 'غير محدد'}</strong>
+          </div>
+          <div className="summaryFact">
+            <span>المساحة</span>
+            <strong>{item.area ? `${formatNumber(item.area)} م²` : 'غير محدد'}</strong>
+          </div>
+          <div className="summaryFact">
+            <span>الحي</span>
+            <strong>{item.neighborhood || 'غير محدد'}</strong>
+          </div>
+          <div className="summaryFact">
+            <span>المخطط</span>
+            <strong>{item.plan || 'غير محدد'}</strong>
+          </div>
+        </div>
+      </section>
 
       <div className="contentGrid">
         <div className="mainCol">
           <div className="sectionCard">
-            <h2 className="sectionHeading">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{color: 'var(--primary)'}}><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
-              أهم التفاصيل
-            </h2>
+            <h2 className="sectionHeading">أهم التفاصيل</h2>
 
-            <div className="customDetailsGrid">
-              <div className="detailItem">
-                <span className="detailLabel">حالة العرض</span>
-                <span className="detailValue" style={{color: 'var(--success)'}}>{normalizeStatusLabel(item)}</span>
-              </div>
-              <div className="detailItem">
-                <span className="detailLabel">السعر</span>
-                <span className="detailValue">{formatPriceSAR(item.price)}</span>
-              </div>
-              <div className="detailItem">
-                <span className="detailLabel">نوع العقار</span>
-                <span className="detailValue">{item.propertyType}</span>
-              </div>
-              <div className="detailItem">
-                <span className="detailLabel">المساحة</span>
-                <span className="detailValue">{item.area ? `${item.area} م²` : 'غير محدد'}</span>
-              </div>
-              {item.streetWidth && (
-                <div className="detailItem">
-                  <span className="detailLabel">عرض الشارع</span>
-                  <span className="detailValue">{item.streetWidth} متر</span>
-                </div>
+            <div className="detailsGrid">
+              <DetailItem label="حالة العرض" value={statusText} highlight />
+              <DetailItem label="السعر" value={formatPriceSAR(item.price)} highlight />
+              {pricePerMeter && (
+                <DetailItem label="سعر المتر" value={`${formatNumber(pricePerMeter)} ر.س / م²`} />
               )}
-              {item.licenseNumber && (
-                <div className="detailItem">
-                  <span className="detailLabel">رقم الترخيص</span>
-                  <span className="detailValue">{item.licenseNumber}</span>
-                </div>
-              )}
+              <DetailItem label="نوع العقار" value={item.propertyType} />
+              <DetailItem label="تصنيف العقار" value={item.propertyClass} />
+              <DetailItem label="نوع الصفقة" value={dealTypeLabel} />
+              <DetailItem label="المساحة" value={item.area ? `${formatNumber(item.area)} م²` : ''} />
+              <DetailItem label="عرض الشارع" value={item.streetWidth ? `${item.streetWidth} متر` : ''} />
+              <DetailItem label="الواجهة" value={item.facade || item.frontage} />
+              <DetailItem label="رقم المخطط" value={item.planNumber || item.plan} />
+              <DetailItem label="رقم القطعة" value={item.part || item.plotNumber} />
+              <DetailItem label="رقم الترخيص" value={licenseNumber} highlight />
             </div>
-
-            <a href={whatsappHref} target="_blank" rel="noopener noreferrer" className="whatsappBigBtn">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
-              تواصل للاستفسار عبر واتساب
-            </a>
           </div>
 
           <div className="sectionCard">
-            <h2 className="sectionHeading">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{color: 'var(--primary)'}}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
-              وصف العقار
-            </h2>
+            <h2 className="sectionHeading">وصف العقار</h2>
             <div className="descriptionText">
               {item.description || 'لا يوجد وصف مضاف لهذا الإعلان.'}
             </div>
           </div>
 
-          {/* معرض الصور والفيديوهات */}
-          <ImageGallery images={media} title={item.title} />
+          <div className="sectionCard">
+            <h2 className="sectionHeading">روابط بحث مرتبطة</h2>
+            <div className="seoLinksGrid">
+              {seoLinks.map((link) => (
+                <Link key={`${link.label}-${link.href}`} href={link.href} className="seoLink">
+                  {link.label}
+                </Link>
+              ))}
+            </div>
+          </div>
+
+          <HeroSection item={item} whatsappHref={whatsappHref} />
         </div>
 
         <div className="sideCol">
-          <div className={`sectionCard ${hasMapCoordinates ? 'stickyMap' : ''}`}>
-            <h2 className="sectionHeading">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{color: 'var(--primary)'}}><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
-              موقع العقار
-            </h2>
+          <div className="sectionCard sideContactCard stickyBox">
+            <h2 className="sectionHeading">التواصل والاستفسار</h2>
+
+            <div className="actionStack">
+              <a href={whatsappHref} target="_blank" rel="noopener noreferrer" className="actionBtnBig whatsappBtn">
+                تواصل واتساب
+              </a>
+
+              {phoneHref && (
+                <a href={phoneHref} className="actionBtnBig callBtn">
+                  اتصال مباشر
+                </a>
+              )}
+
+              {hasMapCoordinates && (
+                <a
+                  href={`https://www.google.com/maps/search/?api=1&query=${item.lat},${item.lng}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="actionBtnBig mapBtn"
+                >
+                  فتح في خرائط جوجل
+                </a>
+              )}
+            </div>
+          </div>
+
+          <div className="sectionCard">
+            <h2 className="sectionHeading">بيانات الإعلان والرخصة</h2>
+
+            <div className="trustList">
+              <div className="trustRow">
+                <span>اسم الجهة</span>
+                <strong>{brokerName}</strong>
+              </div>
+              <div className="trustRow">
+                <span>صفة المعلن</span>
+                <strong>{advertiserType}</strong>
+              </div>
+              <div className="trustRow">
+                <span>رقم الترخيص</span>
+                <strong>{licenseNumber || 'غير مضاف'}</strong>
+              </div>
+              <div className="trustRow">
+                <span>حالة الإعلان</span>
+                <strong>{statusText}</strong>
+              </div>
+              <div className="trustRow">
+                <span>المدينة</span>
+                <strong>{item.city || 'جدة'}</strong>
+              </div>
+            </div>
+          </div>
+
+          <div className="sectionCard">
+            <h2 className="sectionHeading">موقع العقار</h2>
 
             {hasMapCoordinates ? (
               <>
@@ -420,26 +870,32 @@ export default function ListingDetailsPage({ params }) {
                     allowFullScreen
                     loading="lazy"
                     referrerPolicy="no-referrer-when-downgrade"
-                  ></iframe>
+                  />
                 </div>
-                <a
-                  href={`https://www.google.com/maps/search/?api=1&query=${item.lat},${item.lng}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="whatsappBigBtn"
-                  style={{ background: 'var(--primary)', marginTop: '16px' }}
-                >
-                  فتح في خرائط جوجل
-                </a>
               </>
             ) : (
               <div className="noMapData">
-                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{margin: '0 auto 10px', opacity: 0.5}}><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><line x1="9" y1="10" x2="15" y2="10"></line><line x1="12" y1="7" x2="12" y2="13"></line></svg>
                 <p>الإحداثيات غير متوفرة لهذا العرض</p>
               </div>
             )}
           </div>
         </div>
+      </div>
+
+      <div className="mobileBottomActions">
+        <a href={whatsappHref} target="_blank" rel="noopener noreferrer" className="actionBtnBig whatsappBtn">
+          واتساب
+        </a>
+
+        {phoneHref ? (
+          <a href={phoneHref} className="actionBtnBig callBtn">
+            اتصال
+          </a>
+        ) : (
+          <button type="button" onClick={handleShare} className="actionBtnBig callBtn">
+            مشاركة
+          </button>
+        )}
       </div>
     </div>
   );
