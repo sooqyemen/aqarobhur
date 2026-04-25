@@ -891,3 +891,104 @@ button, input, select, textarea { font: inherit; outline: none; }
     transform: none;
   }
 }
+/* إصلاح عرض صور معرض الوسائط في صفحة تعديل الإعلان */
+.mediaGrid {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)) !important;
+  gap: 14px !important;
+  align-items: start !important;
+}
+
+.mediaTile {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  overflow: hidden !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 16px !important;
+  background: #ffffff !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+.mediaPreview {
+  position: relative !important;
+  width: 100% !important;
+  aspect-ratio: 1 / 1 !important;
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: 220px !important;
+  overflow: hidden !important;
+  background: #f8fafc !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.mediaElement {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100% !important;
+  max-height: 100% !important;
+  object-fit: contain !important;
+  display: block !important;
+  background: #f8fafc !important;
+}
+
+.mediaDetails {
+  padding: 9px 10px !important;
+  min-height: 38px !important;
+  overflow: hidden !important;
+}
+
+.mediaName {
+  max-width: 100% !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+  font-size: 12px !important;
+}
+
+.mediaActionsBottom {
+  display: grid !important;
+  grid-template-columns: 1fr 1fr !important;
+  gap: 8px !important;
+  padding: 10px !important;
+  border-top: 1px solid #edf2f7 !important;
+}
+
+.mediaActionsBottom .btnSmall {
+  min-width: 0 !important;
+  width: 100% !important;
+  justify-content: center !important;
+  white-space: nowrap !important;
+  font-size: 12px !important;
+}
+
+.coverCard {
+  overflow: hidden !important;
+  border-radius: 18px !important;
+}
+
+.coverImg {
+  width: 100% !important;
+  height: 100% !important;
+  max-height: 420px !important;
+  object-fit: contain !important;
+  background: #f8fafc !important;
+}
+
+@media (max-width: 640px) {
+  .mediaGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 10px !important;
+  }
+
+  .mediaPreview {
+    max-height: 170px !important;
+  }
+
+  .mediaActionsBottom {
+    grid-template-columns: 1fr !important;
+  }
+}
