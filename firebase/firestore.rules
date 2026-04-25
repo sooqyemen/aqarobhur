@@ -30,6 +30,23 @@ service cloud.firestore {
       allow read, update, delete: if isAdmin();
     }
 
+    // ✅ عدادات مشاهدات الموقع
+    // الزائر يكتب عداد فقط، والقراءة تبقى للأدمن.
+    match /abhur_site_stats/{docId} {
+      allow create, update: if docId == 'summary';
+      allow read, delete: if isAdmin();
+    }
+
+    match /abhur_daily_stats/{docId} {
+      allow create, update: if true;
+      allow read, delete: if isAdmin();
+    }
+
+    match /abhur_page_stats/{docId} {
+      allow create, update: if true;
+      allow read, delete: if isAdmin();
+    }
+
     // legacy (إن وُجد): للأدمن فقط
     match /listings/{docId} {
       allow read, write: if isAdmin();

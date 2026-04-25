@@ -3,6 +3,7 @@ import { Cairo } from 'next/font/google';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 import WhatsAppBar from '@/components/WhatsAppBar';
+import SiteViewTracker from '@/components/analytics/SiteViewTracker';
 
 const cairo = Cairo({ 
   subsets: ['arabic', 'latin'],
@@ -33,12 +34,13 @@ export default function RootLayout({ children }) {
   return (
     <html lang="ar" dir="rtl" className={cairo.className}>
       <body>
+        <SiteViewTracker />
         <Header />
-        
+
         <main className="mainContent">
           {children}
         </main>
-        
+
         <Footer />
         <WhatsAppBar />
       </body>

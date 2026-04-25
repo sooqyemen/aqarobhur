@@ -6,6 +6,7 @@ import { collection, getCountFromServer, query, where, getDocs, limit, orderBy }
 import { getFirebase } from '@/lib/firebaseClient';
 import AdminGuard from '@/components/admin/AdminGuard';
 import AdminShell from '@/components/admin/AdminShell';
+import AnalyticsDashboardCard from '@/components/admin/AnalyticsDashboardCard';
 
 // دالة مساعدة لترجمة حالات الذكاء الاصطناعي
 function translateExtractionStatus(status) {
@@ -83,7 +84,7 @@ export default function AdminDashboardPage() {
   return (
     <>
       <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined" rel="stylesheet" />
-      
+
       <AdminGuard title="نظرة عامة">
         {/* نستخدم الـ AdminShell الذي لا يحتوي على أي أزرار تسجيل خروج */}
         <AdminShell
@@ -104,6 +105,8 @@ export default function AdminDashboardPage() {
              </div>
           )}
 
+          <AnalyticsDashboardCard />
+
           {/* 1. قسم الإحصائيات (Stats Grid) */}
           <div className="statsGrid">
             {stats.map((item) => (
@@ -121,7 +124,7 @@ export default function AdminDashboardPage() {
 
           {/* 2. قسم القوائم السريعة (Recent Activity) */}
           <div className="listsGrid">
-            
+
             {/* آخر الطلبات */}
             <section className="dashboardPanel">
               <div className="panelHeader">
@@ -131,7 +134,7 @@ export default function AdminDashboardPage() {
                 </div>
                 <Link href="/admin/requests" className="viewAllLink">عرض الكل</Link>
               </div>
-              
+
               <div className="listContainer">
                 {loading ? (
                     <div className="emptyState"><span className="material-icons-outlined spin">autorenew</span> جاري التحميل...</div>
@@ -171,7 +174,7 @@ export default function AdminDashboardPage() {
                 </div>
                 <Link href="/admin/inbox" className="viewAllLink">مراجعة الوارد</Link>
               </div>
-              
+
               <div className="listContainer">
                 {loading ? (
                     <div className="emptyState"><span className="material-icons-outlined spin">autorenew</span> جاري التحميل...</div>
@@ -203,7 +206,7 @@ export default function AdminDashboardPage() {
                 )}
               </div>
             </section>
-            
+
           </div>
         </AdminShell>
       </AdminGuard>
@@ -231,7 +234,7 @@ export default function AdminDashboardPage() {
 
         .listsGrid { display: grid; grid-template-columns: 1fr; gap: 20px; }
         @media (min-width: 1024px) { .listsGrid { grid-template-columns: 1fr 1fr; } }
-        
+
         .dashboardPanel { background: white; border-radius: 16px; border: 1px solid var(--border); box-shadow: 0 4px 6px rgba(0,0,0,0.02); overflow: hidden; display: flex; flex-direction: column; }
         .panelHeader { display: flex; justify-content: space-between; align-items: center; padding: 20px; border-bottom: 1px solid var(--border); background: #fcfcfd; }
         .panelTitle { display: flex; align-items: center; gap: 10px; }
@@ -242,24 +245,24 @@ export default function AdminDashboardPage() {
         .listContainer { padding: 10px 20px 20px; display: flex; flex-direction: column; gap: 12px; flex-grow: 1; }
         .emptyState { text-align: center; color: var(--muted); padding: 40px 0; font-weight: 800; font-size: 14px; display: flex; align-items: center; justify-content: center; gap: 8px; }
         .spin { animation: spin 1s linear infinite; }
-        
+
         .listItem { display: flex; align-items: center; gap: 15px; padding: 12px; border-radius: 12px; border: 1px solid var(--border); background: white; transition: border-color 0.2s; }
         .listItem:hover { border-color: var(--primary); }
-        
+
         .itemAvatar { width: 40px; height: 40px; border-radius: 50%; background: var(--bg-soft); color: var(--muted); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
         .itemIcon { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-        
+
         .itemContent { flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
         .itemTitle { font-size: 14px; font-weight: 900; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .itemDesc { font-size: 12px; color: var(--muted); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        
+
         .sourceBadge { background: var(--bg-soft); color: var(--muted); padding: 2px 6px; border-radius: 4px; font-weight: 800; font-size: 11px; }
-        
+
         .itemAction { flex-shrink: 0; }
         .phoneBtn { display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 50%; background: #e6fffa; color: #0f766e; text-decoration: none; transition: all 0.2s; }
         .phoneBtn:hover { background: #ccfbf1; transform: scale(1.05); }
         .phoneBtn .material-icons-outlined { font-size: 20px; }
-        
+
         .statusBadge { padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 900; white-space: nowrap; }
         .mutedTxt { color: var(--border-strong); }
       `}</style>
