@@ -992,3 +992,65 @@ button, input, select, textarea { font: inherit; outline: none; }
     grid-template-columns: 1fr !important;
   }
 }
+/* إصلاح كروت أهم التفاصيل في صفحة تفاصيل الإعلان */
+.listingPageWrap .detailsGrid {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)) !important;
+  gap: 12px !important;
+  align-items: stretch !important;
+}
+
+.listingPageWrap .detailItem {
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: center !important;
+  gap: 7px !important;
+  min-height: 82px !important;
+  padding: 15px !important;
+  border-radius: 16px !important;
+  background: #f8fafc !important;
+  border: 1px solid #e2e8f0 !important;
+  box-sizing: border-box !important;
+}
+
+.listingPageWrap .detailItem.highlight {
+  background: #fffaf0 !important;
+  border-color: rgba(214, 179, 91, 0.55) !important;
+}
+
+.listingPageWrap .detailLabel {
+  display: block !important;
+  font-size: 12px !important;
+  color: #64748b !important;
+  font-weight: 800 !important;
+  line-height: 1.4 !important;
+}
+
+.listingPageWrap .detailValue {
+  display: block !important;
+  font-size: 16px !important;
+  color: #111827 !important;
+  font-weight: 900 !important;
+  line-height: 1.5 !important;
+  word-break: break-word !important;
+}
+
+/* منع الهيدر من تغطية المحتوى */
+.mainContent {
+  scroll-margin-top: 130px !important;
+}
+
+@media (max-width: 640px) {
+  .listingPageWrap .detailsGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .listingPageWrap .detailItem {
+    min-height: 76px !important;
+    padding: 12px !important;
+  }
+
+  .listingPageWrap .detailValue {
+    font-size: 14px !important;
+  }
+}
