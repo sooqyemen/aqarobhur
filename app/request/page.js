@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { buildWhatsAppLink } from '@/components/WhatsAppBar';
 import { NEIGHBORHOODS } from '@/lib/taxonomy';
 import { formatPriceSAR } from '@/lib/format';
+import { createRequest } from '@/lib/requestService';
 import PageHeader from '@/components/PageHeader';
 
 const DEAL_TYPES = [
@@ -46,10 +47,86 @@ function parseSmartAnswer(answer = '') {
   };
 }
 
-function SmartResultBox({ result }) {
+function formatSmartPrice(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return '';
+  return `${n.toLocaleString('ar-SA')} ريال`;
+}
+
+function buildSmartOffersText(result, question, customerPhone = '') {
+  const items = Array.isArray(result?.items) ? result.items : [];
+  const lines = [
+    'السلام عليكم، هذا طلب متابعة من العقاري الذكي:',
+    customerPhone ? `رقم جوال العميل: ${customerPhone}` : '',
+    question ? `طلب العميل: ${question}` : '',
+    '',
+  ].filter(Boolean);
+
+  if (items.length) {
+    lines.push('العروض التي ظهرت للعميل:');
+    items.forEach((item, index) => {
+      const parts = [
+        `${index + 1}. ${item.title || item.generatedTitle || 'عرض عقاري'}`,
+        item.neighborhood ? `الحي: ${item.neighborhood}` : '',
+        item.price ? `السعر: ${formatSmartPrice(item.price)}` : '',
+        item.area ? `المساحة: ${item.area}م²` : '',
+        item.url ? `الرابط: https://aqarobhur.com${item.url}` : '',
+      ].filter(Boolean);
+      lines.push(parts.join(' - '));
+    });
+  } else if (result?.answer) {
+    lines.push('نتيجة البحث:');
+    lines.push(result.answer);
+  }
+
+  return lines.join('\n');
+}
+
+function SmartResultBox({ result, question, officePhone }) {
   const parsed = parseSmartAnswer(result?.answer || '');
+  const items = Array.isArray(result?.items) ? result.items : [];
+  const [customerPhone, setCustomerPhone] = useState('');
+  const [savingPhone, setSavingPhone] = useState(false);
+  const [phoneMessage, setPhoneMessage] = useState('');
+  const [phoneError, setPhoneError] = useState('');
 
   if (!result) return null;
+
+  async function savePhoneLead() {
+    const cleanPhone = String(customerPhone || '').replace(/[^0-9+]/g, '').trim();
+    setPhoneMessage('');
+    setPhoneError('');
+
+    if (!cleanPhone || cleanPhone.length < 8) {
+      setPhoneError('اكتب رقم جوال صحيح ليتم متابعة العروض معك عبر واتساب.');
+      return;
+    }
+
+    setSavingPhone(true);
+    try {
+      const text = buildSmartOffersText(result, question, cleanPhone);
+      await createRequest({
+        requestKind: 'smart_assistant_followup',
+        sourceType: 'العقاري الذكي',
+        source: 'request-page-smart-result',
+        name: 'عميل العقاري الذكي',
+        phone: cleanPhone,
+        note: text,
+        rawText: text,
+        waText: text,
+        status: 'new',
+      });
+
+      setPhoneMessage('تم حفظ رقمك وطلبك في لوحة التحكم. سنرسل لك العروض المتوفرة مع التفاصيل عبر واتساب.');
+
+      const officeLink = buildWhatsAppLink({ phone: officePhone, text });
+      if (officeLink) window.open(officeLink, '_blank');
+    } catch {
+      setPhoneError('تعذر حفظ رقم الجوال الآن. حاول مرة أخرى أو تواصل معنا مباشرة عبر واتساب.');
+    } finally {
+      setSavingPhone(false);
+    }
+  }
 
   return (
     <div className="card" style={{ marginTop: '16px', padding: '16px', background: '#fff' }}>
@@ -58,7 +135,75 @@ function SmartResultBox({ result }) {
         نتيجة العقاري الذكي
       </div>
 
-      {parsed.offers.length ? (
+      {items.length ? (
+        <>
+          <div style={{ marginBottom: '14px', color: 'var(--text)', lineHeight: 1.9, fontWeight: 800 }}>
+            وجدت {items.length} عرض{items.length > 1 ? 'اً' : ''} مناسب{items.length > 1 ? 'ة' : ''} لطلبك.
+          </div>
+
+          <div style={{ display: 'grid', gap: '12px' }}>
+            {items.map((item, index) => (
+              <div
+                key={item.id || `${index}-${item.title}`}
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: item.image ? '94px 1fr' : '1fr',
+                  gap: '12px',
+                  border: '1px solid var(--border)',
+                  borderRadius: '16px',
+                  padding: '12px',
+                  background: '#fcfcfd',
+                  boxShadow: '0 6px 18px rgba(15, 23, 42, 0.04)',
+                }}
+              >
+                {item.image ? (
+                  <img
+                    src={item.image}
+                    alt={item.title || 'عرض عقاري'}
+                    style={{ width: '94px', height: '82px', objectFit: 'cover', borderRadius: '12px', border: '1px solid var(--border)' }}
+                    loading="lazy"
+                  />
+                ) : null}
+
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                    <span
+                      style={{
+                        width: '32px',
+                        height: '32px',
+                        borderRadius: '999px',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        background: 'var(--primary)',
+                        color: '#fff',
+                        fontWeight: 950,
+                        flexShrink: 0,
+                      }}
+                    >
+                      {index + 1}
+                    </span>
+                    <strong style={{ color: 'var(--text)', fontSize: '15px', lineHeight: 1.6 }}>{item.title || item.generatedTitle || 'عرض عقاري'}</strong>
+                  </div>
+
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                    {item.neighborhood ? <span className="smartChip">{item.neighborhood}</span> : null}
+                    {item.price ? <span className="smartChip">{formatSmartPrice(item.price)}</span> : null}
+                    {item.area ? <span className="smartChip">{item.area}م²</span> : null}
+                    {item.summary ? <span className="smartChip">{item.summary}</span> : null}
+                  </div>
+
+                  {item.url ? (
+                    <a href={item.url} style={{ display: 'inline-flex', marginTop: '10px', color: 'var(--primary)', fontWeight: 900 }}>
+                      عرض تفاصيل الإعلان
+                    </a>
+                  ) : null}
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      ) : parsed.offers.length ? (
         <>
           {parsed.intro ? (
             <div style={{ marginBottom: '14px', color: 'var(--text)', lineHeight: 1.9, fontWeight: 800 }}>
@@ -68,56 +213,15 @@ function SmartResultBox({ result }) {
 
           <div style={{ display: 'grid', gap: '12px' }}>
             {parsed.offers.map((offer) => (
-              <div
-                key={`${offer.number}-${offer.raw}`}
-                style={{
-                  border: '1px solid var(--border)',
-                  borderRadius: '16px',
-                  padding: '14px',
-                  background: '#fcfcfd',
-                  boxShadow: '0 6px 18px rgba(15, 23, 42, 0.04)',
-                }}
-              >
+              <div key={`${offer.number}-${offer.raw}`} style={{ border: '1px solid var(--border)', borderRadius: '16px', padding: '14px', background: '#fcfcfd', boxShadow: '0 6px 18px rgba(15, 23, 42, 0.04)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
-                  <span
-                    style={{
-                      width: '34px',
-                      height: '34px',
-                      borderRadius: '999px',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      background: 'var(--primary)',
-                      color: '#fff',
-                      fontWeight: 950,
-                      flexShrink: 0,
-                    }}
-                  >
-                    {offer.number}
-                  </span>
+                  <span style={{ width: '34px', height: '34px', borderRadius: '999px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'var(--primary)', color: '#fff', fontWeight: 950, flexShrink: 0 }}>{offer.number}</span>
                   <strong style={{ color: 'var(--text)', fontSize: '16px', lineHeight: 1.6 }}>{offer.title}</strong>
                 </div>
 
                 {offer.details.length ? (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                    {offer.details.map((detail) => (
-                      <span
-                        key={detail}
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          padding: '7px 10px',
-                          borderRadius: '999px',
-                          background: '#fff',
-                          border: '1px solid var(--border)',
-                          color: 'var(--muted)',
-                          fontSize: '13px',
-                          fontWeight: 800,
-                        }}
-                      >
-                        {detail}
-                      </span>
-                    ))}
+                    {offer.details.map((detail) => <span key={detail} className="smartChip">{detail}</span>)}
                   </div>
                 ) : (
                   <p style={{ margin: 0, color: 'var(--muted)', lineHeight: 1.8 }}>{offer.raw}</p>
@@ -126,30 +230,61 @@ function SmartResultBox({ result }) {
             ))}
           </div>
 
-          {parsed.outro ? (
-            <div style={{ marginTop: '14px', padding: '12px', borderRadius: '12px', background: '#f8fafc', color: 'var(--muted)', lineHeight: 1.8, fontWeight: 800 }}>
-              {parsed.outro}
-            </div>
-          ) : null}
+          {parsed.outro ? <div style={{ marginTop: '14px', padding: '12px', borderRadius: '12px', background: '#f8fafc', color: 'var(--muted)', lineHeight: 1.8, fontWeight: 800 }}>{parsed.outro}</div> : null}
         </>
       ) : (
-        <pre style={{ whiteSpace: 'pre-wrap', margin: 0, fontFamily: 'inherit', lineHeight: 1.9, color: 'var(--text)' }}>
-          {result.answer}
-        </pre>
+        <pre style={{ whiteSpace: 'pre-wrap', margin: 0, fontFamily: 'inherit', lineHeight: 1.9, color: 'var(--text)' }}>{result.answer}</pre>
       )}
 
-      {result?.ctaText ? (
-        <div style={{ marginTop: '14px', padding: '12px', borderRadius: '12px', background: '#f8fafc', color: 'var(--muted)', lineHeight: 1.8, fontWeight: 700 }}>
-          {result.ctaText}
+      {result?.ctaText ? <div style={{ marginTop: '14px', padding: '12px', borderRadius: '12px', background: '#f8fafc', color: 'var(--muted)', lineHeight: 1.8, fontWeight: 700 }}>{result.ctaText}</div> : null}
+
+      <div style={{ marginTop: '14px', padding: '14px', borderRadius: '16px', background: '#f0fdfa', border: '1px solid rgba(15, 118, 110, .18)' }}>
+        <label style={{ display: 'block', fontWeight: 900, marginBottom: '8px', color: 'var(--text)' }}>
+          اكتب رقم جوالك اختياريًا لإرسال العروض المتوفرة مع التفاصيل على واتساب
+        </label>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '10px' }} className="smartPhoneGrid">
+          <input
+            className="input"
+            type="tel"
+            inputMode="tel"
+            value={customerPhone}
+            onChange={(e) => setCustomerPhone(e.target.value)}
+            placeholder="05XXXXXXXX"
+          />
+          <button type="button" className="btn btnPrimary" onClick={savePhoneLead} disabled={savingPhone}>
+            {savingPhone ? 'جاري الحفظ...' : 'إرسال العروض لي'}
+          </button>
         </div>
-      ) : null}
+        {phoneMessage ? <div style={{ marginTop: '10px', color: 'var(--success)', fontWeight: 900, lineHeight: 1.8 }}>{phoneMessage}</div> : null}
+        {phoneError ? <div style={{ marginTop: '10px', color: 'var(--danger)', fontWeight: 900, lineHeight: 1.8 }}>{phoneError}</div> : null}
+      </div>
 
       {result?.whatsappLink ? (
         <a href={result.whatsappLink} target="_blank" rel="noopener noreferrer" className="btn btnPrimary" style={{ width: '100%', marginTop: '14px' }}>
-          تواصل معنا عبر واتساب
+          تواصل معنا مباشرة عبر واتساب
           <span className="material-icons-outlined">chat</span>
         </a>
       ) : null}
+
+      <style jsx>{`
+        .smartChip {
+          display: inline-flex;
+          align-items: center;
+          padding: 7px 10px;
+          border-radius: 999px;
+          background: #fff;
+          border: 1px solid var(--border);
+          color: var(--muted);
+          font-size: 13px;
+          font-weight: 800;
+        }
+
+        @media (max-width: 640px) {
+          .smartPhoneGrid {
+            grid-template-columns: 1fr !important;
+          }
+        }
+      `}</style>
     </div>
   );
 }
@@ -243,6 +378,26 @@ export default function RequestPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || 'تعذر تنفيذ البحث الذكي.');
       setSmartResult(data);
+
+      try {
+        await createRequest({
+          requestKind: 'smart_search_conversation',
+          sourceType: 'العقاري الذكي',
+          source: 'request-page-smart-search',
+          name: formData.name || 'زائر العقاري الذكي',
+          phone: formData.phone || '',
+          dealType: formData.dealType,
+          propertyType: formData.propertyType,
+          neighborhood: formData.neighborhood || '',
+          budgetMin: formData.budgetMin ? Number(formData.budgetMin) : null,
+          budgetMax: formData.budgetMax ? Number(formData.budgetMax) : null,
+          areaMin: formData.areaMin ? Number(formData.areaMin) : null,
+          note: `طلب العميل: ${question}\n\nنتيجة العقاري الذكي:\n${data?.answer || ''}`,
+          rawText: JSON.stringify(data || {}, null, 2),
+          waText: data?.whatsappText || data?.answer || question,
+          status: 'new',
+        });
+      } catch (_) {}
     } catch (error) {
       setSmartError(error?.message || 'تعذر تنفيذ البحث الذكي.');
     } finally {
@@ -382,7 +537,7 @@ export default function RequestPage() {
                 </button>
 
                 {smartError ? <div style={{ marginTop: '12px', color: 'var(--danger)', fontWeight: 800 }}>{smartError}</div> : null}
-                {smartResult ? <SmartResultBox result={smartResult} /> : null}
+                {smartResult ? <SmartResultBox result={smartResult} question={smartQuestion} officePhone={waPhone} /> : null}
               </div>
 
               <hr style={{ border: '0', borderTop: '1px solid var(--border)', margin: '0' }} />
