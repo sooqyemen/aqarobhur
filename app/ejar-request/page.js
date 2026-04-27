@@ -4,26 +4,50 @@ import { useState } from 'react';
 import { buildWhatsAppLink } from '@/components/WhatsAppBar';
 import PageHeader from '@/components/PageHeader';
 import DateInputs from '@/components/DateInputs';
+import { createRequest } from '@/lib/requestService';
+
+const initialFormData = {
+  ownerId: '',
+  ownerPhone: '',
+  ownerDobDay: '',
+  ownerDobMonth: '',
+  ownerDobYear: '',
+  tenantId: '',
+  tenantPhone: '',
+  tenantDobDay: '',
+  tenantDobMonth: '',
+  tenantDobYear: '',
+  deedNumber: '',
+  deedDay: '',
+  deedMonth: '',
+  deedYear: '',
+  propertyType: 'شقة',
+  startDay: '',
+  startMonth: '',
+  startYear: '',
+  contractDuration: 'سنة واحدة',
+  rentAmount: '',
+  paymentFrequency: 'شهري',
+  electricityStatus: 'مستقل برقم حساب',
+  electricityNumber: '',
+  details: '',
+};
 
 export default function EjarRequestPage() {
-  const [formData, setFormData] = useState({
-    ownerId: '', ownerPhone: '', ownerDobDay: '', ownerDobMonth: '', ownerDobYear: '',
-    tenantId: '', tenantPhone: '', tenantDobDay: '', tenantDobMonth: '', tenantDobYear: '',
-    deedNumber: '', deedDay: '', deedMonth: '', deedYear: '', propertyType: 'شقة',
-    startDay: '', startMonth: '', startYear: '', contractDuration: 'سنة واحدة', rentAmount: '', paymentFrequency: 'شهري',
-    electricityStatus: 'مستقل برقم حساب', electricityNumber: '', details: ''
-  });
+  const [formData, setFormData] = useState(initialFormData);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
 
   const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
+  const buildPayload = () => {
     const ownerDob = `${formData.ownerDobYear}/${formData.ownerDobMonth}/${formData.ownerDobDay}`;
     const tenantDob = `${formData.tenantDobYear}/${formData.tenantDobMonth}/${formData.tenantDobDay}`;
     const deedDate = `${formData.deedYear}/${formData.deedMonth}/${formData.deedDay}`;
     const startDate = `${formData.startYear}/${formData.startMonth}/${formData.startDay}`;
 
-    const text = `السلام عليكم، أرغب في توثيق عقد إيجار عبر عقار أبحر 🤝:
+    const waText = `السلام عليكم، أرغب في توثيق عقد إيجار عبر عقار أبحر 🤝:
 👤 *بيانات المالك:*
 - الهوية/الإقامة: ${formData.ownerId}
 - تاريخ الميلاد: ${ownerDob}
@@ -53,9 +77,57 @@ ${formData.electricityStatus === 'مستقل برقم حساب' ? `- رقم ال
 
 📎 *(سأقوم بإرفاق صورة الصك في الرسالة التالية)*`;
 
-    const phone = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || '966597520693';
-    const waLink = buildWhatsAppLink({ phone, text });
-    window.open(waLink, '_blank');
+    return {
+      requestKind: 'ejar_contract',
+      sourceType: 'توثيق عقد إيجار',
+      source: 'ejar-request-page',
+      dealType: 'rent',
+      propertyType: formData.propertyType,
+      name: 'طلب توثيق عقد إيجار',
+      phone: formData.ownerPhone || formData.tenantPhone,
+      ownerId: formData.ownerId,
+      ownerPhone: formData.ownerPhone,
+      ownerDob,
+      tenantId: formData.tenantId,
+      tenantPhone: formData.tenantPhone,
+      tenantDob,
+      deedNumber: formData.deedNumber,
+      deedDate,
+      startDate,
+      contractDuration: formData.contractDuration,
+      rentAmount: formData.rentAmount ? Number(formData.rentAmount) : null,
+      budgetMin: formData.rentAmount ? Number(formData.rentAmount) : null,
+      budgetMax: formData.rentAmount ? Number(formData.rentAmount) : null,
+      paymentFrequency: formData.paymentFrequency,
+      electricityStatus: formData.electricityStatus,
+      electricityNumber: formData.electricityNumber,
+      note: formData.details,
+      rawText: waText,
+      waText,
+      status: 'new',
+    };
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    setSaveError('');
+    setSuccessMessage('');
+
+    try {
+      const payload = buildPayload();
+      await createRequest(payload);
+      setSuccessMessage('تم حفظ طلب توثيق عقد الإيجار في لوحة التحكم بنجاح. يمكن للعميل الآن إرسال نسخة واتساب اختيارياً.');
+
+      const phone = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || '966597520693';
+      const waLink = buildWhatsAppLink({ phone, text: payload.waText });
+      window.open(waLink, '_blank');
+      setFormData(initialFormData);
+    } catch (error) {
+      setSaveError('تعذر حفظ طلب توثيق عقد الإيجار في لوحة التحكم. يرجى المحاولة مرة أخرى أو التواصل معنا مباشرة.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -63,19 +135,30 @@ ${formData.electricityStatus === 'مستقل برقم حساب' ? `- رقم ال
       <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined" rel="stylesheet" />
       <div style={{ padding: '60px 0', minHeight: '80vh', direction: 'rtl' }}>
         <div className="container" style={{ maxWidth: '900px' }}>
-          
-          <PageHeader 
-            icon="assignment" 
-            title="طلب توثيق عقد إيجار" 
-            description="يرجى تعبئة البيانات أدناه بدقة لضمان سرعة إصدار وتوثيق عقد الإيجار الموحد."
-            badgeText="نحن وسيط عقاري معتمد لدى منصة إيجار"
+          <PageHeader
+            icon="assignment"
+            title="طلب توثيق عقد إيجار"
+            description="يرجى تعبئة البيانات أدناه بدقة. يتم حفظ الطلب مباشرة في لوحة التحكم، ثم يمكن إرسال نسخة واتساب اختيارياً."
+            badgeText="نقدم خدمة توثيق عقود الإيجار"
           />
 
           <div className="card" style={{ padding: '35px' }}>
+            {successMessage && (
+              <div className="alert successAlert">
+                <span className="material-icons-outlined">check_circle</span>
+                {successMessage}
+              </div>
+            )}
+
+            {saveError && (
+              <div className="alert errorAlert">
+                <span className="material-icons-outlined">error</span>
+                {saveError}
+              </div>
+            )}
+
             <form onSubmit={handleSubmit} style={{ display: 'grid', gap: '30px' }}>
-              
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }} className="responsive-grid">
-                {/* المالك */}
                 <div style={{ background: '#f8fafc', padding: '20px', borderRadius: '16px', border: '1px solid var(--border)' }}>
                   <h3 style={{ margin: '0 0 15px 0', fontSize: '18px', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <span className="material-icons-outlined">person</span> بيانات المالك
@@ -96,7 +179,6 @@ ${formData.electricityStatus === 'مستقل برقم حساب' ? `- رقم ال
                   </div>
                 </div>
 
-                {/* المستأجر */}
                 <div style={{ background: '#f8fafc', padding: '20px', borderRadius: '16px', border: '1px solid var(--border)' }}>
                   <h3 style={{ margin: '0 0 15px 0', fontSize: '18px', color: '#d8b25f', display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <span className="material-icons-outlined">person_outline</span> بيانات المستأجر
@@ -190,15 +272,22 @@ ${formData.electricityStatus === 'مستقل برقم حساب' ? `- رقم ال
               </div>
 
               <div style={{ marginTop: '20px' }}>
-                <button type="submit" className="btn btnPrimary" style={{ width: '100%', fontSize: '18px', padding: '16px' }}>إرسال طلب التوثيق <span className="material-icons-outlined">receipt_long</span></button>
-                <p style={{ textAlign: 'center', fontSize: '13px', color: 'var(--muted)', marginTop: '14px' }}>سيتم تجهيز المسودة في منصة "إيجار" فور مراجعة الطلب.</p>
+                <button type="submit" className="btn btnPrimary" disabled={saving} style={{ width: '100%', fontSize: '18px', padding: '16px' }}>
+                  {saving ? 'جاري حفظ طلب التوثيق...' : 'حفظ طلب التوثيق وإرساله'}
+                  <span className="material-icons-outlined">receipt_long</span>
+                </button>
+                <p style={{ textAlign: 'center', fontSize: '13px', color: 'var(--muted)', marginTop: '14px' }}>سيتم حفظ الطلب في لوحة التحكم، ثم يمكن إرسال نسخة واتساب اختيارياً.</p>
               </div>
-
             </form>
           </div>
         </div>
       </div>
-      <style jsx>{`@media (max-width: 768px) { .responsive-grid { grid-template-columns: 1fr !important; } }`}</style>
+      <style jsx>{`
+        @media (max-width: 768px) { .responsive-grid { grid-template-columns: 1fr !important; } }
+        .alert { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-radius: 14px; margin-bottom: 22px; font-weight: 800; line-height: 1.8; }
+        .successAlert { background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; }
+        .errorAlert { background: #fff5f5; color: #c53030; border: 1px solid #fed7d7; }
+      `}</style>
     </>
   );
 }
