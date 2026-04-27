@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { fetchAnalyticsSummary } from '@/lib/analytics';
+import { fetchListingById } from '@/lib/listings';
 
 function formatNumber(value) {
   const n = Number(value);
@@ -15,9 +16,98 @@ function safeText(value, fallback = '—') {
   return text || fallback;
 }
 
+function formatPrice(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return '';
+  return `${n.toLocaleString('ar-SA')} ريال`;
+}
+
+function normalizePath(path = '/') {
+  const text = String(path || '/').trim() || '/';
+  try {
+    const url = new URL(text, 'https://aqarobhur.com');
+    return `${url.pathname}${url.search || ''}` || '/';
+  } catch {
+    return text.startsWith('/') ? text : `/${text}`;
+  }
+}
+
+function getListingIdFromPath(path = '') {
+  const clean = normalizePath(path);
+  const match = clean.match(/^\/listing\/([^/?#]+)/);
+  if (!match?.[1]) return '';
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return match[1];
+  }
+}
+
+function getQueryLabel(path = '') {
+  const clean = normalizePath(path);
+  try {
+    const url = new URL(clean, 'https://aqarobhur.com');
+    const query = url.searchParams.get('q') || url.searchParams.get('search') || url.searchParams.get('neighborhood') || '';
+    return query ? decodeURIComponent(query) : '';
+  } catch {
+    return '';
+  }
+}
+
+function getStaticPageTitle(path = '') {
+  const clean = normalizePath(path);
+  const pathname = clean.split('?')[0] || '/';
+
+  if (pathname === '/') return 'الصفحة الرئيسية';
+  if (pathname === '/listings') {
+    const queryLabel = getQueryLabel(clean);
+    return queryLabel ? `صفحة العروض - ${queryLabel}` : 'صفحة العروض العقارية';
+  }
+  if (pathname === '/marketing-request') return 'عقود الوساطة وترخيص الإعلان العقاري';
+  if (pathname === '/neighborhoods') return 'المناطق والأحياء';
+  if (pathname === '/request') return 'إرسال طلب عقاري';
+  if (pathname === '/map') return 'الخريطة العقارية';
+  if (pathname === '/account') return 'الحساب';
+  if (pathname === '/faq') return 'الأسئلة الشائعة';
+  if (pathname === '/ejar-request') return 'توثيق عقود الإيجار';
+
+  return '';
+}
+
+function getPageMeta(page, listingMap) {
+  const path = normalizePath(page?.path || '/');
+  const listingId = safeText(page?.listingId, getListingIdFromPath(path));
+  const listing = listingId ? listingMap[listingId] : null;
+
+  if (listing) {
+    const parts = [listing.neighborhood, listing.dealType === 'rent' ? 'إيجار' : listing.dealType === 'sale' ? 'بيع' : '', formatPrice(listing.price)].filter(Boolean);
+    return {
+      title: safeText(listing.title, 'إعلان عقاري'),
+      subtitle: parts.join(' · ') || path,
+      path,
+    };
+  }
+
+  const staticTitle = getStaticPageTitle(path);
+  if (staticTitle) {
+    return {
+      title: staticTitle,
+      subtitle: path,
+      path,
+    };
+  }
+
+  return {
+    title: safeText(page?.title, path),
+    subtitle: path,
+    path,
+  };
+}
+
 export default function AnalyticsDashboardCard() {
   const [analytics, setAnalytics] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [listingMap, setListingMap] = useState({});
 
   useEffect(() => {
     let live = true;
@@ -35,7 +125,50 @@ export default function AnalyticsDashboardCard() {
     };
   }, []);
 
-  const topPages = analytics?.topPages || [];
+  const topPages = useMemo(() => analytics?.topPages || [], [analytics?.topPages]);
+
+  useEffect(() => {
+    let live = true;
+
+    async function loadListingTitles() {
+      const ids = Array.from(
+        new Set(
+          topPages
+            .map((page) => safeText(page?.listingId, getListingIdFromPath(page?.path || '')))
+            .filter(Boolean),
+        ),
+      );
+
+      if (!ids.length) {
+        setListingMap({});
+        return;
+      }
+
+      try {
+        const entries = await Promise.all(
+          ids.map(async (id) => {
+            try {
+              const item = await fetchListingById(id, { includeLegacy: true });
+              return item ? [id, item] : null;
+            } catch {
+              return null;
+            }
+          }),
+        );
+
+        if (!live) return;
+        setListingMap(Object.fromEntries(entries.filter(Boolean)));
+      } catch {
+        if (live) setListingMap({});
+      }
+    }
+
+    if (!loading) loadListingTitles();
+
+    return () => {
+      live = false;
+    };
+  }, [loading, topPages]);
 
   return (
     <section className="analyticsPanel">
@@ -60,7 +193,7 @@ export default function AnalyticsDashboardCard() {
 
       <div className="analyticsHeader">
         <h3>أكثر الصفحات مشاهدة</h3>
-        {analytics?.lastPath ? <small>آخر صفحة: {analytics.lastPath}</small> : null}
+        {analytics?.lastPath ? <small>آخر صفحة: {getStaticPageTitle(analytics.lastPath) || analytics.lastPath}</small> : null}
       </div>
 
       {analytics?.error && (
@@ -75,23 +208,26 @@ export default function AnalyticsDashboardCard() {
         ) : !topPages.length ? (
           <div className="emptyAnalytics">لم يتم تسجيل مشاهدات حتى الآن.</div>
         ) : (
-          topPages.map((page, index) => (
-            <div key={page.id} className="topPageItem">
-              <div className="rankBadge">{index + 1}</div>
+          topPages.map((page, index) => {
+            const meta = getPageMeta(page, listingMap);
+            return (
+              <div key={page.id} className="topPageItem">
+                <div className="rankBadge">{index + 1}</div>
 
-              <div className="pageInfo">
-                <div className="pageTitle">{safeText(page.title, page.path)}</div>
-                <Link href={page.path || '/'} className="pagePath">
-                  {page.path || '/'}
-                </Link>
-              </div>
+                <div className="pageInfo">
+                  <div className="pageTitle">{meta.title}</div>
+                  <Link href={meta.path || '/'} className="pagePath">
+                    {meta.subtitle || meta.path || '/'}
+                  </Link>
+                </div>
 
-              <div className="pageViews">
-                <strong>{formatNumber(page.views)}</strong>
-                <span>مشاهدة</span>
+                <div className="pageViews">
+                  <strong>{formatNumber(page.views)}</strong>
+                  <span>مشاهدة</span>
+                </div>
               </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
 
@@ -221,7 +357,7 @@ export default function AnalyticsDashboardCard() {
           font-weight: 700;
           text-decoration: none;
           margin-top: 3px;
-          direction: ltr;
+          direction: rtl;
           text-align: right;
           white-space: nowrap;
           overflow: hidden;
