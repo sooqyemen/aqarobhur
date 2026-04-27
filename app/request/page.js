@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { buildWhatsAppLink } from '@/components/WhatsAppBar';
 import { NEIGHBORHOODS } from '@/lib/taxonomy';
 import { formatPriceSAR } from '@/lib/format';
@@ -35,6 +35,8 @@ export default function RequestPage() {
   const [smartBusy, setSmartBusy] = useState(false);
   const [smartError, setSmartError] = useState('');
   const [smartResult, setSmartResult] = useState(null);
+  const [smartQuestionText, setSmartQuestionText] = useState('');
+  const [smartQuestionTouched, setSmartQuestionTouched] = useState(false);
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -46,7 +48,7 @@ export default function RequestPage() {
 
   const waPhone = useMemo(() => phoneDefault || '966597520693', [phoneDefault]);
 
-  const smartQuestion = useMemo(() => {
+  const generatedSmartQuestion = useMemo(() => {
     const parts = [];
 
     if (formData.dealType === 'rent') parts.push('أحتاج عقار للإيجار');
@@ -66,6 +68,17 @@ export default function RequestPage() {
     return parts.join(' ');
   }, [formData]);
 
+  useEffect(() => {
+    if (!smartQuestionTouched) {
+      setSmartQuestionText(generatedSmartQuestion);
+    }
+  }, [generatedSmartQuestion, smartQuestionTouched]);
+
+  const smartQuestion = useMemo(() => {
+    const typed = String(smartQuestionText || '').trim();
+    return typed || generatedSmartQuestion;
+  }, [smartQuestionText, generatedSmartQuestion]);
+
   const waText = useMemo(() => {
     const min = formData.budgetMin ? formatPriceSAR(Number(formData.budgetMin)) : '';
     const max = formData.budgetMax ? formatPriceSAR(Number(formData.budgetMax)) : '';
@@ -80,10 +93,11 @@ export default function RequestPage() {
       budgetText ? `💰 *${budgetText}*` : '',
       areaText ? `📏 *${areaText}*` : '',
       formData.notes ? `📝 *ملاحظات:* ${formData.notes}` : '',
+      smartQuestion ? `🤖 *صياغة الطلب الذكي:* ${smartQuestion}` : '',
       `👤 *الاسم:* ${formData.name}`,
       `📱 *رقم الجوال:* ${formData.phone}`,
     ].filter(Boolean).join('\n');
-  }, [formData]);
+  }, [formData, smartQuestion]);
 
   const waLink = useMemo(() => buildWhatsAppLink({ phone: waPhone, text: waText }), [waPhone, waText]);
 
@@ -92,11 +106,18 @@ export default function RequestPage() {
     setSmartError('');
     setSmartResult(null);
 
+    const question = String(smartQuestion || '').trim();
+    if (!question) {
+      setSmartBusy(false);
+      setSmartError('اكتب طلبك أولاً في مربع صياغة الطلب الذكي.');
+      return;
+    }
+
     try {
       const res = await fetch('/api/ai/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question: smartQuestion }),
+        body: JSON.stringify({ question }),
       });
 
       const data = await res.json();
@@ -133,7 +154,7 @@ export default function RequestPage() {
           budgetMin: formData.budgetMin ? Number(formData.budgetMin) : null,
           budgetMax: formData.budgetMax ? Number(formData.budgetMax) : null,
           areaMin: formData.areaMin ? Number(formData.areaMin) : null,
-          note: formData.notes || '',
+          note: [formData.notes, smartQuestion ? `صياغة الطلب الذكي: ${smartQuestion}` : ''].filter(Boolean).join('\n'),
           name: formData.name || '',
           phone: formData.phone || '',
           waText,
@@ -237,13 +258,47 @@ export default function RequestPage() {
                   جرّب العقاري الذكي قبل إرسال الطلب
                 </div>
 
-                <div className="muted" style={{ fontSize: '14px', marginBottom: '14px' }}>
-                  سيبحث لك مباشرة في العروض الداخلية المناسبة لطلبك، ثم يمكنك متابعة التواصل عبر واتساب.
+                <div className="muted" style={{ fontSize: '14px', marginBottom: '14px', lineHeight: 1.8 }}>
+                  اكتب طلبك بالطريقة التي تريدها، أو عدّل الصياغة المقترحة ثم اضغط بحث. يمكن حذف النص وكتابة طلب جديد بالكامل.
                 </div>
 
                 <div className="card" style={{ padding: '12px', background: '#fff' }}>
-                  <div style={{ fontWeight: 800, marginBottom: '6px' }}>صياغة الطلب الذكي:</div>
-                  <div style={{ color: 'var(--muted)', lineHeight: 1.8 }}>{smartQuestion || 'اكتب بيانات الطلب أولاً'}</div>
+                  <label style={{ display: 'block', fontWeight: 900, marginBottom: '8px' }}>صياغة الطلب الذكي:</label>
+                  <textarea
+                    className="input"
+                    value={smartQuestionText}
+                    onChange={(e) => {
+                      setSmartQuestionTouched(true);
+                      setSmartQuestionText(e.target.value);
+                    }}
+                    rows={4}
+                    placeholder="مثال: أبغى أرض في الياقوت بحدود مليون ريال، أو شقة للإيجار في أبحر الشمالية لعائلة صغيرة"
+                    style={{ minHeight: '120px', resize: 'vertical', lineHeight: 1.9, fontWeight: 700 }}
+                  />
+                  <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '10px' }}>
+                    <button
+                      type="button"
+                      className="btn"
+                      onClick={() => {
+                        setSmartQuestionTouched(false);
+                        setSmartQuestionText(generatedSmartQuestion);
+                      }}
+                    >
+                      توليد من البيانات
+                    </button>
+                    <button
+                      type="button"
+                      className="btn"
+                      onClick={() => {
+                        setSmartQuestionTouched(true);
+                        setSmartQuestionText('');
+                        setSmartResult(null);
+                        setSmartError('');
+                      }}
+                    >
+                      مسح النص
+                    </button>
+                  </div>
                 </div>
 
                 <button
