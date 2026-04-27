@@ -13,6 +13,147 @@ const DEAL_TYPES = [
 
 const PROPERTY_TYPES = ['أرض', 'فيلا', 'شقة', 'دور', 'عمارة', 'تجاري', 'مستودع'];
 
+function parseSmartAnswer(answer = '') {
+  const text = String(answer || '').trim();
+  if (!text) return { intro: '', offers: [], outro: '' };
+
+  const lines = text.split('\n').map((line) => line.trim()).filter(Boolean);
+  const offers = [];
+  const introLines = [];
+  const outroLines = [];
+  let afterOffers = false;
+
+  for (const line of lines) {
+    const match = line.match(/^[-–—\s]*العرض\s*(\d+)\s*[:：]\s*(.+)$/i);
+
+    if (match) {
+      afterOffers = true;
+      const number = match[1];
+      const body = match[2].trim();
+      const parts = body.split(/\s*[—-]\s*/).map((part) => part.trim()).filter(Boolean);
+      offers.push({ number, title: parts[0] || body, details: parts.slice(1), raw: body });
+      continue;
+    }
+
+    if (afterOffers) outroLines.push(line);
+    else introLines.push(line);
+  }
+
+  return {
+    intro: introLines.join('\n'),
+    offers,
+    outro: outroLines.join('\n'),
+  };
+}
+
+function SmartResultBox({ result }) {
+  const parsed = parseSmartAnswer(result?.answer || '');
+
+  if (!result) return null;
+
+  return (
+    <div className="card" style={{ marginTop: '16px', padding: '16px', background: '#fff' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 900, marginBottom: '12px' }}>
+        <span className="material-icons-outlined" style={{ color: 'var(--primary)' }}>auto_awesome</span>
+        نتيجة العقاري الذكي
+      </div>
+
+      {parsed.offers.length ? (
+        <>
+          {parsed.intro ? (
+            <div style={{ marginBottom: '14px', color: 'var(--text)', lineHeight: 1.9, fontWeight: 800 }}>
+              {parsed.intro}
+            </div>
+          ) : null}
+
+          <div style={{ display: 'grid', gap: '12px' }}>
+            {parsed.offers.map((offer) => (
+              <div
+                key={`${offer.number}-${offer.raw}`}
+                style={{
+                  border: '1px solid var(--border)',
+                  borderRadius: '16px',
+                  padding: '14px',
+                  background: '#fcfcfd',
+                  boxShadow: '0 6px 18px rgba(15, 23, 42, 0.04)',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                  <span
+                    style={{
+                      width: '34px',
+                      height: '34px',
+                      borderRadius: '999px',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      background: 'var(--primary)',
+                      color: '#fff',
+                      fontWeight: 950,
+                      flexShrink: 0,
+                    }}
+                  >
+                    {offer.number}
+                  </span>
+                  <strong style={{ color: 'var(--text)', fontSize: '16px', lineHeight: 1.6 }}>{offer.title}</strong>
+                </div>
+
+                {offer.details.length ? (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                    {offer.details.map((detail) => (
+                      <span
+                        key={detail}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          padding: '7px 10px',
+                          borderRadius: '999px',
+                          background: '#fff',
+                          border: '1px solid var(--border)',
+                          color: 'var(--muted)',
+                          fontSize: '13px',
+                          fontWeight: 800,
+                        }}
+                      >
+                        {detail}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <p style={{ margin: 0, color: 'var(--muted)', lineHeight: 1.8 }}>{offer.raw}</p>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {parsed.outro ? (
+            <div style={{ marginTop: '14px', padding: '12px', borderRadius: '12px', background: '#f8fafc', color: 'var(--muted)', lineHeight: 1.8, fontWeight: 800 }}>
+              {parsed.outro}
+            </div>
+          ) : null}
+        </>
+      ) : (
+        <pre style={{ whiteSpace: 'pre-wrap', margin: 0, fontFamily: 'inherit', lineHeight: 1.9, color: 'var(--text)' }}>
+          {result.answer}
+        </pre>
+      )}
+
+      {result?.ctaText ? (
+        <div style={{ marginTop: '14px', padding: '12px', borderRadius: '12px', background: '#f8fafc', color: 'var(--muted)', lineHeight: 1.8, fontWeight: 700 }}>
+          {result.ctaText}
+        </div>
+      ) : null}
+
+      {result?.whatsappLink ? (
+        <a href={result.whatsappLink} target="_blank" rel="noopener noreferrer" className="btn btnPrimary" style={{ width: '100%', marginTop: '14px' }}>
+          تواصل معنا عبر واتساب
+          <span className="material-icons-outlined">chat</span>
+        </a>
+      ) : null}
+    </div>
+  );
+}
+
 export default function RequestPage() {
   const phoneDefault = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || '';
 
@@ -31,53 +172,33 @@ export default function RequestPage() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [ok, setOk] = useState(false);
-
   const [smartBusy, setSmartBusy] = useState(false);
   const [smartError, setSmartError] = useState('');
   const [smartResult, setSmartResult] = useState(null);
   const [smartQuestionText, setSmartQuestionText] = useState('');
   const [smartQuestionTouched, setSmartQuestionTouched] = useState(false);
 
-  const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
-  };
-
-  const handleNumericChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value.replace(/[^\d]/g, '') });
-  };
-
+  const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
+  const handleNumericChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value.replace(/[^\d]/g, '') });
   const waPhone = useMemo(() => phoneDefault || '966597520693', [phoneDefault]);
 
   const generatedSmartQuestion = useMemo(() => {
     const parts = [];
-
-    if (formData.dealType === 'rent') parts.push('أحتاج عقار للإيجار');
-    else parts.push('أحتاج عقار للشراء');
-
+    parts.push(formData.dealType === 'rent' ? 'أحتاج عقار للإيجار' : 'أحتاج عقار للشراء');
     if (formData.propertyType) parts.push(formData.propertyType);
-
     if (formData.neighborhood) parts.push(`في حي ${formData.neighborhood}`);
-
     if (formData.areaMin) parts.push(`بمساحة ${formData.areaMin} متر أو أكثر`);
-
     if (formData.budgetMax) parts.push(`بحد أقصى ${formData.budgetMax} ريال`);
     else if (formData.budgetMin) parts.push(`بميزانية تبدأ من ${formData.budgetMin} ريال`);
-
     if (formData.notes) parts.push(formData.notes);
-
     return parts.join(' ');
   }, [formData]);
 
   useEffect(() => {
-    if (!smartQuestionTouched) {
-      setSmartQuestionText(generatedSmartQuestion);
-    }
+    if (!smartQuestionTouched) setSmartQuestionText(generatedSmartQuestion);
   }, [generatedSmartQuestion, smartQuestionTouched]);
 
-  const smartQuestion = useMemo(() => {
-    const typed = String(smartQuestionText || '').trim();
-    return typed || generatedSmartQuestion;
-  }, [smartQuestionText, generatedSmartQuestion]);
+  const smartQuestion = useMemo(() => String(smartQuestionText || '').trim() || generatedSmartQuestion, [smartQuestionText, generatedSmartQuestion]);
 
   const waText = useMemo(() => {
     const min = formData.budgetMin ? formatPriceSAR(Number(formData.budgetMin)) : '';
@@ -119,13 +240,8 @@ export default function RequestPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ question }),
       });
-
       const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data?.error || 'تعذر تنفيذ البحث الذكي.');
-      }
-
+      if (!res.ok) throw new Error(data?.error || 'تعذر تنفيذ البحث الذكي.');
       setSmartResult(data);
     } catch (error) {
       setSmartError(error?.message || 'تعذر تنفيذ البحث الذكي.');
@@ -163,10 +279,7 @@ export default function RequestPage() {
       });
 
       const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data?.error || 'تعذر إرسال الطلب الآن.');
-      }
-
+      if (!res.ok) throw new Error(data?.error || 'تعذر إرسال الطلب الآن.');
       setOk(true);
       window.open(data?.whatsappLink || waLink, '_blank');
     } catch {
@@ -182,11 +295,7 @@ export default function RequestPage() {
 
       <div style={{ padding: '60px 0', minHeight: '80vh', direction: 'rtl' }}>
         <div className="container" style={{ maxWidth: '850px' }}>
-          <PageHeader
-            icon="travel_explore"
-            title="أرسل طلبك العقاري"
-            description="لم تجد العقار المناسب؟ اكتب مواصفات طلبك وسنقوم بالبحث في شبكتنا العقارية وتوفير أفضل الخيارات لك."
-          />
+          <PageHeader icon="travel_explore" title="أرسل طلبك العقاري" description="لم تجد العقار المناسب؟ اكتب مواصفات طلبك وسنقوم بالبحث في شبكتنا العقارية وتوفير أفضل الخيارات لك." />
 
           <div className="card" style={{ padding: '35px' }}>
             <form onSubmit={submit} style={{ display: 'grid', gap: '30px' }}>
@@ -197,13 +306,7 @@ export default function RequestPage() {
                     <label style={{ display: 'block', marginBottom: '10px', fontWeight: 800, fontSize: '14px' }}>نوع الطلب *</label>
                     <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                       {DEAL_TYPES.map((d) => (
-                        <button
-                          key={d.key}
-                          type="button"
-                          className={`filterPill ${formData.dealType === d.key ? 'active' : ''}`}
-                          onClick={() => setFormData({ ...formData, dealType: d.key })}
-                          style={{ flex: 1, padding: '12px', minWidth: '150px' }}
-                        >
+                        <button key={d.key} type="button" className={`filterPill ${formData.dealType === d.key ? 'active' : ''}`} onClick={() => setFormData({ ...formData, dealType: d.key })} style={{ flex: 1, padding: '12px', minWidth: '150px' }}>
                           {d.label}
                         </button>
                       ))}
@@ -213,9 +316,7 @@ export default function RequestPage() {
                   <div>
                     <label style={{ display: 'block', marginBottom: '8px', fontWeight: 800, fontSize: '14px' }}>نوع العقار *</label>
                     <select name="propertyType" className="input" value={formData.propertyType} onChange={handleChange} required>
-                      {PROPERTY_TYPES.map((t) => (
-                        <option key={t} value={t}>{t}</option>
-                      ))}
+                      {PROPERTY_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
                     </select>
                   </div>
 
@@ -223,9 +324,7 @@ export default function RequestPage() {
                     <label style={{ display: 'block', marginBottom: '8px', fontWeight: 800, fontSize: '14px' }}>الحي المفضل</label>
                     <select name="neighborhood" className="input" value={formData.neighborhood} onChange={handleChange}>
                       <option value="">أي حي</option>
-                      {NEIGHBORHOODS.map((n) => (
-                        <option key={n} value={n}>{n}</option>
-                      ))}
+                      {NEIGHBORHOODS.map((n) => <option key={n} value={n}>{n}</option>)}
                     </select>
                   </div>
 
@@ -267,100 +366,23 @@ export default function RequestPage() {
                   <textarea
                     className="input"
                     value={smartQuestionText}
-                    onChange={(e) => {
-                      setSmartQuestionTouched(true);
-                      setSmartQuestionText(e.target.value);
-                    }}
+                    onChange={(e) => { setSmartQuestionTouched(true); setSmartQuestionText(e.target.value); }}
                     rows={4}
                     placeholder="مثال: أبغى أرض في الياقوت بحدود مليون ريال، أو شقة للإيجار في أبحر الشمالية لعائلة صغيرة"
                     style={{ minHeight: '120px', resize: 'vertical', lineHeight: 1.9, fontWeight: 700 }}
                   />
                   <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '10px' }}>
-                    <button
-                      type="button"
-                      className="btn"
-                      onClick={() => {
-                        setSmartQuestionTouched(false);
-                        setSmartQuestionText(generatedSmartQuestion);
-                      }}
-                    >
-                      توليد من البيانات
-                    </button>
-                    <button
-                      type="button"
-                      className="btn"
-                      onClick={() => {
-                        setSmartQuestionTouched(true);
-                        setSmartQuestionText('');
-                        setSmartResult(null);
-                        setSmartError('');
-                      }}
-                    >
-                      مسح النص
-                    </button>
+                    <button type="button" className="btn" onClick={() => { setSmartQuestionTouched(false); setSmartQuestionText(generatedSmartQuestion); }}>توليد من البيانات</button>
+                    <button type="button" className="btn" onClick={() => { setSmartQuestionTouched(true); setSmartQuestionText(''); setSmartResult(null); setSmartError(''); }}>مسح النص</button>
                   </div>
                 </div>
 
-                <button
-                  type="button"
-                  className="btn btnPrimary"
-                  style={{ marginTop: '14px', width: '100%' }}
-                  onClick={runSmartSearch}
-                  disabled={smartBusy}
-                >
+                <button type="button" className="btn btnPrimary" style={{ marginTop: '14px', width: '100%' }} onClick={runSmartSearch} disabled={smartBusy}>
                   {smartBusy ? 'جاري البحث الذكي...' : 'ابحث بالعقاري الذكي'}
                 </button>
 
-                {smartError ? (
-                  <div style={{ marginTop: '12px', color: 'var(--danger)', fontWeight: 800 }}>{smartError}</div>
-                ) : null}
-
-                {smartResult ? (
-                  <div className="card" style={{ marginTop: '16px', padding: '16px', background: '#fff' }}>
-                    <div style={{ fontWeight: 900, marginBottom: '10px' }}>نتيجة العقاري الذكي</div>
-
-                    <pre
-                      style={{
-                        whiteSpace: 'pre-wrap',
-                        margin: 0,
-                        fontFamily: 'inherit',
-                        lineHeight: 1.9,
-                        color: 'var(--text)',
-                      }}
-                    >
-                      {smartResult.answer}
-                    </pre>
-
-                    {smartResult?.ctaText ? (
-                      <div
-                        style={{
-                          marginTop: '14px',
-                          padding: '12px',
-                          borderRadius: '12px',
-                          background: '#f8fafc',
-                          color: 'var(--muted)',
-                          lineHeight: 1.8,
-                          fontWeight: 700,
-                        }}
-                      >
-                        {smartResult.ctaText}
-                      </div>
-                    ) : null}
-
-                    {smartResult?.whatsappLink ? (
-                      <a
-                        href={smartResult.whatsappLink}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="btn btnPrimary"
-                        style={{ width: '100%', marginTop: '14px' }}
-                      >
-                        تواصل معنا عبر واتساب
-                        <span className="material-icons-outlined">chat</span>
-                      </a>
-                    ) : null}
-                  </div>
-                ) : null}
+                {smartError ? <div style={{ marginTop: '12px', color: 'var(--danger)', fontWeight: 800 }}>{smartError}</div> : null}
+                {smartResult ? <SmartResultBox result={smartResult} /> : null}
               </div>
 
               <hr style={{ border: '0', borderTop: '1px solid var(--border)', margin: '0' }} />
