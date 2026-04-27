@@ -78,13 +78,45 @@ const FAQ_ITEMS = [
   },
 ];
 
+const styles = {
+  section: { marginTop: 34 },
+  grid3: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16, alignItems: 'stretch' },
+  grid4: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16, alignItems: 'stretch' },
+  card: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 12,
+    minHeight: 210,
+    padding: 20,
+    borderRadius: 22,
+    background: '#fff',
+    border: '1px solid var(--border)',
+    boxShadow: '0 12px 30px rgba(15, 23, 42, 0.06)',
+    color: 'var(--text)',
+    textDecoration: 'none',
+    overflow: 'hidden',
+  },
+  icon: {
+    width: 50,
+    height: 50,
+    borderRadius: 16,
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    background: 'rgba(214, 179, 91, 0.14)',
+    color: 'var(--primary)',
+    flexShrink: 0,
+  },
+  title: { margin: '4px 0 0', color: 'var(--text)', fontSize: 19, fontWeight: 950, lineHeight: 1.55 },
+  desc: { margin: 0, color: 'var(--muted)', fontSize: 14, fontWeight: 700, lineHeight: 1.9 },
+  link: { marginTop: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--primary)', fontWeight: 950 },
+};
+
 function ListingsState({ loading, error, items }) {
   if (loading) {
     return (
       <div className="listing-grid">
-        {[1, 2, 3, 4].map((id) => (
-          <div key={id} className="skeleton-card" />
-        ))}
+        {[1, 2, 3, 4].map((id) => <div key={id} className="skeleton-card" />)}
       </div>
     );
   }
@@ -103,11 +135,11 @@ function ListingsState({ loading, error, items }) {
 
 function SectionHeader({ eyebrow, title, description, action }) {
   return (
-    <div className="homeSectionHeader">
-      <div>
-        {eyebrow ? <span className="sectionEyebrow">{eyebrow}</span> : null}
-        <h2>{title}</h2>
-        {description ? <p>{description}</p> : null}
+    <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 18, marginBottom: 18, flexWrap: 'wrap' }}>
+      <div style={{ maxWidth: 760 }}>
+        {eyebrow ? <span style={{ color: 'var(--primary)', fontWeight: 950, fontSize: 13 }}>{eyebrow}</span> : null}
+        <h2 style={{ margin: '6px 0 8px', color: 'var(--text)', fontSize: 'clamp(24px, 4vw, 34px)', fontWeight: 950, lineHeight: 1.35 }}>{title}</h2>
+        {description ? <p style={{ margin: 0, color: 'var(--muted)', fontWeight: 700, lineHeight: 1.9, fontSize: 15 }}>{description}</p> : null}
       </div>
       {action}
     </div>
@@ -116,15 +148,28 @@ function SectionHeader({ eyebrow, title, description, action }) {
 
 function InfoCard({ item }) {
   return (
-    <Link href={item.href} className={`homeInfoCard ${item.highlight ? 'highlight' : ''}`}>
-      <div className="homeInfoIcon"><span className="material-icons-outlined">{item.icon}</span></div>
-      <h3>{item.title}</h3>
-      <p>{item.description}</p>
-      <span className="homeInfoLink">
-        {item.cta}
-        <span className="material-icons-outlined">arrow_back</span>
-      </span>
+    <Link
+      href={item.href}
+      style={{
+        ...styles.card,
+        borderColor: item.highlight ? 'rgba(214, 179, 91, 0.65)' : 'var(--border)',
+        background: item.highlight ? 'linear-gradient(135deg, rgba(214,179,91,.14), #fff 62%)' : '#fff',
+      }}
+    >
+      <div style={styles.icon}><span className="material-icons-outlined" style={{ fontSize: 28 }}>{item.icon}</span></div>
+      <h3 style={styles.title}>{item.title}</h3>
+      <p style={styles.desc}>{item.description}</p>
+      <span style={styles.link}>{item.cta}<span className="material-icons-outlined" style={{ fontSize: 18 }}>arrow_back</span></span>
     </Link>
+  );
+}
+
+function FaqCard({ item }) {
+  return (
+    <div style={{ ...styles.card, minHeight: 0 }}>
+      <h3 style={{ ...styles.title, fontSize: 18 }}>{item.question}</h3>
+      <p style={{ ...styles.desc, fontSize: 14 }}>{item.answer}</p>
+    </div>
   );
 }
 
@@ -160,9 +205,7 @@ export default function HomePage() {
     }
 
     load();
-    return () => {
-      active = false;
-    };
+    return () => { active = false; };
   }, []);
 
   const filteredItems = useMemo(() => {
@@ -173,6 +216,16 @@ export default function HomePage() {
 
   const listingHref = activeTab === 'all' ? '/listings' : `/listings?dealType=${activeTab}`;
 
+  const tabStyle = (key) => ({
+    border: '1px solid var(--border)',
+    background: activeTab === key ? 'var(--primary)' : '#fff',
+    color: activeTab === key ? '#fff' : 'var(--text)',
+    borderRadius: 999,
+    padding: '10px 18px',
+    fontWeight: 950,
+    cursor: 'pointer',
+  });
+
   return (
     <>
       <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined" rel="stylesheet" />
@@ -181,99 +234,82 @@ export default function HomePage() {
         <section className="home-hero-section">
           <div className="home-hero-overlay" />
           <div className="container home-hero-content">
-            <span className="heroBadge">عقار أبحر — شمال جدة</span>
+            <span style={{ display: 'inline-flex', padding: '8px 14px', borderRadius: 999, background: 'rgba(255,255,255,.18)', color: '#fff', border: '1px solid rgba(255,255,255,.25)', fontWeight: 900, marginBottom: 14 }}>عقار أبحر — شمال جدة</span>
             <h1 className="home-hero-title">عقارات أبحر الشمالية <span>وشمال جدة</span></h1>
             <p className="home-hero-subtitle">عروض بيع وإيجار، خدمات عقارية، عقود وساطة، عقود إيجار، واستشارة عقارية مجانية.</p>
 
-            <div className="heroActions">
-              <Link href="/listings" className="heroPrimaryBtn">
-                تصفح العروض
-                <span className="material-icons-outlined">arrow_back</span>
-              </Link>
-              <Link href="/request" className="heroSecondaryBtn">
-                اسأل العقاري الذكي
-                <span className="material-icons-outlined">smart_toy</span>
-              </Link>
-              <a href={whatsappLink} target="_blank" rel="noopener noreferrer" className="heroSecondaryBtn">
-                واتساب
-                <span className="material-icons-outlined">chat</span>
-              </a>
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'center', alignItems: 'center', flexWrap: 'wrap', margin: '24px 0 12px' }}>
+              <Link href="/listings" className="btn btnPrimary">تصفح العروض <span className="material-icons-outlined">arrow_back</span></Link>
+              <Link href="/request" className="btn">اسأل العقاري الذكي <span className="material-icons-outlined">smart_toy</span></Link>
+              <a href={whatsappLink} target="_blank" rel="noopener noreferrer" className="btn">واتساب <span className="material-icons-outlined">chat</span></a>
             </div>
 
-            <div className="search-container glass-effect compactHeroSearch">
+            <div className="search-container glass-effect" style={{ marginTop: 18 }}>
               <div className="search-tabs">
                 <button className={`tab-btn ${activeTab === 'all' ? 'active' : ''}`} onClick={() => setActiveTab('all')}>الكل</button>
                 <button className={`tab-btn ${activeTab === 'sale' ? 'active' : ''}`} onClick={() => setActiveTab('sale')}>للبيع</button>
                 <button className={`tab-btn ${activeTab === 'rent' ? 'active' : ''}`} onClick={() => setActiveTab('rent')}>للإيجار</button>
               </div>
               <div className="search-action">
-                <Link href={listingHref} className="main-search-btn">
-                  استكشف العقارات الآن
-                  <span className="material-icons-outlined">arrow_back</span>
-                </Link>
+                <Link href={listingHref} className="main-search-btn">استكشف العقارات الآن <span className="material-icons-outlined">arrow_back</span></Link>
               </div>
             </div>
           </div>
         </section>
 
         <div className="container home-content-body">
-          <section className="homeQuickGrid">
+          <section style={{ ...styles.section, ...styles.grid3 }}>
             {QUICK_CARDS.map((item) => <InfoCard key={item.title} item={item} />)}
           </section>
 
-          <section className="latest-listings-section homeBlock">
+          <section className="latest-listings-section" style={styles.section}>
             <SectionHeader
               eyebrow="العروض"
               title="أحدث العروض العقارية"
               description="اكتشف أحدث الأراضي والفلل والشقق المدرجة لدينا، مع إمكانية تصفية العروض حسب البيع أو الإيجار."
               action={<Link href="/listings" className="nb-view-btn outline-btn">عرض جميع العقارات</Link>}
             />
-            <div className="homeListingTabs">
-              <button className={activeTab === 'all' ? 'active' : ''} onClick={() => setActiveTab('all')}>الكل</button>
-              <button className={activeTab === 'sale' ? 'active' : ''} onClick={() => setActiveTab('sale')}>للبيع</button>
-              <button className={activeTab === 'rent' ? 'active' : ''} onClick={() => setActiveTab('rent')}>للإيجار</button>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 18 }}>
+              <button style={tabStyle('all')} onClick={() => setActiveTab('all')}>الكل</button>
+              <button style={tabStyle('sale')} onClick={() => setActiveTab('sale')}>للبيع</button>
+              <button style={tabStyle('rent')} onClick={() => setActiveTab('rent')}>للإيجار</button>
             </div>
             <ListingsState loading={loading} error={errorText} items={filteredItems} />
           </section>
 
-          <section className="homeBlock">
+          <section style={styles.section}>
             <SectionHeader
               eyebrow="الخدمات"
               title="خدماتنا العقارية"
               description="نقدم خدمات عقارية متكاملة تشمل عقود الوساطة، ترخيص الإعلانات، عقود الإيجار، تسويق العقارات، والاستشارة العقارية المجانية."
             />
-            <div className="homeServicesGrid">
+            <div style={styles.grid4}>
               {SERVICE_CARDS.map((item) => <InfoCard key={item.title} item={item} />)}
             </div>
           </section>
 
-          <section className="homeBlock neighborhoodsBlock">
+          <section style={styles.section}>
             <NeighborhoodGrid title="استكشف المناطق والأحياء" showViewAll />
           </section>
 
-          <section className="homeBlock faqHomeBlock">
+          <section style={styles.section}>
             <SectionHeader
               eyebrow="معرفة عقارية"
               title="أسئلة عقارية مهمة"
               description="إجابات مختصرة على أسئلة يحتاجها المالك أو المشتري عند البيع، الإفراغ، ضريبة التصرفات العقارية، والتعامل مع البورصة العقارية."
               action={<Link href="/faq" className="nb-view-btn outline-btn">عرض جميع الأسئلة</Link>}
             />
-            <div className="homeFaqGrid">
-              {FAQ_ITEMS.map((item) => (
-                <div key={item.question} className="homeFaqCard">
-                  <h3>{item.question}</h3>
-                  <p>{item.answer}</p>
-                </div>
-              ))}
+            <div style={styles.grid3}>
+              {FAQ_ITEMS.map((item) => <FaqCard key={item.question} item={item} />)}
             </div>
-            <div className="faqWhatsappNote">
-              <span className="material-icons-outlined">support_agent</span>
-              <p>للتوضيح أو المساعدة في أي إجراء عقاري، يمكنك التواصل معنا عبر واتساب وسنوضح لك الخطوات المناسبة حسب حالتك.</p>
-              <a href={whatsappLink} target="_blank" rel="noopener noreferrer">تواصل عبر واتساب</a>
+            <div style={{ marginTop: 16, display: 'grid', gridTemplateColumns: 'auto 1fr auto', alignItems: 'center', gap: 12, padding: 16, borderRadius: 18, background: '#f8fafc', border: '1px solid var(--border)' }} className="faqHelpBox">
+              <span className="material-icons-outlined" style={{ color: 'var(--primary)', fontSize: 28 }}>support_agent</span>
+              <p style={{ margin: 0, color: 'var(--muted)', lineHeight: 1.8, fontWeight: 800 }}>للتوضيح أو المساعدة في أي إجراء عقاري، يمكنك التواصل معنا عبر واتساب وسنوضح لك الخطوات المناسبة حسب حالتك.</p>
+              <a href={whatsappLink} target="_blank" rel="noopener noreferrer" style={{ color: '#fff', background: 'var(--primary)', textDecoration: 'none', borderRadius: 999, padding: '10px 16px', fontWeight: 950, whiteSpace: 'nowrap' }}>تواصل عبر واتساب</a>
             </div>
           </section>
 
-          <section className="cta-section gradient-bg">
+          <section className="cta-section gradient-bg" style={styles.section}>
             <div className="cta-text">
               <h2>تحتاج خدمة أو استشارة عقارية؟</h2>
               <p>تواصل معنا لطلب خدمة عقارية، استشارة مجانية، أو متابعة عروض البيع والإيجار في أبحر الشمالية وشمال جدة.</p>
@@ -287,315 +323,8 @@ export default function HomePage() {
       </div>
 
       <style jsx>{`
-        .heroBadge {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          padding: 8px 14px;
-          border-radius: 999px;
-          background: rgba(255,255,255,.18);
-          color: #fff;
-          border: 1px solid rgba(255,255,255,.25);
-          font-weight: 900;
-          margin-bottom: 14px;
-          backdrop-filter: blur(10px);
-        }
-
-        .heroActions {
-          display: flex;
-          gap: 12px;
-          justify-content: center;
-          align-items: center;
-          flex-wrap: wrap;
-          margin: 24px 0 12px;
-        }
-
-        .heroPrimaryBtn,
-        .heroSecondaryBtn {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          gap: 8px;
-          text-decoration: none;
-          border-radius: 999px;
-          padding: 12px 18px;
-          font-weight: 900;
-          transition: transform .2s ease, box-shadow .2s ease, background .2s ease;
-        }
-
-        .heroPrimaryBtn {
-          background: var(--primary);
-          color: #fff;
-          box-shadow: 0 14px 30px rgba(0,0,0,.18);
-        }
-
-        .heroSecondaryBtn {
-          background: rgba(255,255,255,.14);
-          color: #fff;
-          border: 1px solid rgba(255,255,255,.26);
-          backdrop-filter: blur(10px);
-        }
-
-        .heroPrimaryBtn:hover,
-        .heroSecondaryBtn:hover {
-          transform: translateY(-2px);
-        }
-
-        .compactHeroSearch {
-          margin-top: 20px;
-        }
-
-        .homeBlock {
-          margin-top: 36px;
-        }
-
-        .homeQuickGrid,
-        .homeServicesGrid,
-        .homeFaqGrid {
-          display: grid;
-          grid-template-columns: repeat(3, minmax(0, 1fr));
-          gap: 16px;
-        }
-
-        .homeServicesGrid {
-          grid-template-columns: repeat(4, minmax(0, 1fr));
-        }
-
-        .homeInfoCard {
-          position: relative;
-          min-height: 225px;
-          display: flex;
-          flex-direction: column;
-          gap: 10px;
-          padding: 22px;
-          border-radius: 22px;
-          background: #fff;
-          border: 1px solid var(--border);
-          color: var(--text);
-          text-decoration: none;
-          box-shadow: 0 10px 28px rgba(15, 23, 42, .05);
-          overflow: hidden;
-          transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease;
-        }
-
-        .homeInfoCard::after {
-          content: '';
-          position: absolute;
-          inset-inline-start: -40px;
-          top: -40px;
-          width: 115px;
-          height: 115px;
-          border-radius: 999px;
-          background: rgba(214, 179, 91, .12);
-        }
-
-        .homeInfoCard:hover {
-          transform: translateY(-4px);
-          box-shadow: 0 18px 40px rgba(15, 23, 42, .08);
-          border-color: rgba(214, 179, 91, .55);
-        }
-
-        .homeInfoCard.highlight {
-          border-color: rgba(214, 179, 91, .65);
-          background: linear-gradient(135deg, rgba(214,179,91,.13), #fff 58%);
-        }
-
-        .homeInfoIcon {
-          width: 48px;
-          height: 48px;
-          border-radius: 16px;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          background: rgba(214, 179, 91, .14);
-          color: var(--primary);
-          position: relative;
-          z-index: 1;
-        }
-
-        .homeInfoIcon .material-icons-outlined {
-          font-size: 27px;
-        }
-
-        .homeInfoCard h3 {
-          margin: 6px 0 0;
-          font-size: 18px;
-          font-weight: 950;
-          color: var(--text);
-          position: relative;
-          z-index: 1;
-        }
-
-        .homeInfoCard p {
-          margin: 0;
-          color: var(--muted);
-          font-size: 14px;
-          line-height: 1.9;
-          font-weight: 700;
-          position: relative;
-          z-index: 1;
-        }
-
-        .homeInfoLink {
-          margin-top: auto;
-          display: inline-flex;
-          align-items: center;
-          gap: 6px;
-          color: var(--primary);
-          font-weight: 900;
-          position: relative;
-          z-index: 1;
-        }
-
-        .homeInfoLink .material-icons-outlined {
-          font-size: 18px;
-        }
-
-        .homeSectionHeader {
-          display: flex;
-          align-items: flex-end;
-          justify-content: space-between;
-          gap: 18px;
-          margin-bottom: 18px;
-        }
-
-        .homeSectionHeader h2 {
-          margin: 6px 0 8px;
-          color: var(--text);
-          font-size: clamp(22px, 3vw, 32px);
-          font-weight: 950;
-        }
-
-        .homeSectionHeader p {
-          margin: 0;
-          color: var(--muted);
-          font-weight: 700;
-          line-height: 1.9;
-          max-width: 720px;
-        }
-
-        .sectionEyebrow {
-          color: var(--primary);
-          font-weight: 950;
-          font-size: 13px;
-        }
-
-        .homeListingTabs {
-          display: flex;
-          gap: 10px;
-          flex-wrap: wrap;
-          margin-bottom: 18px;
-        }
-
-        .homeListingTabs button {
-          border: 1px solid var(--border);
-          background: #fff;
-          color: var(--text);
-          border-radius: 999px;
-          padding: 9px 16px;
-          font-weight: 900;
-          cursor: pointer;
-        }
-
-        .homeListingTabs button.active {
-          background: var(--primary);
-          color: #fff;
-          border-color: var(--primary);
-        }
-
-        .homeFaqCard {
-          background: #fff;
-          border: 1px solid var(--border);
-          border-radius: 20px;
-          padding: 20px;
-          box-shadow: 0 10px 24px rgba(15, 23, 42, .04);
-        }
-
-        .homeFaqCard h3 {
-          margin: 0 0 10px;
-          color: var(--text);
-          font-size: 17px;
-          font-weight: 950;
-          line-height: 1.7;
-        }
-
-        .homeFaqCard p {
-          margin: 0;
-          color: var(--muted);
-          line-height: 1.95;
-          font-weight: 700;
-          font-size: 14px;
-        }
-
-        .faqWhatsappNote {
-          margin-top: 16px;
-          display: grid;
-          grid-template-columns: auto 1fr auto;
-          align-items: center;
-          gap: 12px;
-          padding: 16px;
-          border-radius: 18px;
-          background: #f8fafc;
-          border: 1px solid var(--border);
-        }
-
-        .faqWhatsappNote .material-icons-outlined {
-          color: var(--primary);
-          font-size: 26px;
-        }
-
-        .faqWhatsappNote p {
-          margin: 0;
-          color: var(--muted);
-          line-height: 1.8;
-          font-weight: 800;
-        }
-
-        .faqWhatsappNote a {
-          color: #fff;
-          background: var(--primary);
-          text-decoration: none;
-          border-radius: 999px;
-          padding: 10px 15px;
-          font-weight: 900;
-          white-space: nowrap;
-        }
-
-        @media (max-width: 1000px) {
-          .homeServicesGrid {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-          }
-        }
-
-        @media (max-width: 820px) {
-          .homeQuickGrid,
-          .homeFaqGrid {
-            grid-template-columns: 1fr;
-          }
-
-          .homeSectionHeader {
-            align-items: flex-start;
-            flex-direction: column;
-          }
-
-          .faqWhatsappNote {
-            grid-template-columns: 1fr;
-            text-align: right;
-          }
-        }
-
-        @media (max-width: 640px) {
-          .homeServicesGrid {
-            grid-template-columns: 1fr;
-          }
-
-          .homeInfoCard {
-            min-height: auto;
-          }
-
-          .heroActions a {
-            width: 100%;
-          }
+        @media (max-width: 720px) {
+          .faqHelpBox { grid-template-columns: 1fr !important; }
         }
       `}</style>
     </>
