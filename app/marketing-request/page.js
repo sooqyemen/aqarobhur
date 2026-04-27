@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { buildWhatsAppLink } from '@/components/WhatsAppBar';
 import PageHeader from '@/components/PageHeader';
 import DateInputs from '@/components/DateInputs';
+import { createRequest } from '@/lib/requestService';
 
 export default function MarketingRequestPage() {
   const [formData, setFormData] = useState({
@@ -31,16 +32,20 @@ export default function MarketingRequestPage() {
     commission: '',
     details: '',
   });
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
 
   const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
+  const buildPayload = () => {
     const ownerDob = `${formData.ownerDobYear}/${formData.ownerDobMonth}/${formData.ownerDobDay}`;
     const deedDate = `${formData.deedYear}/${formData.deedMonth}/${formData.deedDay}`;
-    const priceTitle = formData.contractType === 'عقد وساطة إيجار' ? 'قيمة الإيجار السنوي المطلوبة' : 'السعر المطلوب للبيع';
+    const isRentContract = formData.contractType === 'عقد وساطة إيجار';
+    const priceTitle = isRentContract ? 'قيمة الإيجار السنوي المطلوبة' : 'السعر المطلوب للبيع';
+    const dealType = isRentContract ? 'rent' : 'sale';
 
-    const text = `السلام عليكم، أرغب في تقديم طلب عقد وساطة عبر عقار أبحر 🏢:
+    const waText = `السلام عليكم، أرغب في تقديم طلب عقد وساطة عبر عقار أبحر 🏢:
 📄 *نوع عقد الوساطة المطلوب:* ${formData.contractType}
 
 👤 *بيانات مقدم الطلب:*
@@ -70,15 +75,94 @@ export default function MarketingRequestPage() {
 
 أرغب من المكتب بمراجعة البيانات وإدخالها في الموقع الرسمي لإصدار عقد الوساطة، ثم متابعة ترخيص الإعلان العقاري بعد اعتماد العقد.`;
 
-    const phone = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || '966597520693';
-    const waLink = buildWhatsAppLink({ phone, text });
-    window.open(waLink, '_blank');
+    return {
+      requestKind: 'brokerage_contract',
+      sourceType: 'عقد وساطة وترخيص إعلان',
+      source: 'marketing-request-page',
+      dealType,
+      contractType: formData.contractType,
+      ownerRole: formData.ownerRole,
+      name: formData.name,
+      phone: formData.phone,
+      nationalId: formData.nationalId,
+      ownerDob,
+      deedNumber: formData.deedNumber,
+      deedDate,
+      propertyType: formData.propertyType,
+      location: formData.location,
+      neighborhood: formData.location,
+      areaMin: formData.area ? Number(formData.area) : null,
+      areaMax: formData.area ? Number(formData.area) : null,
+      budgetMin: formData.price ? Number(formData.price) : null,
+      budgetMax: formData.price ? Number(formData.price) : null,
+      price: formData.price ? Number(formData.price) : null,
+      planNumber: formData.planNumber,
+      parcelNumber: formData.parcelNumber,
+      streetWidth: formData.streetWidth,
+      facade: formData.facade,
+      marketingDuration: formData.marketingDuration,
+      commission: formData.commission,
+      note: formData.details,
+      rawText: waText,
+      waText,
+      status: 'new',
+    };
+  };
+
+  const resetForm = () => {
+    setFormData({
+      contractType: 'عقد وساطة بيع',
+      ownerRole: 'مالك العقار',
+      name: '',
+      phone: '',
+      nationalId: '',
+      ownerDobDay: '',
+      ownerDobMonth: '',
+      ownerDobYear: '',
+      deedNumber: '',
+      deedDay: '',
+      deedMonth: '',
+      deedYear: '',
+      propertyType: 'شقة',
+      location: '',
+      area: '',
+      price: '',
+      planNumber: '',
+      parcelNumber: '',
+      streetWidth: '',
+      facade: '',
+      marketingDuration: '30 يوم',
+      commission: '',
+      details: '',
+    });
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    setSaveError('');
+    setSuccessMessage('');
+
+    try {
+      const payload = buildPayload();
+      await createRequest(payload);
+      setSuccessMessage('تم حفظ طلب عقد الوساطة في لوحة التحكم بنجاح. يمكن للعميل الآن إرسال نسخة واتساب اختيارياً.');
+
+      const phone = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || '966597520693';
+      const waLink = buildWhatsAppLink({ phone, text: payload.waText });
+      window.open(waLink, '_blank');
+      resetForm();
+    } catch (error) {
+      setSaveError('تعذر حفظ الطلب في لوحة التحكم. يرجى المحاولة مرة أخرى أو التواصل معنا مباشرة.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const serviceSteps = [
     'تعبئة النموذج وإرسال بيانات المالك والعقار إلى المكتب.',
-    'مراجعة البيانات والتأكد من اكتمال المتطلبات الأساسية.',
-    'إدخال البيانات في الموقع الرسمي لإنشاء عقد الوساطة.',
+    'يتم حفظ الطلب مباشرة في لوحة التحكم حتى لو لم يكتمل إرسال واتساب.',
+    'مراجعة البيانات وإدخالها في الموقع الرسمي لإنشاء عقد الوساطة.',
     'بعد اعتماد عقد الوساطة، يتم متابعة إصدار ترخيص الإعلان العقاري.',
   ];
 
@@ -145,6 +229,20 @@ export default function MarketingRequestPage() {
           </div>
 
           <div className="card" style={{ padding: '35px' }}>
+            {successMessage && (
+              <div className="alert successAlert">
+                <span className="material-icons-outlined">check_circle</span>
+                {successMessage}
+              </div>
+            )}
+
+            {saveError && (
+              <div className="alert errorAlert">
+                <span className="material-icons-outlined">error</span>
+                {saveError}
+              </div>
+            )}
+
             <form onSubmit={handleSubmit} style={{ display: 'grid', gap: '30px' }}>
               <div>
                 <label style={{ display: 'block', marginBottom: '10px', fontWeight: 900, fontSize: '16px', color: 'var(--primary)' }}>1. حدد نوع عقد الوساطة *</label>
@@ -278,8 +376,8 @@ export default function MarketingRequestPage() {
               </div>
 
               <div style={{ marginTop: '10px' }}>
-                <button type="submit" className="btn btnPrimary" style={{ width: '100%', fontSize: '18px', padding: '16px' }}>
-                  إرسال النموذج إلى المكتب
+                <button type="submit" className="btn btnPrimary" disabled={saving} style={{ width: '100%', fontSize: '18px', padding: '16px' }}>
+                  {saving ? 'جاري حفظ الطلب...' : 'حفظ الطلب وإرساله إلى المكتب'}
                   <span className="material-icons-outlined">send</span>
                 </button>
               </div>
@@ -287,6 +385,31 @@ export default function MarketingRequestPage() {
           </div>
         </div>
       </div>
+
+      <style jsx>{`
+        .alert {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          padding: 14px 16px;
+          border-radius: 14px;
+          margin-bottom: 22px;
+          font-weight: 800;
+          line-height: 1.8;
+        }
+
+        .successAlert {
+          background: #ecfdf5;
+          color: #047857;
+          border: 1px solid #a7f3d0;
+        }
+
+        .errorAlert {
+          background: #fff5f5;
+          color: #c53030;
+          border: 1px solid #fed7d7;
+        }
+      `}</style>
     </>
   );
 }
