@@ -19,7 +19,7 @@ const QUICK_CARDS = [
     icon: 'smart_toy',
     title: 'العقاري الذكي',
     description: 'اكتب طلبك العقاري بلغة بسيطة، وسيبحث العقاري الذكي في العروض المتوفرة ويقترح الأقرب لاحتياجك.',
-    href: '/request',
+    href: '/smart',
     cta: 'اسأل العقاري الذكي',
     highlight: true,
   },
@@ -240,7 +240,7 @@ export default function HomePage() {
 
             <div style={{ display: 'flex', gap: 12, justifyContent: 'center', alignItems: 'center', flexWrap: 'wrap', margin: '24px 0 12px' }}>
               <Link href="/listings" className="btn btnPrimary">تصفح العروض <span className="material-icons-outlined">arrow_back</span></Link>
-              <Link href="/request" className="btn">اسأل العقاري الذكي <span className="material-icons-outlined">smart_toy</span></Link>
+              <Link href="/smart" className="btn">اسأل العقاري الذكي <span className="material-icons-outlined">smart_toy</span></Link>
               <a href={whatsappLink} target="_blank" rel="noopener noreferrer" className="btn">واتساب <span className="material-icons-outlined">chat</span></a>
             </div>
 
