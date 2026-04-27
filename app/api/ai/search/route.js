@@ -24,7 +24,8 @@ export async function POST(request) {
     const ranked = rankListings(results, question, filters);
     const best = ranked.slice(0, 5);
     const answer = buildAnswer(best, question, filters);
-    const whatsappLink = buildWhatsAppLink(question);
+    const whatsappText = buildWhatsAppText(question, best);
+    const whatsappLink = buildWhatsAppLink(whatsappText);
 
     return NextResponse.json({
       ok: true,
@@ -33,9 +34,10 @@ export async function POST(request) {
       count: ranked.length,
       items: best.map(toSafeClientListing),
       answer,
+      whatsappText,
       whatsappLink,
       ctaText:
-        'هل ناسبك أي من هذه العروض؟ لا تتردد بالتواصل معنا مباشرة عبر واتساب وسنكمل لك التفاصيل وننسق لك العرض المناسب.',
+        'هل ناسبك أي من هذه العروض؟ اكتب رقم جوالك اختيارياً وسنرسل لك العروض المتوفرة مع التفاصيل عبر واتساب، أو تواصل معنا مباشرة الآن.',
     });
   } catch (error) {
     return NextResponse.json(
@@ -162,7 +164,8 @@ function buildBriefSpecs(item) {
 function toSafeClientListing(item) {
   return {
     id: item.id || '',
-    title: buildTitle(item),
+    title: item.title || buildTitle(item),
+    generatedTitle: buildTitle(item),
     neighborhood: item.neighborhood || '',
     propertyType: item.propertyType || '',
     dealType: item.dealType || '',
@@ -171,19 +174,47 @@ function toSafeClientListing(item) {
     direct: !!item.direct,
     summary: buildBriefSpecs(item),
     description: String(item.description || '').slice(0, 240),
+    image: getFirstImage(item),
+    url: item.id ? `/listing/${encodeURIComponent(String(item.id))}` : '',
   };
 }
 
-function buildWhatsAppLink(question) {
-  if (!WHATSAPP_NUMBER) return '';
+function getFirstImage(item = {}) {
+  const images = Array.isArray(item.images) ? item.images : [];
+  const image = images.find(Boolean) || item.image || item.coverImage || '';
+  return typeof image === 'string' ? image : image?.url || '';
+}
 
-  const text = [
+function buildWhatsAppText(question, items = []) {
+  const lines = [
     'السلام عليكم',
     'سبق أن طلبت عبر العقاري الذكي:',
     question,
-    'وأرغب في متابعة العروض المناسبة.',
-  ].join('\n');
+    '',
+  ];
 
+  if (items.length) {
+    lines.push('العروض الأقرب لطلبك:');
+    items.forEach((item, index) => {
+      const safe = toSafeClientListing(item);
+      const details = [
+        `${index + 1}. ${safe.title || safe.generatedTitle}`,
+        safe.neighborhood ? `الحي: ${safe.neighborhood}` : '',
+        safe.price ? `السعر: ${formatPrice(safe.price)}` : '',
+        safe.area ? `المساحة: ${safe.area}م²` : '',
+        safe.url ? `الرابط: https://aqarobhur.com${safe.url}` : '',
+      ].filter(Boolean);
+      lines.push(details.join(' - '));
+    });
+  } else {
+    lines.push('لم تظهر نتيجة مطابقة، وأرغب في متابعة الطلب وتوفير بدائل مناسبة.');
+  }
+
+  return lines.join('\n');
+}
+
+function buildWhatsAppLink(text) {
+  if (!WHATSAPP_NUMBER) return '';
   return `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(text)}`;
 }
 
