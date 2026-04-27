@@ -8,6 +8,7 @@ import DateInputs from '@/components/DateInputs';
 export default function MarketingRequestPage() {
   const [formData, setFormData] = useState({
     contractType: 'عقد وساطة بيع',
+    ownerRole: 'مالك العقار',
     name: '',
     phone: '',
     nationalId: '',
@@ -20,6 +21,14 @@ export default function MarketingRequestPage() {
     deedYear: '',
     propertyType: 'شقة',
     location: '',
+    area: '',
+    price: '',
+    planNumber: '',
+    parcelNumber: '',
+    streetWidth: '',
+    facade: '',
+    marketingDuration: '30 يوم',
+    commission: '',
     details: '',
   });
 
@@ -29,11 +38,13 @@ export default function MarketingRequestPage() {
     e.preventDefault();
     const ownerDob = `${formData.ownerDobYear}/${formData.ownerDobMonth}/${formData.ownerDobDay}`;
     const deedDate = `${formData.deedYear}/${formData.deedMonth}/${formData.deedDay}`;
+    const priceTitle = formData.contractType === 'عقد وساطة إيجار' ? 'قيمة الإيجار السنوي المطلوبة' : 'السعر المطلوب للبيع';
 
     const text = `السلام عليكم، أرغب في تقديم طلب عقد وساطة عبر عقار أبحر 🏢:
 📄 *نوع عقد الوساطة المطلوب:* ${formData.contractType}
 
-👤 *بيانات المالك:*
+👤 *بيانات مقدم الطلب:*
+- الصفة: ${formData.ownerRole}
 - الاسم: ${formData.name}
 - رقم الجوال: ${formData.phone}
 - رقم الهوية: ${formData.nationalId}
@@ -44,6 +55,16 @@ export default function MarketingRequestPage() {
 - تاريخ الصك: ${deedDate}
 - نوع العقار: ${formData.propertyType}
 - المدينة/الحي: ${formData.location}
+- المساحة: ${formData.area} م²
+- ${priceTitle}: ${formData.price} ريال
+- رقم المخطط: ${formData.planNumber || 'غير مذكور'}
+- رقم القطعة: ${formData.parcelNumber || 'غير مذكور'}
+- عرض الشارع: ${formData.streetWidth || 'غير مذكور'}
+- الواجهة: ${formData.facade || 'غير مذكور'}
+
+📌 *بيانات التسويق:*
+- مدة التسويق المطلوبة: ${formData.marketingDuration || 'غير محددة'}
+- السعي/العمولة المتفق عليها: ${formData.commission || 'حسب الاتفاق'}
 
 📝 *تفاصيل إضافية:* ${formData.details || 'لا يوجد'}
 
@@ -60,6 +81,10 @@ export default function MarketingRequestPage() {
     'إدخال البيانات في الموقع الرسمي لإنشاء عقد الوساطة.',
     'بعد اعتماد عقد الوساطة، يتم متابعة إصدار ترخيص الإعلان العقاري.',
   ];
+
+  const isRentContract = formData.contractType === 'عقد وساطة إيجار';
+  const priceLabel = isRentContract ? 'قيمة الإيجار السنوي المطلوبة *' : 'السعر المطلوب للبيع *';
+  const pricePlaceholder = isRentContract ? 'مثال: 50000' : 'مثال: 1200000';
 
   return (
     <>
@@ -132,8 +157,16 @@ export default function MarketingRequestPage() {
               <hr style={{ border: '0', borderTop: '1px solid var(--border)', margin: '0' }} />
 
               <div>
-                <h3 style={{ margin: '0 0 15px 0', fontSize: '18px', color: 'var(--text)' }}>2. بيانات المالك</h3>
+                <h3 style={{ margin: '0 0 15px 0', fontSize: '18px', color: 'var(--text)' }}>2. بيانات مقدم الطلب</h3>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px' }}>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: 800, fontSize: '14px' }}>صفة مقدم الطلب *</label>
+                    <select name="ownerRole" className="input" required value={formData.ownerRole} onChange={handleChange}>
+                      <option value="مالك العقار">مالك العقار</option>
+                      <option value="وكيل عن المالك">وكيل عن المالك</option>
+                      <option value="مفوض من المالك">مفوض من المالك</option>
+                    </select>
+                  </div>
                   <div>
                     <label style={{ display: 'block', marginBottom: '8px', fontWeight: 800, fontSize: '14px' }}>الاسم الرباعي *</label>
                     <input type="text" name="name" className="input" placeholder="مطابق للهوية الوطنية" required value={formData.name} onChange={handleChange} />
@@ -181,12 +214,67 @@ export default function MarketingRequestPage() {
                     <label style={{ display: 'block', marginBottom: '8px', fontWeight: 800, fontSize: '14px' }}>المدينة / الحي *</label>
                     <input type="text" name="location" className="input" placeholder="مثال: جدة، حي الشراع" required value={formData.location} onChange={handleChange} />
                   </div>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: 800, fontSize: '14px' }}>المساحة بالمتر المربع *</label>
+                    <input type="number" name="area" className="input" placeholder="مثال: 625" required value={formData.area} onChange={handleChange} />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: 800, fontSize: '14px' }}>{priceLabel}</label>
+                    <input type="number" name="price" className="input" placeholder={pricePlaceholder} required value={formData.price} onChange={handleChange} />
+                  </div>
+                </div>
+              </div>
+
+              <hr style={{ border: '0', borderTop: '1px solid var(--border)', margin: '0' }} />
+
+              <div>
+                <h3 style={{ margin: '0 0 15px 0', fontSize: '18px', color: 'var(--text)' }}>4. بيانات إضافية تساعد في الترخيص والتسويق</h3>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px' }}>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: 800, fontSize: '14px' }}>رقم المخطط (اختياري)</label>
+                    <input type="text" name="planNumber" className="input" placeholder="مثال: 1/ب" value={formData.planNumber} onChange={handleChange} />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: 800, fontSize: '14px' }}>رقم القطعة (اختياري)</label>
+                    <input type="text" name="parcelNumber" className="input" placeholder="مثال: 245" value={formData.parcelNumber} onChange={handleChange} />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: 800, fontSize: '14px' }}>عرض الشارع (اختياري)</label>
+                    <input type="text" name="streetWidth" className="input" placeholder="مثال: 20 متر" value={formData.streetWidth} onChange={handleChange} />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: 800, fontSize: '14px' }}>الواجهة (اختياري)</label>
+                    <select name="facade" className="input" value={formData.facade} onChange={handleChange}>
+                      <option value="">اختر الواجهة</option>
+                      <option value="شمالية">شمالية</option>
+                      <option value="جنوبية">جنوبية</option>
+                      <option value="شرقية">شرقية</option>
+                      <option value="غربية">غربية</option>
+                      <option value="شمالية شرقية">شمالية شرقية</option>
+                      <option value="شمالية غربية">شمالية غربية</option>
+                      <option value="جنوبية شرقية">جنوبية شرقية</option>
+                      <option value="جنوبية غربية">جنوبية غربية</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: 800, fontSize: '14px' }}>مدة التسويق المطلوبة (اختياري)</label>
+                    <select name="marketingDuration" className="input" value={formData.marketingDuration} onChange={handleChange}>
+                      <option value="30 يوم">30 يوم</option>
+                      <option value="60 يوم">60 يوم</option>
+                      <option value="90 يوم">90 يوم</option>
+                      <option value="حسب ما يحدده المكتب مع المالك">حسب ما يحدده المكتب مع المالك</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: 800, fontSize: '14px' }}>السعي / العمولة المتفق عليها (اختياري)</label>
+                    <input type="text" name="commission" className="input" placeholder="مثال: حسب النظام أو حسب الاتفاق" value={formData.commission} onChange={handleChange} />
+                  </div>
                 </div>
               </div>
 
               <div>
                 <label style={{ display: 'block', marginBottom: '8px', fontWeight: 800, fontSize: '14px' }}>تفاصيل إضافية (اختياري)</label>
-                <textarea name="details" className="input" placeholder="مساحة العقار، السعر المطلوب، معلومات إضافية تساعدنا في إدخال الطلب..." style={{ minHeight: '110px', resize: 'vertical' }} value={formData.details} onChange={handleChange}></textarea>
+                <textarea name="details" className="input" placeholder="أي معلومات إضافية تساعدنا في إدخال الطلب وإصدار العقد والترخيص..." style={{ minHeight: '110px', resize: 'vertical' }} value={formData.details} onChange={handleChange}></textarea>
               </div>
 
               <div style={{ marginTop: '10px' }}>
