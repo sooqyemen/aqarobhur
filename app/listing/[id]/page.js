@@ -41,6 +41,35 @@ function getPrimaryArea(item) {
   return item?.neighborhood || item?.plan || '';
 }
 
+function normalizePropertyClassLabel(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+
+  const normalized = raw.toLowerCase();
+
+  const map = {
+    residential: 'سكني',
+    commercial: 'تجاري',
+    residential_commercial: 'سكني تجاري',
+    'residential-commercial': 'سكني تجاري',
+    mixed: 'سكني تجاري',
+    administrative: 'إداري',
+    office: 'مكتبي',
+    industrial: 'صناعي',
+    agricultural: 'زراعي',
+    hospitality: 'فندقي',
+    سكني: 'سكني',
+    تجاري: 'تجاري',
+    'سكني تجاري': 'سكني تجاري',
+    إداري: 'إداري',
+    مكتبي: 'مكتبي',
+    صناعي: 'صناعي',
+    زراعي: 'زراعي',
+  };
+
+  return map[normalized] || map[raw] || raw;
+}
+
 function getSeoLinksForListing(item) {
   const areaName = getPrimaryArea(item);
   const baseLinks = getAreaSeoLinks(areaName, 9);
@@ -77,6 +106,56 @@ function DetailItem({ label, value, highlight = false }) {
     <div className={`detailItem ${highlight ? 'highlight' : ''}`}>
       <span className="detailLabel">{label}</span>
       <span className="detailValue">{value}</span>
+
+      <style jsx>{`
+        .detailItem {
+          display: flex;
+          flex-direction: column;
+          justify-content: center;
+          gap: 7px;
+          min-height: 86px;
+          padding: 15px;
+          border-radius: 16px;
+          background: #f8fafc;
+          border: 1px solid #e2e8f0;
+          box-sizing: border-box;
+          overflow: hidden;
+        }
+
+        .detailItem.highlight {
+          background: #fffaf0;
+          border-color: rgba(214, 179, 91, 0.55);
+        }
+
+        .detailLabel {
+          display: block;
+          font-size: 12px;
+          color: #64748b;
+          font-weight: 850;
+          line-height: 1.4;
+        }
+
+        .detailValue {
+          display: block;
+          font-size: 16px;
+          font-weight: 950;
+          color: #111827;
+          line-height: 1.55;
+          word-break: break-word;
+          overflow-wrap: anywhere;
+        }
+
+        @media (max-width: 640px) {
+          .detailItem {
+            min-height: 78px;
+            padding: 12px;
+          }
+
+          .detailValue {
+            font-size: 14px;
+          }
+        }
+      `}</style>
     </div>
   );
 }
@@ -146,13 +225,16 @@ export default function ListingDetailsPage({ params }) {
 
   const handleShare = async () => {
     const shareUrl = typeof window !== 'undefined' ? window.location.href : '';
-    if (navigator.share) {
-      await navigator.share({ title: item?.title, url: shareUrl });
-    } else {
-      await navigator.clipboard.writeText(shareUrl);
-      setShareMsg('تم نسخ الرابط بنجاح.');
-      setTimeout(() => setShareMsg(''), 2500);
-    }
+
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: item?.title, url: shareUrl });
+      } else {
+        await navigator.clipboard.writeText(shareUrl);
+        setShareMsg('تم نسخ الرابط بنجاح.');
+        setTimeout(() => setShareMsg(''), 2500);
+      }
+    } catch (_) {}
   };
 
   if (loading) return <div className="container stateContainer">جاري تحميل الإعلان...</div>;
@@ -170,6 +252,7 @@ export default function ListingDetailsPage({ params }) {
   const licenseNumber = item.licenseNumber || item.adLicenseNumber || item.license || '';
   const brokerName = item.brokerName || item.officeName || item.agencyName || 'عقار أبحر';
   const advertiserType = item.advertiserType || item.brokerType || 'وسيط عقاري';
+  const propertyClassLabel = normalizePropertyClassLabel(item.propertyClass);
 
   return (
     <div className="container listingPageWrap">
@@ -402,36 +485,9 @@ export default function ListingDetailsPage({ params }) {
 
         .detailsGrid {
           display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(155px, 1fr));
+          grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
           gap: 12px;
-        }
-
-        .detailItem {
-          background: #f8fafc;
-          padding: 15px;
-          border-radius: 16px;
-          border: 1px solid #e2e8f0;
-        }
-
-        .detailItem.highlight {
-          background: #fffaf0;
-          border-color: rgba(214, 179, 91, .45);
-        }
-
-        .detailLabel {
-          display: block;
-          font-size: 12px;
-          color: #64748b;
-          font-weight: 850;
-          margin-bottom: 7px;
-        }
-
-        .detailValue {
-          display: block;
-          font-size: 17px;
-          font-weight: 950;
-          color: #111827;
-          line-height: 1.45;
+          align-items: stretch;
         }
 
         .trustList {
@@ -580,7 +636,8 @@ export default function ListingDetailsPage({ params }) {
           backdrop-filter: blur(12px);
         }
 
-        .mobileBottomActions a {
+        .mobileBottomActions a,
+        .mobileBottomActions button {
           min-height: 48px;
           border-radius: 14px;
           font-size: 15px;
@@ -654,16 +711,8 @@ export default function ListingDetailsPage({ params }) {
           }
 
           .detailsGrid {
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
             gap: 8px;
-          }
-
-          .detailItem {
-            padding: 12px;
-          }
-
-          .detailValue {
-            font-size: 15px;
           }
 
           .mapContainer {
@@ -771,7 +820,7 @@ export default function ListingDetailsPage({ params }) {
                 <DetailItem label="سعر المتر" value={`${formatNumber(pricePerMeter)} ر.س / م²`} />
               )}
               <DetailItem label="نوع العقار" value={item.propertyType} />
-              <DetailItem label="تصنيف العقار" value={item.propertyClass} />
+              <DetailItem label="تصنيف العقار" value={propertyClassLabel} />
               <DetailItem label="نوع الصفقة" value={dealTypeLabel} />
               <DetailItem label="المساحة" value={item.area ? `${formatNumber(item.area)} م²` : ''} />
               <DetailItem label="عرض الشارع" value={item.streetWidth ? `${item.streetWidth} متر` : ''} />
@@ -862,17 +911,15 @@ export default function ListingDetailsPage({ params }) {
             <h2 className="sectionHeading">موقع العقار</h2>
 
             {hasMapCoordinates ? (
-              <>
-                <div className="mapContainer">
-                  <iframe
-                    title="موقع العقار"
-                    src={`https://maps.google.com/maps?q=${item.lat},${item.lng}&hl=ar&z=15&output=embed`}
-                    allowFullScreen
-                    loading="lazy"
-                    referrerPolicy="no-referrer-when-downgrade"
-                  />
-                </div>
-              </>
+              <div className="mapContainer">
+                <iframe
+                  title="موقع العقار"
+                  src={`https://maps.google.com/maps?q=${item.lat},${item.lng}&hl=ar&z=15&output=embed`}
+                  allowFullScreen
+                  loading="lazy"
+                  referrerPolicy="no-referrer-when-downgrade"
+                />
+              </div>
             ) : (
               <div className="noMapData">
                 <p>الإحداثيات غير متوفرة لهذا العرض</p>
