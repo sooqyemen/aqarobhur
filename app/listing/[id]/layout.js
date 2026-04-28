@@ -1,70 +1,113 @@
-const SITE_URL = 'https://aqarobhur.com';
+const SITE_URL = String(process.env.NEXT_PUBLIC_SITE_URL || 'https://aqarobhur.com').replace(/\/$/, '');
 const SITE_NAME = 'عقار أبحر';
 const DEFAULT_IMAGE = '/logo.png';
+
+export const revalidate = 300;
 
 export default function ListingLayout({ children }) {
   return children;
 }
 
 export async function generateMetadata({ params }) {
-  const rawId = params?.id ? String(params.id) : '';
+  const resolvedParams = await resolveParams(params);
+  const rawId = resolvedParams?.id ? String(resolvedParams.id) : '';
   const id = safeDecode(rawId);
-  const item = await fetchListingMeta(id);
-
   const url = `${SITE_URL}/listing/${encodeURIComponent(id)}`;
 
-  if (!item) {
-    return {
-      title: `${SITE_NAME} | عرض عقاري`,
-      description: 'عروض عقارية في أبحر الشمالية وشمال جدة.',
-      alternates: { canonical: url },
-      openGraph: {
-        title: `${SITE_NAME} | عرض عقاري`,
-        description: 'عروض عقارية في أبحر الشمالية وشمال جدة.',
+  const fallbackTitle = `${SITE_NAME} | عرض عقاري`;
+  const fallbackDescription = 'عروض عقارية في أبحر الشمالية وشمال جدة.';
+  const fallbackImage = toAbsoluteUrl(DEFAULT_IMAGE);
+
+  try {
+    const item = await fetchListingMeta(id);
+
+    if (!item) {
+      return buildMetadata({
+        title: fallbackTitle,
+        description: fallbackDescription,
         url,
-        siteName: SITE_NAME,
+        imageUrl: fallbackImage,
         type: 'website',
-        images: [{ url: toAbsoluteUrl(DEFAULT_IMAGE), width: 1200, height: 630, alt: SITE_NAME }],
-      },
-      twitter: {
-        card: 'summary_large_image',
-        title: `${SITE_NAME} | عرض عقاري`,
-        description: 'عروض عقارية في أبحر الشمالية وشمال جدة.',
-        images: [toAbsoluteUrl(DEFAULT_IMAGE)],
-      },
-    };
-  }
+      });
+    }
 
-  const title = buildTitle(item);
-  const description = buildDescription(item);
-  const image = getPrimaryImage(item) || DEFAULT_IMAGE;
-  const imageUrl = toAbsoluteUrl(image);
+    const title = buildTitle(item);
+    const description = buildDescription(item);
+    const image = getPrimaryImage(item) || DEFAULT_IMAGE;
+    const imageUrl = toAbsoluteUrl(image);
 
-  return {
-    title,
-    description,
-    alternates: { canonical: url },
-    openGraph: {
+    return buildMetadata({
       title,
       description,
       url,
-      siteName: SITE_NAME,
+      imageUrl,
       type: 'article',
+    });
+  } catch (error) {
+    console.error('[Listing metadata] failed:', error?.message || error);
+    return buildMetadata({
+      title: fallbackTitle,
+      description: fallbackDescription,
+      url,
+      imageUrl: fallbackImage,
+      type: 'website',
+    });
+  }
+}
+
+async function resolveParams(params) {
+  if (!params) return {};
+  if (typeof params.then === 'function') return await params;
+  return params;
+}
+
+function buildMetadata({ title, description, url, imageUrl, type = 'website' }) {
+  const cleanTitle = truncate(title, 95);
+  const cleanDescription = truncate(description, 220);
+  const cleanImage = toAbsoluteUrl(imageUrl);
+
+  return {
+    title: cleanTitle,
+    description: cleanDescription,
+    alternates: { canonical: url },
+    robots: {
+      index: true,
+      follow: true,
+      googleBot: {
+        index: true,
+        follow: true,
+        'max-image-preview': 'large',
+        'max-snippet': -1,
+      },
+    },
+    openGraph: {
+      title: cleanTitle,
+      description: cleanDescription,
+      url,
+      siteName: SITE_NAME,
+      type,
       locale: 'ar_SA',
       images: [
         {
-          url: imageUrl,
+          url: cleanImage,
+          secureUrl: cleanImage,
           width: 1200,
           height: 630,
-          alt: title,
+          alt: cleanTitle,
         },
       ],
     },
     twitter: {
       card: 'summary_large_image',
-      title,
-      description,
-      images: [imageUrl],
+      title: cleanTitle,
+      description: cleanDescription,
+      images: [cleanImage],
+    },
+    other: {
+      'og:image:secure_url': cleanImage,
+      'og:image:width': '1200',
+      'og:image:height': '630',
+      'og:locale': 'ar_SA',
     },
   };
 }
@@ -113,23 +156,23 @@ function fromFirestoreValue(value) {
   if ('booleanValue' in value) return Boolean(value.booleanValue);
   if ('timestampValue' in value) return value.timestampValue;
   if ('nullValue' in value) return null;
-  if ('arrayValue' in value) {
-    return (value.arrayValue.values || []).map(fromFirestoreValue);
-  }
-  if ('mapValue' in value) {
-    return firestoreFieldsToObject(value.mapValue.fields || {});
-  }
+  if ('arrayValue' in value) return (value.arrayValue.values || []).map(fromFirestoreValue);
+  if ('mapValue' in value) return firestoreFieldsToObject(value.mapValue.fields || {});
   return null;
 }
 
 function buildTitle(item = {}) {
   const explicit = clean(item.title);
-  if (explicit) return `${explicit} | ${SITE_NAME}`;
-
   const propertyType = clean(item.propertyType) || 'عقار';
   const deal = String(item.dealType || '').toLowerCase() === 'rent' ? 'للإيجار' : 'للبيع';
   const area = clean(item.neighborhood || item.plan);
-  return `${propertyType} ${deal}${area ? ` في ${area}` : ''} | ${SITE_NAME}`;
+  const size = item.area ? `${Number(item.area).toLocaleString('ar-SA')} م²` : '';
+
+  if (explicit) {
+    return [explicit, deal, size, area, SITE_NAME].filter(Boolean).join(' | ');
+  }
+
+  return [`${propertyType} ${deal}`, size, area ? `في ${area}` : '', SITE_NAME].filter(Boolean).join(' | ');
 }
 
 function buildDescription(item = {}) {
@@ -139,39 +182,51 @@ function buildDescription(item = {}) {
   const area = clean(item.neighborhood || item.plan);
   const price = formatPrice(item.price);
   const size = item.area ? `${Number(item.area).toLocaleString('ar-SA')} م²` : '';
+  const license = clean(item.licenseNumber || item.license || item.adLicenseNumber);
 
   if (propertyType) parts.push(`${propertyType} ${deal}`);
   if (area) parts.push(`في ${area}`);
-  if (price) parts.push(`بسعر ${price}`);
-  if (size) parts.push(`مساحة ${size}`);
+  if (price) parts.push(`السعر ${price}`);
+  if (size) parts.push(`المساحة ${size}`);
+  if (license) parts.push(`ترخيص الإعلان ${license}`);
 
   const intro = parts.join('، ');
   const desc = clean(item.description);
   const combined = [intro, desc].filter(Boolean).join('. ');
 
-  return truncate(combined || 'عرض عقاري متاح عبر عقار أبحر في أبحر الشمالية وشمال جدة.', 180);
+  return truncate(combined || 'عرض عقاري متاح عبر عقار أبحر في أبحر الشمالية وشمال جدة.', 220);
 }
 
 function getPrimaryImage(item = {}) {
   const candidates = [];
 
-  if (Array.isArray(item.images)) candidates.push(...item.images);
   if (Array.isArray(item.imagesMeta)) {
     for (const entry of item.imagesMeta) {
       if (typeof entry === 'string') candidates.push(entry);
-      else if (entry?.url) candidates.push(entry.url);
+      else if (entry?.kind !== 'video' && entry?.url) candidates.push(entry.url);
+    }
+  }
+
+  if (Array.isArray(item.images)) candidates.push(...item.images);
+  if (Array.isArray(item.media)) {
+    for (const entry of item.media) {
+      if (typeof entry === 'string') candidates.push(entry);
+      else if (entry?.kind !== 'video' && entry?.url) candidates.push(entry.url);
     }
   }
 
   candidates.push(item.image, item.imageUrl, item.cover, item.coverImage, item.thumbnail, item.photo);
 
-  return candidates.map((v) => (typeof v === 'string' ? v.trim() : '')).find(Boolean) || '';
+  return candidates
+    .map((v) => (typeof v === 'string' ? v.trim() : ''))
+    .find((value) => value && !value.toLowerCase().includes('.mp4') && !value.toLowerCase().includes('.mov')) || '';
 }
 
 function toAbsoluteUrl(url = '') {
   const value = clean(url);
   if (!value) return `${SITE_URL}${DEFAULT_IMAGE}`;
   if (value.startsWith('http://') || value.startsWith('https://')) return value;
+  if (value.startsWith('//')) return `https:${value}`;
   return `${SITE_URL}${value.startsWith('/') ? value : `/${value}`}`;
 }
 
