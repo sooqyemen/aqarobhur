@@ -39,21 +39,28 @@ function buildOfficeText({ question, result, customerPhone = '' }) {
 }
 
 function OfferCard({ item, index }) {
+  const title = item.title || item.generatedTitle || 'عرض عقاري';
+
   return (
-    <div className="offerCard">
-      {item.image ? (
-        <img className="offerImage" src={item.image} alt={item.title || 'عرض عقاري'} loading="lazy" />
-      ) : (
-        <div className="offerImage emptyImage">
-          <span className="material-icons-outlined">villa</span>
-        </div>
-      )}
+    <article className="offerCard">
+      <div className="offerImageFrame">
+        {item.image ? (
+          <div
+            className="offerImageBg"
+            role="img"
+            aria-label={title}
+            style={{ backgroundImage: `url(${item.image})` }}
+          />
+        ) : (
+          <div className="offerImageEmpty">
+            <span className="material-icons-outlined">villa</span>
+          </div>
+        )}
+        <span className="offerNumber">{index + 1}</span>
+      </div>
 
       <div className="offerBody">
-        <div className="offerTitleRow">
-          <span className="offerNumber">{index + 1}</span>
-          <h3>{item.title || item.generatedTitle || 'عرض عقاري'}</h3>
-        </div>
+        <h3>{title}</h3>
 
         <div className="offerChips">
           {item.neighborhood ? <span>{item.neighborhood}</span> : null}
@@ -71,7 +78,7 @@ function OfferCard({ item, index }) {
           </Link>
         ) : null}
       </div>
-    </div>
+    </article>
   );
 }
 
@@ -247,6 +254,7 @@ export default function SmartAssistantPage() {
           background: #f8fafc;
           min-height: 80vh;
           padding-bottom: 70px;
+          overflow-x: hidden;
         }
 
         .smartHero {
@@ -258,6 +266,7 @@ export default function SmartAssistantPage() {
 
         .smartHeroInner {
           max-width: 860px;
+          margin-inline: auto;
         }
 
         .smartBadge {
@@ -286,18 +295,24 @@ export default function SmartAssistantPage() {
         }
 
         .smartContainer {
-          margin-top: -72px;
+          margin: -72px auto 0;
           display: grid;
           gap: 22px;
+          width: min(100% - 28px, 1040px);
+          max-width: 1040px;
+          padding-inline: 0;
         }
 
         .smartSearchCard,
         .smartResultSection {
+          width: 100%;
+          min-width: 0;
           background: #fff;
           border: 1px solid var(--border);
           border-radius: 26px;
           padding: 24px;
           box-shadow: 0 18px 45px rgba(15, 23, 42, .08);
+          overflow: hidden;
         }
 
         .smartSearchCard label {
@@ -318,6 +333,7 @@ export default function SmartAssistantPage() {
           font-weight: 700;
           color: var(--text);
           background: #fcfcfd;
+          box-sizing: border-box;
         }
 
         .smartSearchCard button,
@@ -370,53 +386,70 @@ export default function SmartAssistantPage() {
           border-radius: 999px;
           padding: 11px 17px;
           font-weight: 950;
+          text-decoration: none;
         }
 
         .offersGrid {
           display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
+          grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
           gap: 16px;
+          align-items: start;
+          width: 100%;
         }
 
         .offerCard {
+          width: 100%;
+          min-width: 0;
           border: 1px solid var(--border);
           border-radius: 22px;
           overflow: hidden;
           background: #fff;
           box-shadow: 0 10px 26px rgba(15, 23, 42, .05);
+          display: flex;
+          flex-direction: column;
         }
 
-        .offerImage {
+        .offerImageFrame {
+          position: relative;
           width: 100%;
-          height: 170px;
-          object-fit: cover;
-          display: block;
+          height: 190px;
+          min-height: 190px;
+          max-height: 190px;
+          overflow: hidden;
           background: #eef3f9;
+          border-bottom: 1px solid var(--border);
+          isolation: isolate;
         }
 
-        .emptyImage {
+        .offerImageBg {
+          position: absolute;
+          inset: 0;
+          width: 100%;
+          height: 100%;
+          background-size: cover;
+          background-position: center;
+          background-repeat: no-repeat;
+        }
+
+        .offerImageEmpty {
+          width: 100%;
+          height: 100%;
           display: flex;
           align-items: center;
           justify-content: center;
           color: var(--primary);
+          background: linear-gradient(135deg, #f8fafc, #eef2f7);
         }
 
-        .emptyImage .material-icons-outlined {
+        .offerImageEmpty .material-icons-outlined {
           font-size: 44px;
         }
 
-        .offerBody {
-          padding: 15px;
-        }
-
-        .offerTitleRow {
-          display: flex;
-          gap: 10px;
-          align-items: center;
-          margin-bottom: 10px;
-        }
-
         .offerNumber {
+          position: absolute;
+          top: 10px;
+          right: 10px;
+          z-index: 2;
           width: 34px;
           height: 34px;
           border-radius: 999px;
@@ -426,13 +459,24 @@ export default function SmartAssistantPage() {
           background: var(--primary);
           color: #fff;
           font-weight: 950;
-          flex-shrink: 0;
+          box-shadow: 0 8px 18px rgba(15, 23, 42, .18);
         }
 
-        .offerTitleRow h3 {
-          margin: 0;
+        .offerBody {
+          padding: 15px;
+          min-width: 0;
+        }
+
+        .offerBody h3 {
+          margin: 0 0 10px;
           font-size: 16px;
-          line-height: 1.6;
+          line-height: 1.65;
+          color: var(--text);
+          font-weight: 950;
+          display: -webkit-box;
+          -webkit-line-clamp: 2;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
         }
 
         .offerChips {
@@ -449,6 +493,7 @@ export default function SmartAssistantPage() {
           font-size: 13px;
           color: var(--muted);
           font-weight: 800;
+          max-width: 100%;
         }
 
         .offerBody p {
@@ -457,6 +502,10 @@ export default function SmartAssistantPage() {
           line-height: 1.8;
           font-size: 13px;
           font-weight: 700;
+          display: -webkit-box;
+          -webkit-line-clamp: 3;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
         }
 
         .offerLink {
@@ -466,6 +515,7 @@ export default function SmartAssistantPage() {
           display: inline-flex;
           align-items: center;
           gap: 4px;
+          text-decoration: none;
         }
 
         .phoneLeadBox {
@@ -502,6 +552,7 @@ export default function SmartAssistantPage() {
           padding: 0 14px;
           min-height: 54px;
           font-weight: 800;
+          min-width: 0;
         }
 
         .phoneLeadForm button {
@@ -517,13 +568,8 @@ export default function SmartAssistantPage() {
           line-height: 1.8;
         }
 
-        .smartError {
-          color: var(--danger);
-        }
-
-        .leadSuccess {
-          color: var(--success);
-        }
+        .smartError { color: var(--danger); }
+        .leadSuccess { color: var(--success); }
 
         .smartAnswer {
           background: #f8fafc;
@@ -541,10 +587,26 @@ export default function SmartAssistantPage() {
             padding: 48px 0 95px;
           }
 
+          .smartContainer {
+            width: min(100% - 20px, 100%);
+            gap: 16px;
+          }
+
           .smartSearchCard,
           .smartResultSection {
-            padding: 18px;
+            padding: 16px;
             border-radius: 22px;
+          }
+
+          .offersGrid {
+            grid-template-columns: 1fr;
+            gap: 14px;
+          }
+
+          .offerImageFrame {
+            height: 205px;
+            min-height: 205px;
+            max-height: 205px;
           }
 
           .phoneLeadForm {
