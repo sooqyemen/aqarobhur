@@ -63,24 +63,26 @@ export async function POST(request) {
     const aiResult = await getOpenAiFilters(question, fallbackFilters);
     const filters = mergeFilters(aiResult.filters, fallbackFilters);
 
-    let results = await fetchListings({
-      filters,
-      onlyPublic: false,
-      includeLegacy: true,
-      max: 900,
-    });
+    // المهم هنا: OpenAI يفهم الطلب فقط. البحث نفسه يرجع للطريقة الواسعة القديمة:
+    // نسحب العروض المتاحة من قاعدة البيانات ثم نطابقها داخل العنوان والوصف وكل الحقول المحتملة.
+    const allListings = await fetchAllSearchListings();
+    let results = broadMatchListings(allListings, filters, question);
+    let searchMode = 'broad-server-scan';
 
-    let searchMode = 'strict';
-
-    if (!Array.isArray(results) || results.length === 0) {
-      const allListings = await fetchListings({
-        filters: {},
-        onlyPublic: false,
-        includeLegacy: true,
-        max: 1200,
-      });
-      results = looseMatchListings(allListings, filters, question);
-      searchMode = 'loose-server-scan';
+    // احتياط: لو ما طلع شيء من البحث الواسع، نجرب فلترة المكتبة الحالية مرة أخيرة.
+    // لكن لا نجعل فلتر OpenAI الصارم هو الأساس حتى لا تختفي النتائج بسبب اختلاف أسماء الحقول.
+    if (!results.length) {
+      try {
+        results = await fetchListings({
+          filters,
+          onlyPublic: true,
+          includeLegacy: true,
+          max: 900,
+        });
+        searchMode = 'strict-fallback';
+      } catch (_) {
+        results = [];
+      }
     }
 
     const ranked = rankListings(results, question, filters);
@@ -96,6 +98,7 @@ export async function POST(request) {
       model: aiResult.model || null,
       question,
       filters,
+      allListingsCount: allListings.length,
       count: ranked.length,
       items: best.map(toSafeClientListing),
       answer,
@@ -108,6 +111,30 @@ export async function POST(request) {
       { error: error?.message || 'تعذر تنفيذ البحث الذكي.' },
       { status: 500 }
     );
+  }
+}
+
+async function fetchAllSearchListings() {
+  try {
+    const publicItems = await fetchListings({
+      filters: {},
+      onlyPublic: true,
+      includeLegacy: true,
+      max: 1200,
+    });
+    if (Array.isArray(publicItems) && publicItems.length) return publicItems;
+  } catch (_) {}
+
+  try {
+    const adminItems = await fetchListings({
+      filters: {},
+      onlyPublic: false,
+      includeLegacy: true,
+      max: 1200,
+    });
+    return Array.isArray(adminItems) ? adminItems : [];
+  } catch (_) {
+    return [];
   }
 }
 
@@ -128,7 +155,7 @@ async function getOpenAiFilters(question, fallbackFilters) {
       'أنت مساعد بحث عقاري لموقع عقار أبحر في شمال جدة.',
       'مهمتك تحويل طلب المستخدم إلى فلاتر بحث فقط، ولا تخترع نتائج.',
       'إذا كتب المستخدم شقة أو شقق أو شقه أو دور: propertyType = شقة.',
-      'إذا كتب المستخدم فيلا أو فيلا أو فله أو فلل: propertyType = فيلا.',
+      'إذا كتب المستخدم فيلا أو فله أو فلل: propertyType = فيلا.',
       'إذا كتب المستخدم فندق أو فنادق أو فندقي: propertyType = فندق.',
       'إذا كتب المستخدم أرض أو اراضي أو قطعة: propertyType = أرض.',
       'إذا كتب إيجار أو للايجار أو سنوي أو شهري: dealType = rent.',
@@ -227,27 +254,32 @@ function mergeFilters(aiFilters = {}, fallbackFilters = {}) {
   };
 }
 
-function looseMatchListings(items = [], filters = {}, question = '') {
+function broadMatchListings(items = [], filters = {}, question = '') {
   const safe = Array.isArray(items) ? items.filter(Boolean) : [];
   const wantedKind = getPropertyKind(filters.propertyType || question);
   const wantedDeal = getDealKind(filters.dealType || question);
   const wantedArea = normalize(filters.neighborhood || '');
+  const wantedPlan = normalize(filters.plan || '');
+  const wantedPart = normalize(filters.part || '');
+  const q = normalize(filters.q || question);
 
   return safe.filter((item) => {
-    if (String(item.status || '').trim() === 'sold') return false;
+    if (!item) return false;
+    if (isUnavailable(item)) return false;
 
-    const hay = normalize([
-      item.propertyType,
-      item.dealType,
-      item.title,
-      item.description,
-      item.neighborhood,
-      item.plan,
-    ].filter(Boolean).join(' '));
+    const hay = buildSearchHaystack(item);
+    const actualKind = getPropertyKind(hay);
+    const actualDeal = getDealKind(hay);
 
-    if (wantedKind && getPropertyKind(hay) !== wantedKind) return false;
-    if (wantedDeal && getDealKind(hay) !== wantedDeal) return false;
+    if (wantedKind && actualKind !== wantedKind) return false;
+
+    // إذا الطلب فيه إيجار/بيع، نرفض فقط إذا الإعلان واضح أنه عكس المطلوب.
+    // أما لو الحقل ناقص ولا يوجد في العنوان/الوصف، لا نحذف الإعلان مباشرة.
+    if (wantedDeal && actualDeal && actualDeal !== wantedDeal) return false;
+
     if (wantedArea && !hay.includes(wantedArea)) return false;
+    if (wantedPlan && !hay.includes(wantedPlan)) return false;
+    if (wantedPart && !hay.includes(wantedPart)) return false;
 
     const price = toNumber(item.price);
     if (filters.priceMin != null && (price == null || price < Number(filters.priceMin))) return false;
@@ -257,6 +289,10 @@ function looseMatchListings(items = [], filters = {}, question = '') {
     if (filters.areaMin != null && (area == null || area < Number(filters.areaMin))) return false;
     if (filters.areaMax != null && (area == null || area > Number(filters.areaMax))) return false;
 
+    if (!wantedKind && !wantedDeal && !wantedArea && q.length >= 2) {
+      return hay.includes(q);
+    }
+
     return true;
   });
 }
@@ -265,7 +301,7 @@ function rankListings(items = [], question = '', filters = {}) {
   const q = normalize(question);
   return (Array.isArray(items) ? items : [])
     .filter(Boolean)
-    .filter((item) => String(item.status || '').trim() !== 'sold')
+    .filter((item) => !isUnavailable(item))
     .map((item) => ({ ...item, _score: computeScore(item, q, filters) }))
     .sort((a, b) => {
       if (b._score !== a._score) return b._score - a._score;
@@ -275,7 +311,7 @@ function rankListings(items = [], question = '', filters = {}) {
 
 function computeScore(item, q, filters) {
   let score = 0;
-  const hay = normalize(`${item.propertyType || ''} ${item.dealType || ''} ${item.title || ''} ${item.description || ''} ${item.neighborhood || ''} ${item.plan || ''}`);
+  const hay = buildSearchHaystack(item);
   const wantedKind = getPropertyKind(filters.propertyType || q);
   const actualKind = getPropertyKind(hay);
   const wantedDeal = getDealKind(filters.dealType || q);
@@ -284,6 +320,7 @@ function computeScore(item, q, filters) {
   if (wantedKind && actualKind === wantedKind) score += 45;
   if (wantedDeal && actualDeal === wantedDeal) score += 25;
   if (filters.neighborhood && hay.includes(normalize(filters.neighborhood))) score += 35;
+  if (filters.plan && hay.includes(normalize(filters.plan))) score += 12;
   if (filters.directOnly && item.direct) score += 18;
   if (q && normalize(item.title).includes(q)) score += 16;
   if (q && normalize(item.description).includes(q)) score += 10;
@@ -313,12 +350,12 @@ function buildAnswer(items, filters, aiIntro = '') {
 
 function buildTitle(item) {
   const type = item.propertyType || inferPropertyTitle(item) || 'عرض عقاري';
-  const deal = getDealKind(`${item.dealType || ''} ${item.title || ''} ${item.description || ''}`) === 'rent' ? 'للإيجار' : 'للبيع';
+  const deal = getDealKind(buildSearchHaystack(item)) === 'rent' ? 'للإيجار' : 'للبيع';
   return `${type} ${deal}`;
 }
 
 function inferPropertyTitle(item) {
-  const kind = getPropertyKind(`${item.propertyType || ''} ${item.title || ''} ${item.description || ''}`);
+  const kind = getPropertyKind(buildSearchHaystack(item));
   const map = { apartment: 'شقة', land: 'أرض', villa: 'فيلا', building: 'عمارة', hotel: 'فندق', resthouse: 'استراحة', shop: 'محل', warehouse: 'مستودع' };
   return map[kind] || '';
 }
@@ -385,6 +422,34 @@ function buildWhatsAppLink(text) {
   return `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(text)}`;
 }
 
+function buildSearchHaystack(item = {}) {
+  return normalize([
+    item.propertyType,
+    item.type,
+    item.category,
+    item.propertyCategory,
+    item.propertyKind,
+    item.realEstateType,
+    item.listingType,
+    item.dealType,
+    item.offerType,
+    item.purpose,
+    item.title,
+    item.description,
+    item.neighborhood,
+    item.region,
+    item.city,
+    item.plan,
+    item.part,
+  ].filter(Boolean).join(' '));
+}
+
+function isUnavailable(item = {}) {
+  const status = normalize(item.status || item.availability || '');
+  if (!status) return false;
+  return ['sold', 'مباع', 'تم البيع', 'محجوز', 'reserved_sold', 'deleted'].some((x) => status.includes(normalize(x)));
+}
+
 function normalize(value) {
   return String(value || '')
     .replace(/[إأآ]/g, 'ا')
@@ -415,7 +480,7 @@ function getPropertyKind(value = '') {
 function getDealKind(value = '') {
   const v = normalize(value);
   if (!v) return '';
-  if (['rent', 'rental', 'lease', 'ايجار', 'اجار', 'للايجار', 'سنوي', 'شهري'].some((x) => v.includes(x))) return 'rent';
+  if (['rent', 'rental', 'lease', 'ايجار', 'اجار', 'للايجار', 'للايجار', 'سنوي', 'شهري'].some((x) => v.includes(x))) return 'rent';
   if (['sale', 'sell', 'buy', 'بيع', 'للبيع', 'شراء', 'تمليك'].some((x) => v.includes(x))) return 'sale';
   return '';
 }
