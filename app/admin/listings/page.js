@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import AdminGuard from '@/components/admin/AdminGuard';
 import AdminShell from '@/components/admin/AdminShell';
 import { formatPriceSAR, statusBadge } from '@/lib/format';
-import { fetchListings } from '@/lib/listings';
+import { adminBoostListing, fetchListings } from '@/lib/listings';
 
 function getListingMedia(item) {
   if (Array.isArray(item?.imagesMeta) && item.imagesMeta.length > 0) return item.imagesMeta;
@@ -19,11 +19,29 @@ function isVideo(entry) {
   return kind === 'video' || ['.mp4', '.mov', '.webm', '.m4v'].some((ext) => url.includes(ext));
 }
 
-function ListingCard({ item }) {
+function formatDate(value) {
+  try {
+    if (!value) return '';
+    const date = typeof value?.toDate === 'function' ? value.toDate() : new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+    return new Intl.DateTimeFormat('ar-SA', {
+      calendar: 'gregory',
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    }).format(date);
+  } catch (_) {
+    return '';
+  }
+}
+
+function ListingCard({ item, boostingId, onBoost }) {
   const media = getListingMedia(item);
   const coverEntry = media[0] || null;
   const cover = coverEntry?.url || '/placeholder-image.jpg';
   const count = media.length;
+  const isBoosting = boostingId === item.id;
+  const freshDate = formatDate(item.boostedAt || item.updatedAt || item.createdAt);
 
   return (
     <article className="listingCard">
@@ -59,9 +77,26 @@ function ListingCard({ item }) {
           <span>{statusBadge(item.status)}</span>
         </div>
 
+        {freshDate && (
+          <div className="freshDate">
+            <span className="material-icons-outlined">update</span>
+            آخر تحديث: {freshDate}
+          </div>
+        )}
+
         <div className="cardPrice">{formatPriceSAR(item.price)}</div>
 
         <div className="cardActions">
+          <button
+            type="button"
+            className="btnBoost actionBtn"
+            onClick={() => onBoost(item)}
+            disabled={isBoosting}
+            title="تحديث تاريخ العرض ورفعه للأعلى في الصفحة الأولى"
+          >
+            <span className={`material-icons-outlined ${isBoosting ? 'spin' : ''}`}>{isBoosting ? 'autorenew' : 'north'}</span>
+            {isBoosting ? 'جاري التحديث' : 'تحديث العرض'}
+          </button>
           <Link href={`/admin/listings/${item.id}`} className="btnPrimary actionBtn">
             <span className="material-icons-outlined">edit</span> إدارة
           </Link>
@@ -86,7 +121,6 @@ function ListingCard({ item }) {
           box-shadow: 0 12px 20px -5px rgba(0,0,0,0.08);
           border-color: #cbd5e0;
         }
-
         .thumbWrap {
           position: relative;
           width: 100%;
@@ -95,8 +129,6 @@ function ListingCard({ item }) {
           overflow: hidden;
           border-bottom: 1px solid #edf2f7;
         }
-
-        /* 🔧 الإصلاح الأساسي: جعل الصورة/الفيديو تملأ الحاوية بالكامل */
         .thumbMedia {
           position: absolute;
           top: 0;
@@ -107,11 +139,7 @@ function ListingCard({ item }) {
           display: block;
           transition: transform 0.3s;
         }
-
-        .listingCard:hover .thumbMedia {
-          transform: scale(1.05);
-        }
-
+        .listingCard:hover .thumbMedia { transform: scale(1.05); }
         .mediaCountBadge {
           position: absolute;
           top: 12px;
@@ -128,7 +156,6 @@ function ListingCard({ item }) {
           backdrop-filter: blur(4px);
           z-index: 2;
         }
-
         .dealBadge {
           position: absolute;
           top: 12px;
@@ -140,15 +167,8 @@ function ListingCard({ item }) {
           box-shadow: 0 2px 4px rgba(0,0,0,0.1);
           z-index: 2;
         }
-        .saleBadge {
-          background: var(--primary);
-          color: white;
-        }
-        .rentBadge {
-          background: #dd6b20;
-          color: white;
-        }
-
+        .saleBadge { background: var(--primary); color: white; }
+        .rentBadge { background: #dd6b20; color: white; }
         .cardBody {
           padding: 16px;
           display: flex;
@@ -156,12 +176,7 @@ function ListingCard({ item }) {
           flex-grow: 1;
           gap: 12px;
         }
-
-        .cardHeader {
-          display: flex;
-          flex-direction: column;
-          gap: 4px;
-        }
+        .cardHeader { display: flex; flex-direction: column; gap: 4px; }
         .cardTitle {
           margin: 0;
           font-size: 16px;
@@ -180,10 +195,7 @@ function ListingCard({ item }) {
           align-items: center;
           gap: 4px;
         }
-        .cardLocation .material-icons-outlined {
-          font-size: 16px;
-        }
-
+        .cardLocation .material-icons-outlined { font-size: 16px; }
         .cardTags {
           display: flex;
           flex-wrap: wrap;
@@ -204,7 +216,15 @@ function ListingCard({ item }) {
           background: rgba(15, 118, 110, 0.1);
           border-color: rgba(15, 118, 110, 0.2);
         }
-
+        .freshDate {
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
+          color: #718096;
+          font-size: 12px;
+          font-weight: 700;
+        }
+        .freshDate .material-icons-outlined { font-size: 16px; }
         .cardPrice {
           font-size: 20px;
           font-weight: 900;
@@ -213,32 +233,35 @@ function ListingCard({ item }) {
           padding-top: 8px;
           border-top: 1px dashed #e2e8f0;
         }
-
         .cardActions {
-          display: flex;
+          display: grid;
+          grid-template-columns: 1fr 1fr;
           gap: 8px;
           margin-top: 5px;
         }
         .actionBtn {
-          flex: 1;
           display: flex;
           justify-content: center;
           align-items: center;
           gap: 6px;
           padding: 10px;
           border-radius: 10px;
-          font-size: 14px;
-          font-weight: 700;
+          font-size: 13px;
+          font-weight: 800;
           text-decoration: none;
           transition: all 0.2s;
+          cursor: pointer;
         }
-        .btnPrimary {
-          background: #1a202c;
-          color: white;
+        .btnBoost {
+          grid-column: span 2;
+          background: #fffaf0;
+          color: #b7791f;
+          border: 1px solid #f6e05e;
         }
-        .btnPrimary:hover {
-          background: #2d3748;
-        }
+        .btnBoost:hover:not(:disabled) { background: #feebc8; }
+        .btnBoost:disabled { opacity: 0.75; cursor: wait; }
+        .btnPrimary { background: #1a202c; color: white; border: none; }
+        .btnPrimary:hover { background: #2d3748; }
         .btnOutline {
           background: white;
           border: 1px solid #cbd5e0;
@@ -249,6 +272,8 @@ function ListingCard({ item }) {
           border-color: #a0aec0;
           color: #1a202c;
         }
+        .spin { animation: spin 1s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
       `}</style>
     </article>
   );
@@ -257,8 +282,23 @@ function ListingCard({ item }) {
 export default function AdminListingsPage() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [boostingId, setBoostingId] = useState('');
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [queryText, setQueryText] = useState('');
+
+  const loadListings = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const data = await fetchListings({ onlyPublic: false, max: 300 });
+      setItems(data || []);
+    } catch (_) {
+      setError('تعذر تحميل بيانات العروض. يرجى التأكد من اتصالك بالإنترنت أو صلاحيات حسابك.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -280,6 +320,35 @@ export default function AdminListingsPage() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!success && !error) return undefined;
+    const timer = setTimeout(() => {
+      setSuccess('');
+      setError('');
+    }, 4500);
+    return () => clearTimeout(timer);
+  }, [success, error]);
+
+  const handleBoost = async (item) => {
+    if (!item?.id || boostingId) return;
+    const ok = window.confirm('هل تريد تحديث هذا العرض ورفعه للأعلى في الصفحة الأولى؟');
+    if (!ok) return;
+
+    setBoostingId(item.id);
+    setError('');
+    setSuccess('');
+    try {
+      await adminBoostListing(item.id);
+      setSuccess('تم تحديث العرض ورفعه للأعلى بنجاح.');
+      await loadListings();
+    } catch (e) {
+      console.error(e);
+      setError('تعذر تحديث العرض. تأكد من صلاحيات حساب الأدمن وحاول مرة أخرى.');
+    } finally {
+      setBoostingId('');
+    }
+  };
+
   const filtered = useMemo(() => {
     const q = String(queryText || '').trim().toLowerCase();
     if (!q) return items;
@@ -296,7 +365,7 @@ export default function AdminListingsPage() {
       <AdminGuard title="إدارة العروض العقارية">
         <AdminShell
           title="سجل العروض العقارية"
-          description="تصفح جميع العقارات المنشورة في المنصة، ابحث عنها بسهولة، وقم بإدارتها بالكامل."
+          description="تصفح جميع العقارات المنشورة في المنصة، حدّث العرض لرفعه للأعلى، أو قم بإدارته بالكامل."
           actions={[
             <Link key="dashboard" href="/admin" className="headerBtnOutline">
               <span className="material-icons-outlined">dashboard</span> لوحة التحكم
@@ -335,6 +404,12 @@ export default function AdminListingsPage() {
             </div>
           )}
 
+          {success && (
+            <div className="alert alertSuccess">
+              <span className="material-icons-outlined">check_circle</span> {success}
+            </div>
+          )}
+
           {loading ? (
             <div className="listingsGrid">
               {[1, 2, 3, 4, 5, 6].map((i) => (
@@ -359,7 +434,7 @@ export default function AdminListingsPage() {
           ) : (
             <div className="listingsGrid">
               {filtered.map((item) => (
-                <ListingCard key={item.id} item={item} />
+                <ListingCard key={item.id} item={item} boostingId={boostingId} onBoost={handleBoost} />
               ))}
             </div>
           )}
@@ -375,7 +450,6 @@ export default function AdminListingsPage() {
           margin-bottom: 25px;
           padding: 20px;
         }
-
         .headerBtnOutline {
           display: inline-flex;
           align-items: center;
@@ -389,9 +463,7 @@ export default function AdminListingsPage() {
           font-weight: 600;
           transition: all 0.2s;
         }
-        .headerBtnOutline:hover {
-          background: #f7fafc;
-        }
+        .headerBtnOutline:hover { background: #f7fafc; }
         .headerBtnPrimary {
           display: inline-flex;
           align-items: center;
@@ -405,10 +477,7 @@ export default function AdminListingsPage() {
           transition: background 0.2s;
           border: none;
         }
-        .headerBtnPrimary:hover {
-          background: #0d665f;
-        }
-
+        .headerBtnPrimary:hover { background: #0d665f; }
         .searchPanel {
           display: flex;
           flex-wrap: wrap;
@@ -416,7 +485,6 @@ export default function AdminListingsPage() {
           align-items: center;
           justify-content: space-between;
         }
-
         .searchWrap {
           position: relative;
           flex-grow: 1;
@@ -457,11 +525,7 @@ export default function AdminListingsPage() {
           padding: 5px;
           border-radius: 50%;
         }
-        .clearBtn:hover {
-          background: #edf2f7;
-          color: #e53e3e;
-        }
-
+        .clearBtn:hover { background: #edf2f7; color: #e53e3e; }
         .statsBadge {
           background: rgba(15, 118, 110, 0.1);
           color: var(--primary);
@@ -470,7 +534,6 @@ export default function AdminListingsPage() {
           font-size: 15px;
           border: 1px solid rgba(15, 118, 110, 0.2);
         }
-
         .alert {
           display: flex;
           align-items: center;
@@ -478,33 +541,23 @@ export default function AdminListingsPage() {
           padding: 15px;
           border-radius: 12px;
           margin-bottom: 20px;
-          font-weight: 600;
+          font-weight: 700;
         }
-        .alertError {
-          background: #fff5f5;
-          color: #e53e3e;
-          border: 1px solid #fed7d7;
-        }
-
+        .alertError { background: #fff5f5; color: #e53e3e; border: 1px solid #fed7d7; }
+        .alertSuccess { background: #f0fff4; color: #2f855a; border: 1px solid #c6f6d5; }
         .listingsGrid {
           display: grid;
           grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
           gap: 20px;
         }
-
         .skeletonCard {
           background: linear-gradient(110deg, #eef3f8 8%, #f8fafc 18%, #eef3f8 33%);
           background-size: 200% 100%;
           border-radius: 16px;
-          min-height: 380px;
+          min-height: 420px;
           animation: loadingShimmer 1.1s linear infinite;
         }
-        @keyframes loadingShimmer {
-          to {
-            background-position-x: -200%;
-          }
-        }
-
+        @keyframes loadingShimmer { to { background-position-x: -200%; } }
         .emptyStatePanel {
           text-align: center;
           padding: 60px 20px;
@@ -523,9 +576,7 @@ export default function AdminListingsPage() {
           color: #2d3748;
           font-size: 22px;
         }
-        .emptyStatePanel p {
-          margin: 0;
-        }
+        .emptyStatePanel p { margin: 0; }
       `}</style>
     </>
   );
