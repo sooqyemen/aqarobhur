@@ -1,19 +1,18 @@
 import { NextResponse } from 'next/server';
-import OpenAI from 'openai';
 import { extractSearchFilters } from '@/lib/searchUtils';
 import { fetchListings } from '@/lib/listings';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
+const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
 const WHATSAPP_NUMBER = String(process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || '').replace(/\D/g, '');
-const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4.1-mini';
 
 const FILTER_SCHEMA = {
   type: 'object',
   additionalProperties: false,
   properties: {
-    intent: { type: 'string', enum: ['property_search', 'unknown'] },
     answer: { type: 'string' },
     filters: {
       type: 'object',
@@ -32,10 +31,23 @@ const FILTER_SCHEMA = {
         directOnly: { type: 'boolean' },
         q: { type: ['string', 'null'] },
       },
-      required: ['propertyType', 'dealType', 'propertyClass', 'neighborhood', 'plan', 'part', 'priceMin', 'priceMax', 'areaMin', 'areaMax', 'directOnly', 'q'],
+      required: [
+        'propertyType',
+        'dealType',
+        'propertyClass',
+        'neighborhood',
+        'plan',
+        'part',
+        'priceMin',
+        'priceMax',
+        'areaMin',
+        'areaMax',
+        'directOnly',
+        'q',
+      ],
     },
   },
-  required: ['intent', 'answer', 'filters'],
+  required: ['answer', 'filters'],
 };
 
 export async function POST(request) {
@@ -55,33 +67,31 @@ export async function POST(request) {
       filters,
       onlyPublic: false,
       includeLegacy: true,
-      max: 700,
+      max: 900,
     });
 
     let searchMode = 'strict';
 
-    // احتياط مهم: إذا الفلاتر الدقيقة لم ترجع نتيجة، نجيب كل العروض من السيرفر
-    // ونطابقها محلياً بشكل أوسع داخل العنوان والوصف والحقول، حتى لا تضيع الشقق بسبب اختلاف التخزين.
     if (!Array.isArray(results) || results.length === 0) {
-      const broad = await fetchListings({
+      const allListings = await fetchListings({
         filters: {},
         onlyPublic: false,
         includeLegacy: true,
-        max: 900,
+        max: 1200,
       });
-      results = looseMatchListings(broad, filters, question);
+      results = looseMatchListings(allListings, filters, question);
       searchMode = 'loose-server-scan';
     }
 
     const ranked = rankListings(results, question, filters);
     const best = ranked.slice(0, 8);
-    const answer = buildAnswer(best, question, filters, aiResult.answer);
+    const answer = buildAnswer(best, filters, aiResult.answer);
     const whatsappText = buildWhatsAppText(question, best);
-    const whatsappLink = buildWhatsAppLink(whatsappText);
 
     return NextResponse.json({
       ok: true,
       source: aiResult.source,
+      openaiError: aiResult.openaiError || '',
       searchMode,
       model: aiResult.model || null,
       question,
@@ -90,54 +100,91 @@ export async function POST(request) {
       items: best.map(toSafeClientListing),
       answer,
       whatsappText,
-      whatsappLink,
+      whatsappLink: buildWhatsAppLink(whatsappText),
       ctaText: 'هل ناسبك أي من هذه العروض؟ اكتب رقم جوالك اختيارياً وسنرسل لك العروض المتوفرة مع التفاصيل عبر واتساب، أو تواصل معنا مباشرة الآن.',
     });
   } catch (error) {
-    return NextResponse.json({ error: error?.message || 'تعذر تنفيذ البحث الذكي.' }, { status: 500 });
+    return NextResponse.json(
+      { error: error?.message || 'تعذر تنفيذ البحث الذكي.' },
+      { status: 500 }
+    );
   }
 }
 
 async function getOpenAiFilters(question, fallbackFilters) {
-  if (!process.env.OPENAI_API_KEY) {
-    return { source: 'rules', model: null, answer: 'فهمت طلبك وطبقت الفلاتر المناسبة على العروض المتوفرة.', filters: fallbackFilters };
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    return {
+      source: 'rules',
+      model: null,
+      openaiError: 'OPENAI_API_KEY missing',
+      answer: 'فهمت طلبك وطبقت الفلاتر المناسبة على العروض المتوفرة.',
+      filters: fallbackFilters,
+    };
   }
 
   try {
-    const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-    const response = await client.responses.create({
-      model: OPENAI_MODEL,
-      input: [
-        {
-          role: 'system',
-          content: [
-            'أنت مساعد بحث عقاري لموقع عقار أبحر في شمال جدة.',
-            'حوّل طلب المستخدم العربي إلى فلاتر بحث دقيقة فقط.',
-            'لا تخترع نتائج ولا تقول إن العقار متوفر؛ النتائج ستأتي من قاعدة البيانات.',
-            'إذا قال المستخدم شقة أو شقق أو دور يجب أن يكون propertyType = شقة.',
-            'إذا قال المستخدم فندق أو فنادق أو فندقي يجب أن يكون propertyType = فندق، ولا يجوز تحويله إلى أرض.',
-            'إذا قال أرض أو قطعة أو أراضي يكون propertyType = أرض.',
-            'إذا قال بحدود مليون أو ميزانية مليون فالأفضل priceMax قريب من الرقم ولا تجعل priceMin إلزامي.',
-            'إذا لم يذكر بيع أو إيجار اترك dealType = null.',
-            'استخدم أسماء الأحياء كما كتبها المستخدم قدر الإمكان.',
-          ].join('\n'),
-        },
-        { role: 'user', content: question },
-      ],
-      text: {
-        format: { type: 'json_schema', name: 'real_estate_search_filters', strict: true, schema: FILTER_SCHEMA },
+    const systemPrompt = [
+      'أنت مساعد بحث عقاري لموقع عقار أبحر في شمال جدة.',
+      'مهمتك تحويل طلب المستخدم إلى فلاتر بحث فقط، ولا تخترع نتائج.',
+      'إذا كتب المستخدم شقة أو شقق أو شقه أو دور: propertyType = شقة.',
+      'إذا كتب المستخدم فيلا أو فيلا أو فله أو فلل: propertyType = فيلا.',
+      'إذا كتب المستخدم فندق أو فنادق أو فندقي: propertyType = فندق.',
+      'إذا كتب المستخدم أرض أو اراضي أو قطعة: propertyType = أرض.',
+      'إذا كتب إيجار أو للايجار أو سنوي أو شهري: dealType = rent.',
+      'إذا كتب بيع أو للبيع أو تمليك: dealType = sale.',
+      'إذا لم يحدد بيع أو إيجار اجعل dealType = null.',
+      'إذا قال بحدود مليون أو ميزانية مليون اجعل priceMax قريب من الرقم ولا تجعل priceMin إلزامي.',
+      'أعد JSON فقط حسب المخطط.',
+    ].join('\n');
+
+    const response = await fetch(OPENAI_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
       },
+      body: JSON.stringify({
+        model: OPENAI_MODEL,
+        temperature: 0.1,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: question },
+        ],
+        response_format: {
+          type: 'json_schema',
+          json_schema: {
+            name: 'real_estate_search_filters',
+            strict: true,
+            schema: FILTER_SCHEMA,
+          },
+        },
+      }),
     });
 
-    const parsed = JSON.parse(response.output_text || '{}');
+    const json = await response.json();
+    if (!response.ok) {
+      throw new Error(json?.error?.message || 'OpenAI API request failed');
+    }
+
+    const content = json?.choices?.[0]?.message?.content || '{}';
+    const parsed = JSON.parse(content);
+
     return {
       source: 'openai',
       model: OPENAI_MODEL,
+      openaiError: '',
       answer: String(parsed?.answer || '').trim() || 'فهمت طلبك وطبقت الفلاتر المناسبة.',
       filters: parsed?.filters || fallbackFilters,
     };
-  } catch (_) {
-    return { source: 'rules', model: null, answer: 'فهمت طلبك وطبقت الفلاتر المناسبة على العروض المتوفرة.', filters: fallbackFilters };
+  } catch (error) {
+    return {
+      source: 'rules',
+      model: OPENAI_MODEL,
+      openaiError: error?.message || 'OpenAI failed',
+      answer: 'فهمت طلبك وطبقت الفلاتر المناسبة على العروض المتوفرة.',
+      filters: fallbackFilters,
+    };
   }
 }
 
@@ -243,7 +290,7 @@ function computeScore(item, q, filters) {
   return score;
 }
 
-function buildAnswer(items, question, filters, aiIntro = '') {
+function buildAnswer(items, filters, aiIntro = '') {
   if (!items.length) {
     const type = filters.propertyType ? ` من نوع ${filters.propertyType}` : '';
     return `حالياً لم أجد عرضاً مطابقاً تماماً${type} لطلبك في قاعدة العروض الداخلية. يسعدنا نخدمك إذا أرسلت الطلب عبر واتساب لنبحث لك عن بدائل مناسبة.`;
