@@ -82,11 +82,11 @@ export default function SearchAnswerCard({
               <div key={item.id} className="resultCard smartResultCard">
                 <div className="smartResultMedia">
                   {imageUrl ? (
-                    <img
-                      src={imageUrl}
-                      alt={item.title || 'صورة العرض العقاري'}
-                      className="smartResultImage"
-                      loading="lazy"
+                    <div
+                      className="smartResultImageBg"
+                      role="img"
+                      aria-label={item.title || 'صورة العرض العقاري'}
+                      style={{ backgroundImage: `url(${imageUrl})` }}
                     />
                   ) : (
                     <div className="smartResultPlaceholder">
@@ -185,24 +185,36 @@ export default function SearchAnswerCard({
         .smartResultMedia {
           position: relative;
           width: 100%;
-          aspect-ratio: 4 / 3;
-          min-height: 156px;
-          max-height: 190px;
+          height: 170px;
+          min-height: 170px;
+          max-height: 170px;
           border-radius: 16px;
           overflow: hidden;
           background: #f1f5f9;
           border: 1px solid #e2e8f0;
           align-self: start;
+          isolation: isolate;
         }
 
-        .smartResultImage {
-          display: block;
-          width: 100% !important;
-          height: 100% !important;
-          max-width: none !important;
-          object-fit: cover !important;
-          object-position: center !important;
-          border-radius: 0 !important;
+        .smartResultImageBg {
+          position: absolute;
+          inset: 0;
+          width: 100%;
+          height: 100%;
+          background-size: cover;
+          background-position: center;
+          background-repeat: no-repeat;
+          transform: translateZ(0);
+        }
+
+        .smartResultMedia :global(img),
+        .smartResultMedia img {
+          display: none !important;
+          width: 0 !important;
+          height: 0 !important;
+          max-height: 0 !important;
+          opacity: 0 !important;
+          pointer-events: none !important;
         }
 
         .smartResultPlaceholder {
@@ -230,6 +242,7 @@ export default function SearchAnswerCard({
           position: absolute;
           top: 10px;
           left: 10px;
+          z-index: 2;
           display: inline-flex;
           align-items: center;
           gap: 5px;
@@ -253,7 +266,6 @@ export default function SearchAnswerCard({
           gap: 12px;
         }
 
-        .smartResultBody :global(.resultTop),
         .resultTop {
           display: flex;
           justify-content: space-between;
@@ -400,9 +412,9 @@ export default function SearchAnswerCard({
           }
 
           .smartResultMedia {
-            aspect-ratio: 16 / 10;
-            min-height: 0;
-            max-height: none;
+            height: 190px;
+            min-height: 190px;
+            max-height: 190px;
           }
 
           .resultTitle {
@@ -410,7 +422,6 @@ export default function SearchAnswerCard({
             -webkit-line-clamp: 2;
           }
 
-          .smartResultBody :global(.resultTop),
           .resultTop {
             flex-direction: column;
             gap: 8px;
