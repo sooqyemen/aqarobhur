@@ -51,10 +51,6 @@ export default function Footer() {
           <div className="seo-links-head">
             <span className="seo-eyebrow">روابط بحث سريعة</span>
             <h3>عقارات أبحر الشمالية وشمال جدة</h3>
-            <p>
-              اختصارات منظمة تساعد الزائر ومحركات البحث للوصول إلى عروض البيع
-              والإيجار حسب الحي ونوع العقار، بدون ازدحام أو تكرار مزعج.
-            </p>
           </div>
 
           <div className="seo-links-grid">
@@ -127,7 +123,7 @@ export default function Footer() {
 
         .seo-links-head {
           text-align: center;
-          margin-bottom: 22px;
+          margin-bottom: 20px;
         }
 
         .seo-eyebrow {
@@ -145,20 +141,11 @@ export default function Footer() {
         }
 
         .seo-links-head h3 {
-          margin: 0 0 8px;
+          margin: 0;
           font-size: clamp(20px, 3vw, 25px);
           font-weight: 950;
           color: #111827;
           letter-spacing: -0.02em;
-        }
-
-        .seo-links-head p {
-          margin: 0 auto;
-          max-width: 780px;
-          color: #64748b;
-          font-size: 14px;
-          line-height: 1.9;
-          font-weight: 700;
         }
 
         .seo-links-grid {
@@ -261,10 +248,6 @@ export default function Footer() {
           .seo-links-head {
             text-align: right;
             margin-bottom: 16px;
-          }
-
-          .seo-links-head p {
-            font-size: 13px;
           }
 
           .seo-links-grid {
