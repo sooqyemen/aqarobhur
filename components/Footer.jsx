@@ -49,24 +49,26 @@ export default function Footer() {
 
         <section className="seo-links-section" aria-label="روابط عقارية مهمة">
           <div className="seo-links-head">
+            <span className="seo-eyebrow">روابط بحث سريعة</span>
             <h3>عقارات أبحر الشمالية وشمال جدة</h3>
             <p>
-              روابط بحث دقيقة حسب الأحياء والمخططات: أحياء أبحر للشقق والفلل
-              والأراضي، ومخططات جوهرة العروس وطيبة والهجرة للأراضي السكنية
-              والتجارية.
+              اختصارات منظمة تساعد الزائر ومحركات البحث للوصول إلى عروض البيع
+              والإيجار حسب الحي ونوع العقار، بدون ازدحام أو تكرار مزعج.
             </p>
           </div>
 
           <div className="seo-links-grid">
             {seoGroups.map((group) => (
-              <div className="seo-links-col" key={group.title}>
+              <div className="seo-links-card" key={group.title}>
                 <h4>{group.title}</h4>
 
-                {group.links.map((link) => (
-                  <Link key={`${group.title}-${link.label}`} href={link.href}>
-                    {link.label}
-                  </Link>
-                ))}
+                <div className="seo-links-list">
+                  {group.links.slice(0, 8).map((link) => (
+                    <Link key={`${group.title}-${link.label}`} href={link.href}>
+                      {link.label}
+                    </Link>
+                  ))}
+                </div>
               </div>
             ))}
           </div>
@@ -114,11 +116,13 @@ export default function Footer() {
       <style jsx>{`
         .seo-links-section {
           margin-top: 28px;
-          padding: 28px 22px;
-          border-radius: 24px;
-          background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+          padding: 26px;
+          border-radius: 26px;
+          background:
+            radial-gradient(circle at top right, rgba(214, 179, 91, 0.16), transparent 34%),
+            linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
           border: 1px solid rgba(226, 232, 240, 0.95);
-          box-shadow: 0 12px 32px rgba(15, 23, 42, 0.06);
+          box-shadow: 0 16px 38px rgba(15, 23, 42, 0.07);
         }
 
         .seo-links-head {
@@ -126,59 +130,98 @@ export default function Footer() {
           margin-bottom: 22px;
         }
 
+        .seo-eyebrow {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          padding: 7px 13px;
+          border-radius: 999px;
+          background: #fff7df;
+          color: #8a6a12;
+          border: 1px solid rgba(214, 179, 91, 0.35);
+          font-size: 12px;
+          font-weight: 900;
+          margin-bottom: 10px;
+        }
+
         .seo-links-head h3 {
           margin: 0 0 8px;
-          font-size: 22px;
-          font-weight: 900;
+          font-size: clamp(20px, 3vw, 25px);
+          font-weight: 950;
           color: #111827;
+          letter-spacing: -0.02em;
         }
 
         .seo-links-head p {
           margin: 0 auto;
-          max-width: 760px;
+          max-width: 780px;
           color: #64748b;
           font-size: 14px;
           line-height: 1.9;
+          font-weight: 700;
         }
 
         .seo-links-grid {
           display: grid;
           grid-template-columns: repeat(4, minmax(0, 1fr));
-          gap: 22px;
+          gap: 14px;
         }
 
-        .seo-links-col {
-          display: flex;
-          flex-direction: column;
-          gap: 9px;
+        .seo-links-card {
           min-width: 0;
+          padding: 16px;
+          border-radius: 20px;
+          background: rgba(255, 255, 255, 0.86);
+          border: 1px solid rgba(226, 232, 240, 0.95);
+          box-shadow: 0 10px 24px rgba(15, 23, 42, 0.045);
         }
 
-        .seo-links-col h4 {
-          margin: 0 0 6px;
+        .seo-links-card h4 {
+          margin: 0 0 12px;
           color: #111827;
-          font-size: 17px;
-          font-weight: 900;
+          font-size: 16px;
+          font-weight: 950;
+          padding-bottom: 10px;
+          border-bottom: 1px solid rgba(226, 232, 240, 0.9);
         }
 
-        .seo-links-col a {
-          color: #4b5563;
+        .seo-links-list {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+        }
+
+        .seo-links-list a {
+          display: inline-flex;
+          align-items: center;
+          max-width: 100%;
+          min-height: 34px;
+          padding: 7px 10px;
+          border-radius: 999px;
+          background: #f8fafc;
+          border: 1px solid rgba(226, 232, 240, 0.95);
+          color: #475569;
           text-decoration: none;
-          font-size: 14px;
-          line-height: 1.7;
-          transition: color 0.18s ease;
+          font-size: 12.5px;
+          line-height: 1.5;
+          font-weight: 850;
+          white-space: normal;
+          transition: border-color 0.18s ease, background 0.18s ease, color 0.18s ease, transform 0.18s ease;
         }
 
-        .seo-links-col a:hover {
-          color: #9a7a21;
-          text-decoration: underline;
+        .seo-links-list a:hover {
+          transform: translateY(-1px);
+          border-color: #d6b35b;
+          color: #111827;
+          background: #fffaf0;
         }
 
         .seo-keywords-row {
           display: flex;
           flex-wrap: wrap;
-          gap: 10px;
-          margin-top: 24px;
+          justify-content: center;
+          gap: 9px;
+          margin-top: 22px;
           padding-top: 18px;
           border-top: 1px solid rgba(226, 232, 240, 0.95);
         }
@@ -189,18 +232,17 @@ export default function Footer() {
           justify-content: center;
           padding: 8px 12px;
           border-radius: 999px;
-          background: #fff;
-          border: 1px solid rgba(226, 232, 240, 0.95);
-          color: #334155;
+          background: #111827;
+          border: 1px solid rgba(17, 24, 39, 0.1);
+          color: #fff;
           text-decoration: none;
-          font-size: 13px;
-          font-weight: 700;
+          font-size: 12.5px;
+          font-weight: 850;
+          line-height: 1.45;
         }
 
         .seo-keywords-row a:hover {
-          border-color: #d6b35b;
-          color: #111827;
-          background: #fffaf0;
+          background: #8a6a12;
         }
 
         @media (max-width: 1100px) {
@@ -211,26 +253,46 @@ export default function Footer() {
 
         @media (max-width: 640px) {
           .seo-links-section {
-            padding: 22px 16px;
-            border-radius: 20px;
+            margin-top: 22px;
+            padding: 18px 14px;
+            border-radius: 22px;
+          }
+
+          .seo-links-head {
+            text-align: right;
+            margin-bottom: 16px;
+          }
+
+          .seo-links-head p {
+            font-size: 13px;
           }
 
           .seo-links-grid {
             grid-template-columns: 1fr;
-            gap: 18px;
+            gap: 12px;
           }
 
-          .seo-links-head h3 {
-            font-size: 19px;
+          .seo-links-card {
+            padding: 14px;
+            border-radius: 18px;
+          }
+
+          .seo-links-list a:nth-child(n + 7) {
+            display: none;
           }
 
           .seo-keywords-row {
+            justify-content: flex-start;
             gap: 8px;
           }
 
           .seo-keywords-row a {
             font-size: 12px;
             padding: 7px 10px;
+          }
+
+          .seo-keywords-row a:nth-child(n + 7) {
+            display: none;
           }
         }
       `}</style>
