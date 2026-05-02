@@ -1,520 +1,354 @@
 import { NextResponse } from 'next/server';
+import { collection, getDocs, limit, orderBy, query } from 'firebase/firestore';
 import { extractSearchFilters } from '@/lib/searchUtils';
 import { fetchListings } from '@/lib/listings';
+import { getFirebase } from '@/lib/firebaseClient';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
-const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-5.4';
+const EXTRACTED_COLLECTION = 'abhur_extracted_items';
 const WHATSAPP_NUMBER = String(process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || '').replace(/\D/g, '');
-
-const FILTER_SCHEMA = {
-  type: 'object',
-  additionalProperties: false,
-  properties: {
-    answer: { type: 'string' },
-    filters: {
-      type: 'object',
-      additionalProperties: false,
-      properties: {
-        propertyType: { type: ['string', 'null'] },
-        dealType: { type: ['string', 'null'], enum: ['sale', 'rent', null] },
-        propertyClass: { type: ['string', 'null'], enum: ['residential', 'commercial', null] },
-        neighborhood: { type: ['string', 'null'] },
-        plan: { type: ['string', 'null'] },
-        part: { type: ['string', 'null'] },
-        priceMin: { type: ['number', 'null'] },
-        priceMax: { type: ['number', 'null'] },
-        areaMin: { type: ['number', 'null'] },
-        areaMax: { type: ['number', 'null'] },
-        directOnly: { type: 'boolean' },
-        q: { type: ['string', 'null'] },
-      },
-      required: [
-        'propertyType',
-        'dealType',
-        'propertyClass',
-        'neighborhood',
-        'plan',
-        'part',
-        'priceMin',
-        'priceMax',
-        'areaMin',
-        'areaMax',
-        'directOnly',
-        'q',
-      ],
-    },
-  },
-  required: ['answer', 'filters'],
-};
 
 export async function POST(request) {
   try {
     const body = await request.json();
     const question = String(body?.question || body?.query || '').trim();
+    if (!question) return NextResponse.json({ error: 'نص الطلب مطلوب.' }, { status: 400 });
 
-    if (!question) {
-      return NextResponse.json({ error: 'نص الطلب مطلوب.' }, { status: 400 });
-    }
-
-    const fallbackFilters = extractSearchFilters(question);
-    const aiResult = await getOpenAiFilters(question, fallbackFilters);
-    const filters = mergeFilters(aiResult.filters, fallbackFilters);
-
-    // المهم هنا: OpenAI يفهم الطلب فقط. البحث نفسه يرجع للطريقة الواسعة القديمة:
-    // نسحب العروض المتاحة من قاعدة البيانات ثم نطابقها داخل العنوان والوصف وكل الحقول المحتملة.
-    const allListings = await fetchAllSearchListings();
-    let results = broadMatchListings(allListings, filters, question);
-    let searchMode = 'broad-server-scan';
-
-    // احتياط: لو ما طلع شيء من البحث الواسع، نجرب فلترة المكتبة الحالية مرة أخيرة.
-    // لكن لا نجعل فلتر OpenAI الصارم هو الأساس حتى لا تختفي النتائج بسبب اختلاف أسماء الحقول.
-    if (!results.length) {
-      try {
-        results = await fetchListings({
-          filters,
-          onlyPublic: true,
-          includeLegacy: true,
-          max: 900,
-        });
-        searchMode = 'strict-fallback';
-      } catch (_) {
-        results = [];
-      }
-    }
-
-    const ranked = rankListings(results, question, filters);
-    const best = ranked.slice(0, 8);
-    const answer = buildAnswer(best, filters, aiResult.answer);
-    const whatsappText = buildWhatsAppText(question, best);
+    const filters = cleanFilters(extractSearchFilters(question));
+    const { items: allItems, sources } = await readAllSources();
+    const ranked = rank(matchItems(allItems, filters, question), question, filters);
+    const best = ranked.slice(0, 10);
+    const whatsappText = makeWhatsappText(question, best);
 
     return NextResponse.json({
       ok: true,
-      source: aiResult.source,
-      openaiError: aiResult.openaiError || '',
-      searchMode,
-      model: aiResult.model || null,
+      source: 'rules',
+      searchMode: 'listings-and-smart-inbox',
       question,
       filters,
-      allListingsCount: allListings.length,
+      sources,
+      allListingsCount: allItems.length,
       count: ranked.length,
-      items: best.map(toSafeClientListing),
-      answer,
+      items: best.map(toClientItem),
+      answer: makeAnswer(best, filters),
       whatsappText,
-      whatsappLink: buildWhatsAppLink(whatsappText),
-      ctaText: 'هل ناسبك أي من هذه العروض؟ اكتب رقم جوالك اختيارياً وسنرسل لك العروض المتوفرة مع التفاصيل عبر واتساب، أو تواصل معنا مباشرة الآن.',
+      whatsappLink: WHATSAPP_NUMBER ? `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(whatsappText)}` : '',
+      ctaText: 'هل ناسبك أي من هذه العروض؟ تواصل معنا وسنرسل لك التفاصيل عبر واتساب.',
     });
   } catch (error) {
-    return NextResponse.json(
-      { error: error?.message || 'تعذر تنفيذ البحث الذكي.' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: error?.message || 'تعذر تنفيذ البحث الذكي.' }, { status: 500 });
   }
 }
 
-async function fetchAllSearchListings() {
-  try {
-    const publicItems = await fetchListings({
-      filters: {},
-      onlyPublic: true,
-      includeLegacy: true,
-      max: 1200,
-    });
-    if (Array.isArray(publicItems) && publicItems.length) return publicItems;
-  } catch (_) {}
+async function readAllSources() {
+  const items = [];
+  const sources = { publicListings: 0, internalListings: 0, smartInboxItems: 0, warnings: [] };
 
   try {
-    const adminItems = await fetchListings({
-      filters: {},
-      onlyPublic: false,
-      includeLegacy: true,
-      max: 1200,
-    });
-    return Array.isArray(adminItems) ? adminItems : [];
+    const rows = await fetchListings({ filters: {}, onlyPublic: true, includeLegacy: true, max: 1200 });
+    const safe = Array.isArray(rows) ? rows : [];
+    sources.publicListings = safe.length;
+    items.push(...safe.map((x) => ({ ...x, sourceBucket: 'site' })));
+  } catch (e) {
+    sources.warnings.push(`publicListings: ${e?.message || 'failed'}`);
+  }
+
+  try {
+    const rows = await fetchListings({ filters: {}, onlyPublic: false, includeLegacy: true, max: 1200 });
+    const safe = Array.isArray(rows) ? rows : [];
+    sources.internalListings = safe.length;
+    items.push(...safe.map((x) => ({ ...x, sourceBucket: 'internal' })));
+  } catch (e) {
+    sources.warnings.push(`internalListings: ${e?.message || 'failed'}`);
+  }
+
+  try {
+    const rows = await readInboxListings(900);
+    sources.smartInboxItems = rows.length;
+    items.push(...rows);
+  } catch (e) {
+    sources.warnings.push(`smartInboxItems: ${e?.message || 'failed'}`);
+  }
+
+  return { items: dedupe(items), sources };
+}
+
+async function readInboxListings(max) {
+  const { db } = getFirebase();
+  let docs = [];
+  try {
+    const q = query(collection(db, EXTRACTED_COLLECTION), orderBy('createdAt', 'desc'), limit(max));
+    docs = (await getDocs(q)).docs;
   } catch (_) {
-    return [];
-  }
-}
-
-async function getOpenAiFilters(question, fallbackFilters) {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    return {
-      source: 'rules',
-      model: null,
-      openaiError: 'OPENAI_API_KEY missing',
-      answer: 'فهمت طلبك وطبقت الفلاتر المناسبة على العروض المتوفرة.',
-      filters: fallbackFilters,
-    };
+    const q = query(collection(db, EXTRACTED_COLLECTION), limit(max));
+    docs = (await getDocs(q)).docs;
   }
 
-  try {
-    const systemPrompt = [
-      'أنت مساعد بحث عقاري لموقع عقار أبحر في شمال جدة.',
-      'مهمتك تحويل طلب المستخدم إلى فلاتر بحث فقط، ولا تخترع نتائج.',
-      'إذا كتب المستخدم شقة أو شقق أو شقه أو دور: propertyType = شقة.',
-      'إذا كتب المستخدم فيلا أو فله أو فلل: propertyType = فيلا.',
-      'إذا كتب المستخدم فندق أو فنادق أو فندقي: propertyType = فندق.',
-      'إذا كتب المستخدم أرض أو اراضي أو قطعة: propertyType = أرض.',
-      'إذا كتب إيجار أو للايجار أو سنوي أو شهري: dealType = rent.',
-      'إذا كتب بيع أو للبيع أو تمليك: dealType = sale.',
-      'إذا لم يحدد بيع أو إيجار اجعل dealType = null.',
-      'إذا قال بحدود مليون أو ميزانية مليون اجعل priceMax قريب من الرقم ولا تجعل priceMin إلزامي.',
-      'أعد JSON فقط حسب المخطط.',
-    ].join('\n');
+  return docs.map((d) => fromInboxDoc(d.id, d.data())).filter(Boolean).filter((x) => !isUnavailable(x));
+}
 
-    const response = await fetch(OPENAI_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: OPENAI_MODEL,
-        temperature: 0.1,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: question },
-        ],
-        response_format: {
-          type: 'json_schema',
-          json_schema: {
-            name: 'real_estate_search_filters',
-            strict: true,
-            schema: FILTER_SCHEMA,
-          },
-        },
-      }),
-    });
+function fromInboxDoc(id, data = {}) {
+  if (data.recordType !== 'listing') return null;
+  const status = String(data.extractionStatus || '').trim();
+  if (['ignored', 'expired', 'sold'].includes(status)) return null;
+  if (data.isFresh === false || expired(data.expiresAt)) return null;
 
-    const json = await response.json();
-    if (!response.ok) {
-      throw new Error(json?.error?.message || 'OpenAI API request failed');
-    }
+  const listing = data.listing || {};
+  const source = data.source || {};
+  const promotedDocId = String(data.promotedDocId || '').trim();
+  const summary = String(data.summary || '').trim();
+  const rawText = String(data.rawText || '').trim();
+  const description = [listing.description, summary, rawText].filter(Boolean).join('\n\n');
 
-    const content = json?.choices?.[0]?.message?.content || '{}';
-    const parsed = JSON.parse(content);
+  const item = {
+    ...listing,
+    id: promotedDocId || `inbox-${id}`,
+    inboxItemId: id,
+    promotedDocId,
+    sourceBucket: 'smart_inbox',
+    extractionStatus: status,
+    title: String(listing.title || summary || 'عرض عقاري من الوارد الذكي').trim(),
+    description,
+    rawText,
+    summary,
+    status: String(listing.status || 'hidden').trim(),
+    contactPhone: String(listing.contactPhone || listing.sourceContactPhone || source.contactPhone || '').trim(),
+    messageDate: data.messageDate || listing.messageDate || '',
+    expiresAt: data.expiresAt || listing.expiresAt || '',
+    createdAt: data.createdAt || listing.createdAt || '',
+    updatedAt: data.updatedAt || listing.updatedAt || '',
+    duplicateKey: data.duplicateKey || listing.duplicateKey || '',
+  };
 
-    return {
-      source: 'openai',
-      model: OPENAI_MODEL,
-      openaiError: '',
-      answer: String(parsed?.answer || '').trim() || 'فهمت طلبك وطبقت الفلاتر المناسبة.',
-      filters: parsed?.filters || fallbackFilters,
-    };
-  } catch (error) {
-    return {
-      source: 'rules',
-      model: OPENAI_MODEL,
-      openaiError: error?.message || 'OpenAI failed',
-      answer: 'فهمت طلبك وطبقت الفلاتر المناسبة على العروض المتوفرة.',
-      filters: fallbackFilters,
-    };
+  return item.title || item.propertyType || item.neighborhood || item.price || item.area || item.description ? item : null;
+}
+
+function cleanFilters(filters = {}) {
+  const out = {};
+  for (const k of ['propertyType', 'neighborhood', 'plan', 'part', 'q']) {
+    const v = String(filters[k] || '').trim();
+    if (v && v !== 'null' && v !== 'undefined') out[k] = v;
   }
+  if (filters.dealType === 'sale' || filters.dealType === 'rent') out.dealType = filters.dealType;
+  if (filters.directOnly === true) out.directOnly = true;
+  for (const k of ['priceMin', 'priceMax', 'areaMin', 'areaMax']) {
+    const n = Number(filters[k]);
+    if (Number.isFinite(n) && n >= 0) out[k] = Math.round(n);
+  }
+  return out;
 }
 
-function normalizeFilters(filters = {}) {
-  const output = {};
-  const copyString = (key) => {
-    const value = String(filters[key] || '').trim();
-    if (value && value !== 'null' && value !== 'undefined') output[key] = value;
-  };
-  const copyNumber = (key) => {
-    const value = Number(filters[key]);
-    if (Number.isFinite(value) && value >= 0) output[key] = Math.round(value);
-  };
+function matchItems(items = [], filters = {}, question = '') {
+  const wantedKind = kind(filters.propertyType || question);
+  const wantedDeal = deal(filters.dealType || question);
+  const wantedArea = norm(filters.neighborhood || '');
+  const wantedPlan = norm(filters.plan || '');
+  const wantedPart = norm(filters.part || '');
+  const q = norm(filters.q || question);
 
-  copyString('propertyType');
-  copyString('neighborhood');
-  copyString('plan');
-  copyString('part');
-  copyString('q');
-  if (filters.dealType === 'sale' || filters.dealType === 'rent') output.dealType = filters.dealType;
-  if (filters.propertyClass === 'residential' || filters.propertyClass === 'commercial') output.propertyClass = filters.propertyClass;
-  if (filters.directOnly === true) output.directOnly = true;
-  copyNumber('priceMin');
-  copyNumber('priceMax');
-  copyNumber('areaMin');
-  copyNumber('areaMax');
-  return output;
-}
-
-function mergeFilters(aiFilters = {}, fallbackFilters = {}) {
-  const ai = normalizeFilters(aiFilters);
-  const fallback = normalizeFilters(fallbackFilters);
-  return {
-    ...fallback,
-    ...ai,
-    propertyType: ai.propertyType || fallback.propertyType,
-    neighborhood: ai.neighborhood || fallback.neighborhood,
-    dealType: ai.dealType || fallback.dealType,
-    propertyClass: ai.propertyClass || fallback.propertyClass,
-  };
-}
-
-function broadMatchListings(items = [], filters = {}, question = '') {
-  const safe = Array.isArray(items) ? items.filter(Boolean) : [];
-  const wantedKind = getPropertyKind(filters.propertyType || question);
-  const wantedDeal = getDealKind(filters.dealType || question);
-  const wantedArea = normalize(filters.neighborhood || '');
-  const wantedPlan = normalize(filters.plan || '');
-  const wantedPart = normalize(filters.part || '');
-  const q = normalize(filters.q || question);
-
-  return safe.filter((item) => {
-    if (!item) return false;
-    if (isUnavailable(item)) return false;
-
-    const hay = buildSearchHaystack(item);
-    const actualKind = getPropertyKind(hay);
-    const actualDeal = getDealKind(hay);
-
-    if (wantedKind && actualKind !== wantedKind) return false;
-
-    // إذا الطلب فيه إيجار/بيع، نرفض فقط إذا الإعلان واضح أنه عكس المطلوب.
-    // أما لو الحقل ناقص ولا يوجد في العنوان/الوصف، لا نحذف الإعلان مباشرة.
+  return items.filter((item) => {
+    if (!item || isUnavailable(item)) return false;
+    const hay = haystack(item);
+    const actualKind = kind(hay);
+    const actualDeal = deal(hay);
+    if (wantedKind && actualKind && actualKind !== wantedKind) return false;
     if (wantedDeal && actualDeal && actualDeal !== wantedDeal) return false;
-
     if (wantedArea && !hay.includes(wantedArea)) return false;
     if (wantedPlan && !hay.includes(wantedPlan)) return false;
     if (wantedPart && !hay.includes(wantedPart)) return false;
 
-    const price = toNumber(item.price);
+    const price = num(item.price);
     if (filters.priceMin != null && (price == null || price < Number(filters.priceMin))) return false;
     if (filters.priceMax != null && (price == null || price > Number(filters.priceMax))) return false;
 
-    const area = toNumber(item.area);
+    const area = num(item.area);
     if (filters.areaMin != null && (area == null || area < Number(filters.areaMin))) return false;
     if (filters.areaMax != null && (area == null || area > Number(filters.areaMax))) return false;
 
-    if (!wantedKind && !wantedDeal && !wantedArea && q.length >= 2) {
-      return hay.includes(q);
-    }
-
+    if (!wantedKind && !wantedDeal && !wantedArea && q.length >= 2) return hay.includes(q);
     return true;
   });
 }
 
-function rankListings(items = [], question = '', filters = {}) {
-  const q = normalize(question);
-  return (Array.isArray(items) ? items : [])
-    .filter(Boolean)
-    .filter((item) => !isUnavailable(item))
-    .map((item) => ({ ...item, _score: computeScore(item, q, filters) }))
-    .sort((a, b) => {
-      if (b._score !== a._score) return b._score - a._score;
-      return toMillis(b.updatedAt || b.createdAt) - toMillis(a.updatedAt || a.createdAt);
-    });
+function rank(items = [], question = '', filters = {}) {
+  const q = norm(question);
+  return items.map((item) => ({ ...item, _score: score(item, q, filters) })).sort((a, b) => {
+    if (b._score !== a._score) return b._score - a._score;
+    return millis(b.updatedAt || b.createdAt || b.messageDate) - millis(a.updatedAt || a.createdAt || a.messageDate);
+  });
 }
 
-function computeScore(item, q, filters) {
-  let score = 0;
-  const hay = buildSearchHaystack(item);
-  const wantedKind = getPropertyKind(filters.propertyType || q);
-  const actualKind = getPropertyKind(hay);
-  const wantedDeal = getDealKind(filters.dealType || q);
-  const actualDeal = getDealKind(hay);
-
-  if (wantedKind && actualKind === wantedKind) score += 45;
-  if (wantedDeal && actualDeal === wantedDeal) score += 25;
-  if (filters.neighborhood && hay.includes(normalize(filters.neighborhood))) score += 35;
-  if (filters.plan && hay.includes(normalize(filters.plan))) score += 12;
-  if (filters.directOnly && item.direct) score += 18;
-  if (q && normalize(item.title).includes(q)) score += 16;
-  if (q && normalize(item.description).includes(q)) score += 10;
-  return score;
+function score(item, q, filters) {
+  const hay = haystack(item);
+  let s = 0;
+  if (kind(filters.propertyType || q) && kind(filters.propertyType || q) === kind(hay)) s += 45;
+  if (deal(filters.dealType || q) && deal(filters.dealType || q) === deal(hay)) s += 25;
+  if (filters.neighborhood && hay.includes(norm(filters.neighborhood))) s += 35;
+  if (filters.plan && hay.includes(norm(filters.plan))) s += 12;
+  if (item.sourceBucket === 'smart_inbox') s += 10;
+  if (item.sourceBucket === 'site') s += 8;
+  if (q && norm(item.title).includes(q)) s += 16;
+  if (q && norm(item.description).includes(q)) s += 10;
+  return s;
 }
 
-function buildAnswer(items, filters, aiIntro = '') {
+function makeAnswer(items, filters) {
   if (!items.length) {
     const type = filters.propertyType ? ` من نوع ${filters.propertyType}` : '';
-    return `حالياً لم أجد عرضاً مطابقاً تماماً${type} لطلبك في قاعدة العروض الداخلية. يسعدنا نخدمك إذا أرسلت الطلب عبر واتساب لنبحث لك عن بدائل مناسبة.`;
+    return `حالياً لم أجد عرضاً مطابقاً تماماً${type} في عروض الموقع أو الوارد الذكي.`;
   }
-
-  const lines = items.map((item, index) => {
-    const bits = [`العرض ${index + 1}: ${buildTitle(item)}`];
-    if (item.neighborhood) bits.push(`في ${item.neighborhood}`);
-    if (item.price) bits.push(`بسعر ${formatPrice(item.price)}`);
-    if (item.area) bits.push(`المساحة ${item.area}م²`);
-    if (item.direct) bits.push('مباشر');
-    const brief = buildBriefSpecs(item);
-    if (brief) bits.push(brief);
-    return `- ${bits.join(' — ')}`;
+  const lines = items.map((item, i) => {
+    const parts = [`العرض ${i + 1}: ${titleOf(item)}`];
+    if (item.neighborhood) parts.push(`في ${item.neighborhood}`);
+    if (item.price) parts.push(`بسعر ${price(item.price)}`);
+    if (item.area) parts.push(`المساحة ${item.area}م²`);
+    if (item.sourceBucket === 'smart_inbox') parts.push('من الوارد الذكي');
+    return `- ${parts.join(' — ')}`;
   });
-
-  const intro = aiIntro || `وجدت ${items.length} عرض مناسب لطلبك.`;
-  return [intro, ...lines].join('\n');
+  return [`وجدت ${items.length} عرض مناسب من الموقع أو الوارد الذكي.`, ...lines].join('\n');
 }
 
-function buildTitle(item) {
-  const type = item.propertyType || inferPropertyTitle(item) || 'عرض عقاري';
-  const deal = getDealKind(buildSearchHaystack(item)) === 'rent' ? 'للإيجار' : 'للبيع';
-  return `${type} ${deal}`;
-}
-
-function inferPropertyTitle(item) {
-  const kind = getPropertyKind(buildSearchHaystack(item));
-  const map = { apartment: 'شقة', land: 'أرض', villa: 'فيلا', building: 'عمارة', hotel: 'فندق', resthouse: 'استراحة', shop: 'محل', warehouse: 'مستودع' };
-  return map[kind] || '';
-}
-
-function buildBriefSpecs(item) {
-  const text = normalize(item.description || '');
-  const rooms = extractRoomsFromListing(item);
-  const baths = extractBathroomsFromListing(item);
-  const parts = [];
-  if (rooms) parts.push(`${rooms} غرف`);
-  if (baths) parts.push(`${baths} حمامات`);
-  if (/صاله|صالة/.test(text)) parts.push('صالة');
-  if (/مطبخ/.test(text)) parts.push('مطبخ');
-  return parts.join(' + ');
-}
-
-function toSafeClientListing(item) {
+function toClientItem(item) {
+  const inboxOnly = item.sourceBucket === 'smart_inbox' && !item.promotedDocId && String(item.id || '').startsWith('inbox-');
+  const id = item.promotedDocId || item.id || '';
   return {
-    id: item.id || '',
-    title: item.title || buildTitle(item),
-    generatedTitle: buildTitle(item),
+    id,
+    inboxItemId: item.inboxItemId || '',
+    sourceBucket: item.sourceBucket || 'site',
+    title: item.title || titleOf(item),
+    generatedTitle: titleOf(item),
     neighborhood: item.neighborhood || '',
-    propertyType: item.propertyType || inferPropertyTitle(item),
+    propertyType: item.propertyType || typeName(item),
     dealType: item.dealType || '',
     price: item.price || null,
     area: item.area || null,
     direct: !!item.direct,
-    summary: buildBriefSpecs(item),
-    description: String(item.description || '').slice(0, 240),
-    image: getFirstImage(item),
-    url: item.id ? `/listing/${encodeURIComponent(String(item.id))}` : '',
+    summary: item.summary || '',
+    description: String(item.description || item.rawText || '').slice(0, 280),
+    contactPhone: item.contactPhone || '',
+    image: firstImage(item),
+    url: !inboxOnly && id ? `/listing/${encodeURIComponent(String(id))}` : '',
   };
 }
 
-function getFirstImage(item = {}) {
+function makeWhatsappText(question, items = []) {
+  const lines = ['السلام عليكم', 'سبق أن طلبت عبر العقاري الذكي:', question, ''];
+  if (!items.length) {
+    lines.push('لم تظهر نتيجة مطابقة، وأرغب في متابعة الطلب وتوفير بدائل مناسبة.');
+    return lines.join('\n');
+  }
+  lines.push('العروض الأقرب لطلبك:');
+  items.forEach((item, i) => {
+    const safe = toClientItem(item);
+    lines.push([
+      `${i + 1}. ${safe.title || safe.generatedTitle}`,
+      safe.neighborhood ? `الحي: ${safe.neighborhood}` : '',
+      safe.price ? `السعر: ${price(safe.price)}` : '',
+      safe.area ? `المساحة: ${safe.area}م²` : '',
+      safe.sourceBucket === 'smart_inbox' ? 'المصدر: الوارد الذكي' : '',
+      safe.url ? `الرابط: https://aqarobhur.com${safe.url}` : '',
+    ].filter(Boolean).join(' - '));
+  });
+  return lines.join('\n');
+}
+
+function titleOf(item) {
+  const t = String(item.title || '').trim();
+  if (t) return t;
+  return `${item.propertyType || typeName(item) || 'عرض عقاري'} ${deal(haystack(item)) === 'rent' ? 'للإيجار' : 'للبيع'}`;
+}
+
+function typeName(item) {
+  return ({ apartment: 'شقة', land: 'أرض', villa: 'فيلا', building: 'عمارة', hotel: 'فندق', resthouse: 'استراحة', shop: 'محل', warehouse: 'مستودع' })[kind(haystack(item))] || '';
+}
+
+function haystack(item = {}) {
+  return norm([item.propertyType, item.type, item.category, item.dealType, item.offerType, item.title, item.summary, item.description, item.rawText, item.neighborhood, item.region, item.city, item.plan, item.part, item.contactPhone].filter(Boolean).join(' '));
+}
+
+function isUnavailable(item = {}) {
+  if (expired(item.expiresAt)) return true;
+  const status = norm(item.status || item.availability || item.extractionStatus || '');
+  const text = norm(`${item.title || ''} ${item.summary || ''} ${item.description || ''} ${item.rawText || ''}`);
+  if (['sold', 'مباع', 'تم البيع', 'deleted', 'ignored', 'expired'].some((x) => status.includes(norm(x)))) return true;
+  return ['تم البيع', 'مباع', 'انتهى العرض', 'العرض منتهي'].some((x) => text.includes(norm(x)));
+}
+
+function dedupe(items = []) {
+  const out = [];
+  const seen = new Set();
+  for (const item of items) {
+    if (!item) continue;
+    const key = item.promotedDocId ? `p:${item.promotedDocId}` : item.duplicateKey ? `d:${item.duplicateKey}` : item.id ? `i:${item.id}` : `t:${norm(item.title)}:${norm(item.neighborhood)}:${num(item.price) || ''}:${num(item.area) || ''}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(item);
+  }
+  return out;
+}
+
+function norm(value) {
+  return String(value || '').replace(/[إأآ]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه').replace(/ـ/g, '').replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d))).replace(/[۰-۹]/g, (d) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))).replace(/\s+/g, ' ').toLowerCase().trim();
+}
+
+function kind(value = '') {
+  const v = norm(value);
+  if (!v) return '';
+  if (['شقه', 'شقق', 'دور', 'apartment', 'flat'].some((x) => v.includes(x))) return 'apartment';
+  if (['ارض', 'اراضي', 'قطعه', 'قطع', 'land'].some((x) => v.includes(x))) return 'land';
+  if (['فيلا', 'فله', 'فلل', 'فيلات', 'villa'].some((x) => v.includes(x))) return 'villa';
+  if (['عماره', 'عماير', 'عمائر', 'building'].some((x) => v.includes(x))) return 'building';
+  if (['فندق', 'فنادق', 'فندقي', 'hotel'].some((x) => v.includes(x))) return 'hotel';
+  if (['استراحه', 'شاليه'].some((x) => v.includes(x))) return 'resthouse';
+  if (['محل', 'محلات', 'معرض', 'مكتب'].some((x) => v.includes(x))) return 'shop';
+  if (['مستودع', 'مستودعات', 'ورشه'].some((x) => v.includes(x))) return 'warehouse';
+  return '';
+}
+
+function deal(value = '') {
+  const v = norm(value);
+  if (!v) return '';
+  if (['rent', 'rental', 'lease', 'ايجار', 'اجار', 'للايجار', 'سنوي', 'شهري'].some((x) => v.includes(norm(x)))) return 'rent';
+  if (['sale', 'sell', 'buy', 'بيع', 'للبيع', 'شراء', 'تمليك'].some((x) => v.includes(norm(x)))) return 'sale';
+  return '';
+}
+
+function num(value) {
+  if (value === undefined || value === null || value === '') return null;
+  const n = Number(String(value).replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d))).replace(/[۰-۹]/g, (d) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))).replace(/,/g, ''));
+  return Number.isFinite(n) ? n : null;
+}
+
+function firstImage(item = {}) {
   const images = Array.isArray(item.images) ? item.images : [];
   const image = images.find(Boolean) || item.image || item.coverImage || '';
   return typeof image === 'string' ? image : image?.url || '';
 }
 
-function buildWhatsAppText(question, items = []) {
-  const lines = ['السلام عليكم', 'سبق أن طلبت عبر العقاري الذكي:', question, ''];
-  if (items.length) {
-    lines.push('العروض الأقرب لطلبك:');
-    items.forEach((item, index) => {
-      const safe = toSafeClientListing(item);
-      const details = [
-        `${index + 1}. ${safe.title || safe.generatedTitle}`,
-        safe.neighborhood ? `الحي: ${safe.neighborhood}` : '',
-        safe.price ? `السعر: ${formatPrice(safe.price)}` : '',
-        safe.area ? `المساحة: ${safe.area}م²` : '',
-        safe.url ? `الرابط: https://aqarobhur.com${safe.url}` : '',
-      ].filter(Boolean);
-      lines.push(details.join(' - '));
-    });
-  } else {
-    lines.push('لم تظهر نتيجة مطابقة، وأرغب في متابعة الطلب وتوفير بدائل مناسبة.');
-  }
-  return lines.join('\n');
+function expired(value) {
+  const t = millis(value);
+  return !!t && t < Date.now();
 }
 
-function buildWhatsAppLink(text) {
-  if (!WHATSAPP_NUMBER) return '';
-  return `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(text)}`;
-}
-
-function buildSearchHaystack(item = {}) {
-  return normalize([
-    item.propertyType,
-    item.type,
-    item.category,
-    item.propertyCategory,
-    item.propertyKind,
-    item.realEstateType,
-    item.listingType,
-    item.dealType,
-    item.offerType,
-    item.purpose,
-    item.title,
-    item.description,
-    item.neighborhood,
-    item.region,
-    item.city,
-    item.plan,
-    item.part,
-  ].filter(Boolean).join(' '));
-}
-
-function isUnavailable(item = {}) {
-  const status = normalize(item.status || item.availability || '');
-  if (!status) return false;
-  return ['sold', 'مباع', 'تم البيع', 'محجوز', 'reserved_sold', 'deleted'].some((x) => status.includes(normalize(x)));
-}
-
-function normalize(value) {
-  return String(value || '')
-    .replace(/[إأآ]/g, 'ا')
-    .replace(/ى/g, 'ي')
-    .replace(/ة/g, 'ه')
-    .replace(/ـ/g, '')
-    .replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
-    .replace(/[۰-۹]/g, (d) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d)))
-    .replace(/\s+/g, ' ')
-    .toLowerCase()
-    .trim();
-}
-
-function getPropertyKind(value = '') {
-  const v = normalize(value);
-  if (!v) return '';
-  if (['شقه', 'شقق', 'دور', 'ادوار', 'apartment', 'flat'].some((x) => v.includes(x))) return 'apartment';
-  if (['ارض', 'اراضي', 'قطعه', 'land'].some((x) => v.includes(x))) return 'land';
-  if (['فيلا', 'فله', 'فلل', 'فيلات', 'villa'].some((x) => v.includes(x))) return 'villa';
-  if (['عماره', 'عماير', 'عمائر', 'building'].some((x) => v.includes(x))) return 'building';
-  if (['فندق', 'فنادق', 'فندقي', 'hotel'].some((x) => v.includes(x))) return 'hotel';
-  if (['استراحه', 'شاليه', 'شاليهات'].some((x) => v.includes(x))) return 'resthouse';
-  if (['محل', 'محلات', 'معرض', 'معارض', 'مكتب', 'مكاتب'].some((x) => v.includes(x))) return 'shop';
-  if (['مستودع', 'مستودعات', 'ورشه'].some((x) => v.includes(x))) return 'warehouse';
-  return '';
-}
-
-function getDealKind(value = '') {
-  const v = normalize(value);
-  if (!v) return '';
-  if (['rent', 'rental', 'lease', 'ايجار', 'اجار', 'للايجار', 'للايجار', 'سنوي', 'شهري'].some((x) => v.includes(x))) return 'rent';
-  if (['sale', 'sell', 'buy', 'بيع', 'للبيع', 'شراء', 'تمليك'].some((x) => v.includes(x))) return 'sale';
-  return '';
-}
-
-function toNumber(value) {
-  if (value === undefined || value === null || value === '') return null;
-  const n = Number(String(value).replace(/,/g, ''));
-  return Number.isFinite(n) ? n : null;
-}
-
-function extractRoomsFromListing(item) {
-  const text = `${item.title || ''} ${item.description || ''}`;
-  const m = text.match(/(\d+)\s*غرف?/) || text.match(/(\d+)\s*غرفة/);
-  return m ? Number(m[1]) : null;
-}
-
-function extractBathroomsFromListing(item) {
-  const text = `${item.title || ''} ${item.description || ''}`;
-  const m = text.match(/(\d+)\s*حمامات?/) || text.match(/(\d+)\s*دورات?\s*مياه/);
-  return m ? Number(m[1]) : null;
-}
-
-function toMillis(v) {
+function millis(v) {
   try {
     if (!v) return 0;
     if (typeof v.toMillis === 'function') return v.toMillis();
     if (v instanceof Date) return v.getTime();
     if (typeof v === 'number') return v;
+    if (typeof v === 'string') {
+      const parsed = new Date(v).getTime();
+      return Number.isFinite(parsed) ? parsed : 0;
+    }
+    if (typeof v === 'object' && typeof v.seconds === 'number') return v.seconds * 1000;
   } catch (_) {}
   return 0;
 }
 
-function formatPrice(value) {
-  const num = Number(value);
-  if (!Number.isFinite(num)) return value;
-  return new Intl.NumberFormat('ar-SA').format(num) + ' ريال';
+function price(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return value;
+  return new Intl.NumberFormat('ar-SA').format(n) + ' ريال';
 }
