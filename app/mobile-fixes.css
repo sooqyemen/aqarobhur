@@ -141,6 +141,7 @@ svg {
 }
 
 .premiumHome .mapMock {
+  position: relative !important;
   height: 210px !important;
   border-radius: 16px !important;
   background: none !important;
@@ -174,6 +175,61 @@ svg {
 
 .premiumHome .mapMock > span {
   display: none !important;
+}
+
+.premiumHome .mapMock.cleanGoogleMapPreview::before,
+.premiumHome .mapMock.cleanGoogleMapPreview::after {
+  content: none !important;
+  display: none !important;
+}
+
+.premiumHome .mapMock.cleanGoogleMapPreview > span {
+  display: none !important;
+}
+
+.premiumHome .cleanGoogleMapLink {
+  position: absolute;
+  inset: 0;
+  display: block;
+  color: inherit;
+  text-decoration: none;
+}
+
+.premiumHome .cleanGoogleMapLink iframe {
+  width: 100% !important;
+  height: 100% !important;
+  border: 0 !important;
+  display: block !important;
+  pointer-events: none;
+}
+
+.premiumHome .cleanGoogleMapOverlay {
+  position: absolute;
+  right: 14px;
+  left: 14px;
+  bottom: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, .94);
+  border: 1px solid rgba(184, 132, 47, .20);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, .14);
+  backdrop-filter: blur(10px);
+}
+
+.premiumHome .cleanGoogleMapOverlay strong {
+  color: #111827;
+  font-size: 14px;
+  font-weight: 950;
+}
+
+.premiumHome .cleanGoogleMapOverlay small {
+  color: #667085;
+  font-size: 12px;
+  font-weight: 850;
 }
 
 @media (max-width: 768px) {
@@ -210,6 +266,16 @@ svg {
   .premiumHome .heroBackdrop .sun {
     opacity: .28 !important;
     transform: scale(.58) !important;
+  }
+
+  .premiumHome .mapMock.cleanGoogleMapPreview {
+    height: 190px !important;
+  }
+
+  .premiumHome .cleanGoogleMapOverlay {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
   }
 
   .galleryCard,
