@@ -1,14 +1,13 @@
 import './globals.css';
 import './mobile-fixes.css';
-import './home-fixes.css';
 import { Cairo } from 'next/font/google';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 import WhatsAppBar from '@/components/WhatsAppBar';
+import MobileNav from '@/components/MobileNav';
 import SiteViewTracker from '@/components/analytics/SiteViewTracker';
-import HomeRuntimeFixes from '@/components/HomeRuntimeFixes';
 
-const cairo = Cairo({ 
+const cairo = Cairo({
   subsets: ['arabic', 'latin'],
   weight: ['400', '500', '600', '700', '800', '900'],
   display: 'swap',
@@ -16,18 +15,18 @@ const cairo = Cairo({
 
 export const metadata = {
   title: 'عقار أبحر | خيارك الأول لعقارات جدة',
-  description: 'منصة عقار أبحر هي بوابتك المتطورة للبحث عن أفضل العقارات في مدينة جدة وأبحر، بيع وشراء وتأجير وإدارة أملاك باحترافية وموثوقية عالية.',
-  keywords: 'عقار, أبحر, جدة, عقارات جدة, أراضي أبحر, فلل للبيع, شقق تمليك, إدارة أملاك, تسويق عقاري',
+  description: 'منصة عقار أبحر للبحث عن العقارات في أبحر الشمالية وشمال جدة.',
+  keywords: 'عقار أبحر, عقارات أبحر الشمالية, عقارات شمال جدة',
   openGraph: {
     title: 'عقار أبحر | دليلك العقاري',
-    description: 'اكتشف أفضل العروض العقارية في أبحر وجدة.',
+    description: 'اكتشف عروض الأراضي والفلل والشقق في أبحر الشمالية وشمال جدة.',
     locale: 'ar_SA',
     type: 'website',
   },
 };
 
 export const viewport = {
-  themeColor: '#0f766e',
+  themeColor: '#b8842f',
   width: 'device-width',
   initialScale: 1,
   maximumScale: 1,
@@ -38,14 +37,10 @@ export default function RootLayout({ children }) {
     <html lang="ar" dir="rtl" className={cairo.className}>
       <body>
         <SiteViewTracker />
-        <HomeRuntimeFixes />
         <Header />
-
-        <main className="mainContent">
-          {children}
-        </main>
-
+        <main className="mainContent">{children}</main>
         <Footer />
+        <MobileNav />
         <WhatsAppBar />
       </body>
     </html>
