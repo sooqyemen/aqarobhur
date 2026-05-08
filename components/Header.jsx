@@ -7,7 +7,7 @@ import { getFirebase } from '@/lib/firebaseClient';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { isAdminUser } from '@/lib/admin';
 
-const LOGO_SOURCES = ['/logo-symbol.png?v=4', '/icon-256x256.png?v=4', '/logo-full.png?v=4'];
+const LOGO_SOURCES = ['/logo-symbol.png?v=5', '/icon-256x256.png?v=5', '/logo-full.png?v=5'];
 
 export default function Header() {
   const pathname = usePathname() || '/';
@@ -25,7 +25,7 @@ export default function Header() {
   useEffect(() => setMenuOpen(false), [pathname]);
 
   useEffect(() => {
-    if (typeof document === 'undefined') return;
+    if (typeof document === 'undefined') return undefined;
     document.documentElement.style.overflow = menuOpen ? 'hidden' : '';
     document.body.style.overflow = menuOpen ? 'hidden' : '';
     return () => {
@@ -70,19 +70,20 @@ export default function Header() {
   }
 
   function Logo() {
-    if (logoDead) {
-      return (
-        <span className="logoFallback" aria-hidden="true">ع</span>
-      );
-    }
     return (
-      <img
-        src={LOGO_SOURCES[logoIndex]}
-        alt="عقار أبحر"
-        className="brandLogo"
-        onError={handleLogoError}
-        draggable={false}
-      />
+      <span className="logoBox" aria-hidden="true">
+        {logoDead ? (
+          <span className="logoFallback">ع</span>
+        ) : (
+          <img
+            src={LOGO_SOURCES[logoIndex]}
+            alt=""
+            className="brandLogo"
+            onError={handleLogoError}
+            draggable={false}
+          />
+        )}
+      </span>
     );
   }
 
@@ -171,21 +172,19 @@ export default function Header() {
           position: sticky;
           top: 0;
           z-index: 100;
-          height: 70px;
-          background: rgba(255, 255, 255, .97);
+          height: 66px;
+          background: rgba(255, 255, 255, .98);
           border-bottom: 1px solid rgba(190, 157, 98, .18);
           backdrop-filter: blur(16px);
           box-shadow: 0 8px 24px rgba(15, 23, 42, .035);
         }
-
         .headerInner {
-          height: 70px;
+          height: 66px;
           display: grid;
           grid-template-columns: auto 1fr auto;
           align-items: center;
-          gap: 24px;
+          gap: 22px;
         }
-
         .brandBlock {
           display: inline-flex;
           align-items: center;
@@ -193,50 +192,60 @@ export default function Header() {
           color: #111827;
           text-decoration: none;
           min-width: 0;
+          max-width: 260px;
         }
-
+        .logoBox {
+          width: 42px;
+          height: 42px;
+          flex: 0 0 42px;
+          display: grid;
+          place-items: center;
+          overflow: hidden;
+          border-radius: 12px;
+          background: #fffaf0;
+          border: 1px solid rgba(184, 132, 47, .18);
+        }
         .brandLogo {
-          width: 48px;
-          height: 48px;
+          width: 100%;
+          height: 100%;
+          max-width: 42px;
+          max-height: 42px;
           object-fit: contain;
           display: block;
         }
-
         .logoFallback {
-          width: 46px;
-          height: 46px;
+          width: 100%;
+          height: 100%;
           display: grid;
           place-items: center;
-          border-radius: 14px;
           color: #b8842f;
-          background: #fff7e8;
-          border: 1px solid rgba(184, 132, 47, .25);
           font-size: 22px;
           font-weight: 950;
         }
-
         .brandText {
           display: flex;
           flex-direction: column;
-          line-height: 1.35;
+          line-height: 1.25;
+          min-width: 0;
         }
         .brandText strong {
           color: #b8842f;
-          font-size: 20px;
+          font-size: 19px;
           font-weight: 950;
           letter-spacing: -.02em;
+          white-space: nowrap;
         }
         .brandText small {
           color: #4b5563;
           font-size: 11px;
           font-weight: 800;
+          white-space: nowrap;
         }
-
         .desktopNav {
           display: flex;
           justify-content: center;
           align-items: center;
-          gap: 34px;
+          gap: 30px;
         }
         .desktopNav a {
           position: relative;
@@ -244,14 +253,14 @@ export default function Header() {
           font-size: 14px;
           font-weight: 850;
           text-decoration: none;
-          padding: 25px 0 21px;
+          padding: 23px 0 20px;
         }
         .desktopNav a::after {
           content: '';
           position: absolute;
           right: 0;
           left: 0;
-          bottom: 16px;
+          bottom: 14px;
           height: 2px;
           border-radius: 99px;
           background: #b8842f;
@@ -262,20 +271,19 @@ export default function Header() {
         .desktopNav a.active { color: #a97625; }
         .desktopNav a:hover::after,
         .desktopNav a.active::after { transform: scaleX(1); }
-
         .headerActions {
           display: flex;
           align-items: center;
-          gap: 10px;
+          gap: 9px;
         }
         .addListingBtn,
         .loginBtn {
-          min-height: 38px;
+          min-height: 37px;
           display: inline-flex;
           align-items: center;
           justify-content: center;
           gap: 7px;
-          padding: 0 14px;
+          padding: 0 13px;
           border-radius: 8px;
           font-size: 13px;
           font-weight: 950;
@@ -296,7 +304,6 @@ export default function Header() {
         }
         .addListingBtn .material-icons-outlined,
         .loginBtn .material-icons-outlined { font-size: 17px; }
-
         .mobileMenuBtn,
         .closeBtn {
           width: 40px;
@@ -309,7 +316,6 @@ export default function Header() {
           color: #a97625;
           cursor: pointer;
         }
-
         .drawerBackdrop {
           position: fixed;
           inset: 0;
@@ -328,7 +334,7 @@ export default function Header() {
           flex-direction: column;
         }
         .drawerHead {
-          min-height: 76px;
+          min-height: 74px;
           display: flex;
           align-items: center;
           justify-content: space-between;
@@ -364,18 +370,20 @@ export default function Header() {
           border-top: 1px solid rgba(184, 132, 47, .18);
         }
         .full { width: 100%; min-height: 44px; }
-
         @media (max-width: 920px) {
           .premiumHeader,
-          .headerInner { height: 66px; }
-          .headerInner { grid-template-columns: 1fr auto; }
+          .headerInner { height: 62px; }
+          .headerInner { grid-template-columns: 1fr auto; gap: 10px; }
           .desktopNav { display: none; }
           .mobileMenuBtn,
           .closeBtn { display: grid; }
-          .addListingBtn:not(.full) { display: none; }
+          .addListingBtn:not(.full),
           .loginBtn:not(.full) { display: none; }
-          .brandLogo { width: 42px; height: 42px; }
-          .brandText strong { font-size: 18px; }
+          .brandBlock { max-width: calc(100vw - 92px); }
+          .logoBox { width: 38px; height: 38px; flex-basis: 38px; }
+          .brandLogo { max-width: 38px; max-height: 38px; }
+          .brandText strong { font-size: 17px; }
+          .brandText small { font-size: 10px; }
         }
       `}</style>
     </>
