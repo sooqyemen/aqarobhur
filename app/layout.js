@@ -6,6 +6,7 @@ import Footer from '@/components/Footer';
 import WhatsAppBar from '@/components/WhatsAppBar';
 import MobileNav from '@/components/MobileNav';
 import SiteViewTracker from '@/components/analytics/SiteViewTracker';
+import HomeMapRuntimePatch from '@/components/HomeMapRuntimePatch';
 
 const cairo = Cairo({
   subsets: ['arabic', 'latin'],
@@ -37,6 +38,7 @@ export default function RootLayout({ children }) {
     <html lang="ar" dir="rtl" className={cairo.className}>
       <body>
         <SiteViewTracker />
+        <HomeMapRuntimePatch />
         <Header />
         <main className="mainContent">{children}</main>
         <Footer />
