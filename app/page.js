@@ -2,188 +2,160 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import ListingCard from '@/components/ListingCard';
-import NeighborhoodGrid from '@/components/NeighborhoodGrid';
+import { useRouter } from 'next/navigation';
 import { fetchLatestListings } from '@/lib/listings';
 import { buildWhatsAppLink } from '@/components/WhatsAppBar';
+import { formatPriceSAR } from '@/lib/format';
+import { collectMediaEntries, isVideoLike } from '@/lib/media';
 
-const QUICK_CARDS = [
-  {
-    icon: 'real_estate_agent',
-    title: 'العروض العقارية',
-    description: 'تصفح أحدث عروض الأراضي والفلل والشقق المتاحة للبيع والإيجار في أبحر الشمالية وشمال جدة.',
-    href: '/listings',
-    cta: 'تصفح العروض',
-  },
-  {
-    icon: 'smart_toy',
-    title: 'العقاري الذكي',
-    description: 'اكتب طلبك العقاري بلغة بسيطة، وسيبحث العقاري الذكي في العروض المتوفرة ويقترح الأقرب لاحتياجك.',
-    href: '/smart',
-    cta: 'اسأل العقاري الذكي',
-    highlight: true,
-  },
-  {
-    icon: 'playlist_add_check_circle',
-    title: 'أرسل طلبك',
-    description: 'إذا لم تجد العقار المناسب، أرسل طلبك وسنقوم بمراجعته والبحث عن الخيارات المناسبة لك.',
-    href: '/request',
-    cta: 'إرسال طلب',
-  },
+const GOLD = '#b8842f';
+
+const NEIGHBORHOODS = [
+  'أبحر الشمالية',
+  'الفنار',
+  'الزمرد',
+  'الياقوت',
+  'الشراع',
+  'الأمواج',
+  'جوهرة العروس',
+  'الهجرة',
+  'طيبة الفرعية',
 ];
 
-const SERVICE_CARDS = [
+const SERVICES = [
   {
-    icon: 'verified',
-    title: 'عقود الوساطة وترخيص الإعلان',
-    description: 'إنشاء عقد وساطة بين المكتب ومالك العقار عبر منصة هيئة العقار، ثم إصدار ترخيص الإعلان العقاري بعد اعتماد العقد.',
+    icon: 'groups',
+    title: 'تسويق عقاري',
+    text: 'تسويق احترافي لعقارك للوصول لأفضل المشترين والمستأجرين.',
     href: '/marketing-request',
-    cta: 'طلب الخدمة',
   },
   {
-    icon: 'assignment_turned_in',
-    title: 'عقود الإيجار',
-    description: 'نقدم خدمة توثيق عقود الإيجار وتجهيز بيانات العقد ومتابعة خطوات القبول والتوثيق حتى اكتمال الإجراء.',
-    href: '/ejar-request',
-    cta: 'طلب توثيق',
-  },
-  {
-    icon: 'campaign',
-    title: 'تسويق عقارك',
-    description: 'نقدم خدمة تسويق عقارك باحتراف، من عرض العقار وإبرازه للعملاء الجادين إلى متابعة طلبات المهتمين.',
+    icon: 'fact_check',
+    title: 'إصدار ترخيص إعلان',
+    text: 'نساعدك في عقد الوساطة وإصدار ترخيص الإعلان بسرعة واحترافية.',
     href: '/marketing-request',
-    cta: 'سوّق عقارك',
   },
   {
-    icon: 'support_agent',
-    title: 'استشارة عقارية مجانية',
-    description: 'نقدم استشارة عقارية مجانية في البيع والشراء والإيجار والتسويق والعقود، ونوضح لك الخيارات الأنسب لاحتياجك.',
+    icon: 'assignment',
+    title: 'إدارة الطلبات',
+    text: 'تنظيم طلبات العملاء ومطابقتها مع العروض المناسبة بكفاءة.',
     href: '/request',
-    cta: 'اطلب استشارة',
+  },
+  {
+    icon: 'grade',
+    title: 'عروض مباشرة',
+    text: 'عروض عقارية مباشرة من الملاك والوكلاء المعتمدين متى توفرت.',
+    href: '/listings',
   },
 ];
 
 const FAQ_ITEMS = [
-  {
-    question: 'كيف أصدر ضريبة التصرفات العقارية؟',
-    answer: 'يتم تسجيل التصرف العقاري قبل الإفراغ عبر الخدمة الرسمية، بإدخال بيانات العقار وقيمة البيع، ثم إصدار رقم الطلب أو فاتورة السداد عند وجود مبلغ مستحق. وللتوضيح والمساعدة يمكنك التواصل معنا عبر واتساب.',
-  },
-  {
-    question: 'كيف أقبل عرض البيع في البورصة العقارية؟',
-    answer: 'عند وصول عرض بيع أو طلب صفقة، تتم مراجعة بيانات الصك والصفقة والسعر من حسابك في البورصة العقارية، ثم قبول الطلب أو رفضه حسب الإجراء المتاح في المنصة.',
-  },
-  {
-    question: 'كيف أقدم عرض بيع على منصة البورصة العقارية؟',
-    answer: 'يمكن تقديم عرض بيع عبر الدخول للمنصة، اختيار العقار أو الصك، إدخال بيانات الصفقة والسعر والطرف الآخر، ثم إرسال الطلب ليتم استكمال القبول والإجراءات.',
-  },
+  'كيف يمكنني إضافة إعلان؟',
+  'هل هناك رسوم على نشر الإعلانات؟',
+  'كيف يتم التحقق من الإعلانات؟',
+  'هل يمكنني تعديل أو حذف الإعلان؟',
 ];
 
-const styles = {
-  section: { marginTop: 34 },
-  grid3: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16, alignItems: 'stretch' },
-  grid4: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16, alignItems: 'stretch' },
-  card: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 12,
-    minHeight: 210,
-    padding: 20,
-    borderRadius: 22,
-    background: '#fff',
-    border: '1px solid var(--border)',
-    boxShadow: '0 12px 30px rgba(15, 23, 42, 0.06)',
-    color: 'var(--text)',
-    textDecoration: 'none',
-    overflow: 'hidden',
-  },
-  icon: {
-    width: 50,
-    height: 50,
-    borderRadius: 16,
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    background: 'rgba(214, 179, 91, 0.14)',
-    color: 'var(--primary)',
-    flexShrink: 0,
-  },
-  title: { margin: '4px 0 0', color: 'var(--text)', fontSize: 19, fontWeight: 950, lineHeight: 1.55 },
-  desc: { margin: 0, color: 'var(--muted)', fontSize: 14, fontWeight: 700, lineHeight: 1.9 },
-  link: { marginTop: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--primary)', fontWeight: 950 },
-};
+function updateQuery(filters) {
+  const params = new URLSearchParams();
+  if (filters.neighborhood) params.set('neighborhood', filters.neighborhood);
+  if (filters.propertyType) params.set('propertyType', filters.propertyType);
+  if (filters.dealType) params.set('dealType', filters.dealType);
+  if (filters.maxPrice) params.set('maxPrice', filters.maxPrice);
+  const query = params.toString();
+  return query ? `/listings?${query}` : '/listings';
+}
 
-function ListingsState({ loading, error, items }) {
-  if (loading) {
-    return (
-      <div className="listing-grid">
-        {[1, 2, 3, 4].map((id) => <div key={id} className="skeleton-card" />)}
-      </div>
-    );
+function getListingId(item) {
+  return item?.id || item?.docId || item?.listingId || item?._id || '';
+}
+
+function getCoverUrl(item) {
+  try {
+    const entries = collectMediaEntries(item);
+    const image = entries.find((entry) => entry?.url && !isVideoLike(entry));
+    return image?.url || entries?.[0]?.url || '';
+  } catch {
+    return '';
   }
-
-  if (error) return <div className="error-card">{error}</div>;
-  if (!items.length) return <div className="empty-card">لا توجد عقارات منشورة حاليًا في هذه الفئة.</div>;
-
-  return (
-    <div className="listing-grid">
-      {items.map((item, index) => (
-        <ListingCard key={item?.id || item?.docId || item?.slug || `listing-${index}`} item={item} />
-      ))}
-    </div>
-  );
 }
 
-function SectionHeader({ eyebrow, title, description, action }) {
+function listingWhatsAppText(item) {
+  const title = item?.title || 'العرض العقاري';
+  const neighborhood = item?.neighborhood ? ` في ${item.neighborhood}` : '';
+  return `السلام عليكم، أرغب في الاستفسار عن ${title}${neighborhood}.`;
+}
+
+function HomeListingCard({ item, index, fallbackPhone }) {
+  const safeId = getListingId(item);
+  const detailLink = safeId ? `/listing/${encodeURIComponent(String(safeId))}` : '/listings';
+  const coverUrl = getCoverUrl(item);
+  const isRent = item?.dealType === 'rent';
+  const price = item?.price ? formatPriceSAR(item.price) : 'السعر عند التواصل';
+  const phone = item?.contactPhone || fallbackPhone;
+  const whatsappHref = buildWhatsAppLink({ phone, text: listingWhatsAppText(item) });
+  const area = item?.area ? `${item.area} م²` : 'المساحة غير محددة';
+  const facade = item?.facade || item?.frontage || item?.direction || 'الواجهة غير محددة';
+  const neighborhood = item?.neighborhood || 'أبحر الشمالية';
+  const title = item?.title || item?.propertyType || 'عرض عقاري';
+
   return (
-    <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 18, marginBottom: 18, flexWrap: 'wrap' }}>
-      <div style={{ maxWidth: 760 }}>
-        {eyebrow ? <span style={{ color: 'var(--primary)', fontWeight: 950, fontSize: 13 }}>{eyebrow}</span> : null}
-        <h2 style={{ margin: '6px 0 8px', color: 'var(--text)', fontSize: 'clamp(24px, 4vw, 34px)', fontWeight: 950, lineHeight: 1.35 }}>{title}</h2>
-        {description ? <p style={{ margin: 0, color: 'var(--muted)', fontWeight: 700, lineHeight: 1.9, fontSize: 15 }}>{description}</p> : null}
+    <article className="homeListingCard">
+      <Link href={detailLink} className="homeListingMedia" aria-label={title}>
+        {coverUrl ? (
+          <img src={coverUrl} alt={title} loading="lazy" />
+        ) : (
+          <div className={`listingFallback fallback${(index % 4) + 1}`}>
+            <span className="material-icons-outlined">villa</span>
+          </div>
+        )}
+        <span className={`dealChip ${isRent ? 'rent' : 'sale'}`}>{isRent ? 'للإيجار' : 'للبيع'}</span>
+        <span className="heartChip"><span className="material-icons-outlined">favorite_border</span></span>
+        <strong className="priceOverlay">{price}{isRent ? <small> / سنوي</small> : null}</strong>
+      </Link>
+
+      <div className="homeListingBody">
+        <Link href={detailLink} className="homeListingTitle">{title}</Link>
+        <p className="homeListingLocation">{neighborhood}</p>
+        <div className="homeListingFacts">
+          <span>{area}</span>
+          <span>{facade}</span>
+        </div>
+        <div className="homeListingActions">
+          <a href={whatsappHref} target="_blank" rel="noopener noreferrer" className="whatsBtn">
+            <span className="material-icons-outlined">chat</span>
+            واتساب
+          </a>
+          <Link href={detailLink} className="detailsBtn">التفاصيل</Link>
+        </div>
       </div>
-      {action}
-    </div>
+    </article>
   );
 }
 
-function InfoCard({ item }) {
+function ListingSkeletons() {
   return (
-    <Link
-      href={item.href}
-      style={{
-        ...styles.card,
-        borderColor: item.highlight ? 'rgba(214, 179, 91, 0.65)' : 'var(--border)',
-        background: item.highlight ? 'linear-gradient(135deg, rgba(214,179,91,.14), #fff 62%)' : '#fff',
-      }}
-    >
-      <div style={styles.icon}><span className="material-icons-outlined" style={{ fontSize: 28 }}>{item.icon}</span></div>
-      <h3 style={styles.title}>{item.title}</h3>
-      <p style={styles.desc}>{item.description}</p>
-      <span style={styles.link}>{item.cta}<span className="material-icons-outlined" style={{ fontSize: 18 }}>arrow_back</span></span>
-    </Link>
-  );
-}
-
-function FaqCard({ item }) {
-  return (
-    <div style={{ ...styles.card, minHeight: 0 }}>
-      <h3 style={{ ...styles.title, fontSize: 18 }}>{item.question}</h3>
-      <p style={{ ...styles.desc, fontSize: 14 }}>{item.answer}</p>
+    <div className="homeListingsGrid">
+      {[1, 2, 3, 4].map((id) => <div key={id} className="homeListingSkeleton" />)}
     </div>
   );
 }
 
 export default function HomePage() {
+  const router = useRouter();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errorText, setErrorText] = useState('');
-  const [activeTab, setActiveTab] = useState('all');
-
-  const whatsappNumber = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || '966597520693';
-  const whatsappLink = buildWhatsAppLink({
-    phone: whatsappNumber,
-    text: 'السلام عليكم، أرغب في الاستفسار عن عروض وخدمات عقار أبحر.',
+  const [filters, setFilters] = useState({
+    neighborhood: '',
+    propertyType: '',
+    dealType: '',
+    maxPrice: '',
   });
+  const [request, setRequest] = useState({ name: '', phone: '', type: '', message: '' });
+
+  const officePhone = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || '966597520693';
+  const listingsHref = useMemo(() => updateQuery(filters), [filters]);
 
   useEffect(() => {
     let active = true;
@@ -194,7 +166,7 @@ export default function HomePage() {
         setErrorText('');
         const result = await fetchLatestListings({ n: 8, onlyPublic: true, includeLegacy: false });
         if (!active) return;
-        setItems(Array.isArray(result) ? result : []);
+        setItems(Array.isArray(result) ? result.filter(Boolean) : []);
       } catch {
         if (!active) return;
         setErrorText('تعذر تحميل العقارات الآن، يرجى المحاولة لاحقاً.');
@@ -208,123 +180,896 @@ export default function HomePage() {
     return () => { active = false; };
   }, []);
 
-  const filteredItems = useMemo(() => {
-    const safeItems = Array.isArray(items) ? items.filter(Boolean) : [];
-    if (activeTab === 'all') return safeItems;
-    return safeItems.filter((item) => item.dealType === activeTab);
-  }, [items, activeTab]);
+  const visibleItems = useMemo(() => {
+    return items
+      .filter((item) => {
+        if (filters.dealType && item?.dealType !== filters.dealType) return false;
+        if (filters.neighborhood && item?.neighborhood !== filters.neighborhood) return false;
+        if (filters.propertyType && item?.propertyType !== filters.propertyType) return false;
+        return true;
+      })
+      .slice(0, 4);
+  }, [items, filters]);
 
-  const listingHref = activeTab === 'all' ? '/listings' : `/listings?dealType=${activeTab}`;
+  function setFilter(key, value) {
+    setFilters((prev) => ({ ...prev, [key]: value }));
+  }
 
-  const tabStyle = (key) => ({
-    border: '1px solid var(--border)',
-    background: activeTab === key ? 'var(--primary)' : '#fff',
-    color: activeTab === key ? '#fff' : 'var(--text)',
-    borderRadius: 999,
-    padding: '10px 18px',
-    fontWeight: 950,
-    cursor: 'pointer',
-  });
+  function handleSearchSubmit(event) {
+    event.preventDefault();
+    router.push(listingsHref);
+  }
+
+  function handleRequestSubmit(event) {
+    event.preventDefault();
+    const params = new URLSearchParams();
+    if (request.name) params.set('name', request.name);
+    if (request.phone) params.set('phone', request.phone);
+    if (request.type) params.set('type', request.type);
+    if (request.message) params.set('message', request.message);
+    const query = params.toString();
+    router.push(query ? `/request?${query}` : '/request');
+  }
 
   return (
     <>
       <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined" rel="stylesheet" />
 
-      <div>
-        <section className="home-hero-section">
-          <div className="home-hero-overlay" />
-          <div className="container home-hero-content">
-            <span style={{ display: 'inline-flex', padding: '8px 14px', borderRadius: 999, background: 'rgba(255,255,255,.18)', color: '#fff', border: '1px solid rgba(255,255,255,.25)', fontWeight: 900, marginBottom: 14 }}>عقار أبحر — شمال جدة</span>
-            <h1 className="home-hero-title">عقارات أبحر الشمالية <span>وشمال جدة</span></h1>
-            <p className="home-hero-subtitle">عروض بيع وإيجار، خدمات عقارية، عقود وساطة، عقود إيجار، واستشارة عقارية مجانية.</p>
+      <main className="premiumHome" dir="rtl">
+        <section className="heroPanel">
+          <div className="heroBackdrop" aria-hidden="true">
+            <span className="sun" />
+            <span className="coastLine" />
+            <span className="villa villaOne" />
+            <span className="villa villaTwo" />
+            <span className="villa villaThree" />
+            <span className="palm palmOne" />
+            <span className="palm palmTwo" />
+          </div>
 
-            <div style={{ display: 'flex', gap: 12, justifyContent: 'center', alignItems: 'center', flexWrap: 'wrap', margin: '24px 0 12px' }}>
-              <Link href="/listings" className="btn btnPrimary">تصفح العروض <span className="material-icons-outlined">arrow_back</span></Link>
-              <Link href="/smart" className="btn">اسأل العقاري الذكي <span className="material-icons-outlined">smart_toy</span></Link>
-              <a href={whatsappLink} target="_blank" rel="noopener noreferrer" className="btn">واتساب <span className="material-icons-outlined">chat</span></a>
-            </div>
+          <div className="container heroContent">
+            <h1>عقارات أبحر الشمالية وشمال جدة</h1>
+            <p>أراضي، فلل، شقق للبيع والإيجار في أرقى أحياء أبحر وشمال جدة</p>
 
-            <div className="search-container glass-effect" style={{ marginTop: 18 }}>
-              <div className="search-tabs">
-                <button className={`tab-btn ${activeTab === 'all' ? 'active' : ''}`} onClick={() => setActiveTab('all')}>الكل</button>
-                <button className={`tab-btn ${activeTab === 'sale' ? 'active' : ''}`} onClick={() => setActiveTab('sale')}>للبيع</button>
-                <button className={`tab-btn ${activeTab === 'rent' ? 'active' : ''}`} onClick={() => setActiveTab('rent')}>للإيجار</button>
-              </div>
-              <div className="search-action">
-                <Link href={listingHref} className="main-search-btn">استكشف العقارات الآن <span className="material-icons-outlined">arrow_back</span></Link>
-              </div>
-            </div>
+            <form className="heroSearch" onSubmit={handleSearchSubmit}>
+              <label>
+                <span>الحي</span>
+                <select value={filters.neighborhood} onChange={(e) => setFilter('neighborhood', e.target.value)}>
+                  <option value="">اختر الحي</option>
+                  {NEIGHBORHOODS.map((name) => <option key={name} value={name}>{name}</option>)}
+                </select>
+              </label>
+
+              <label>
+                <span>نوع العقار</span>
+                <select value={filters.propertyType} onChange={(e) => setFilter('propertyType', e.target.value)}>
+                  <option value="">اختر نوع العقار</option>
+                  <option value="أرض">أرض</option>
+                  <option value="فيلا">فيلا</option>
+                  <option value="شقة">شقة</option>
+                  <option value="عمارة">عمارة</option>
+                </select>
+              </label>
+
+              <label>
+                <span>بيع / إيجار</span>
+                <select value={filters.dealType} onChange={(e) => setFilter('dealType', e.target.value)}>
+                  <option value="">الكل</option>
+                  <option value="sale">للبيع</option>
+                  <option value="rent">للإيجار</option>
+                </select>
+              </label>
+
+              <label>
+                <span>السعر</span>
+                <select value={filters.maxPrice} onChange={(e) => setFilter('maxPrice', e.target.value)}>
+                  <option value="">الحد الأدنى - الحد الأقصى</option>
+                  <option value="500000">حتى 500 ألف</option>
+                  <option value="1000000">حتى مليون</option>
+                  <option value="2000000">حتى 2 مليون</option>
+                  <option value="5000000">حتى 5 مليون</option>
+                </select>
+              </label>
+
+              <button type="submit">
+                <span className="material-icons-outlined">search</span>
+                بحث
+              </button>
+            </form>
           </div>
         </section>
 
-        <div className="container home-content-body">
-          <section style={{ ...styles.section, ...styles.grid3 }}>
-            {QUICK_CARDS.map((item) => <InfoCard key={item.title} item={item} />)}
-          </section>
+        <section className="container neighborhoodsBand" aria-label="تصفح الأحياء">
+          <div className="bandHeader">
+            <h2><span className="material-icons-outlined">location_on</span> تصفح الأحياء</h2>
+            <Link href="/neighborhoods">عرض جميع الأحياء</Link>
+          </div>
+          <div className="chipsScroller">
+            {NEIGHBORHOODS.map((name) => (
+              <Link key={name} href={`/listings?neighborhood=${encodeURIComponent(name)}`} className="neighborhoodChip">
+                <span className="material-icons-outlined">park</span>
+                {name}
+              </Link>
+            ))}
+          </div>
+        </section>
 
-          <section className="latest-listings-section" style={styles.section}>
-            <SectionHeader
-              eyebrow="العروض"
-              title="أحدث العروض العقارية"
-              description="اكتشف أحدث الأراضي والفلل والشقق المدرجة لدينا، مع إمكانية تصفية العروض حسب البيع أو الإيجار."
-              action={<Link href="/listings" className="nb-view-btn outline-btn">عرض جميع العقارات</Link>}
-            />
-            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 18 }}>
-              <button style={tabStyle('all')} onClick={() => setActiveTab('all')}>الكل</button>
-              <button style={tabStyle('sale')} onClick={() => setActiveTab('sale')}>للبيع</button>
-              <button style={tabStyle('rent')} onClick={() => setActiveTab('rent')}>للإيجار</button>
+        <section className="container listingsSection">
+          <div className="sectionHeading compactHeading">
+            <div>
+              <h2><span className="material-icons-outlined">apartment</span> أحدث العروض العقارية</h2>
             </div>
-            <ListingsState loading={loading} error={errorText} items={filteredItems} />
-          </section>
+            <Link href="/listings">عرض جميع العروض</Link>
+          </div>
 
-          <section style={styles.section}>
-            <SectionHeader
-              eyebrow="الخدمات"
-              title="خدماتنا العقارية"
-              description="نقدم خدمات عقارية متكاملة تشمل عقود الوساطة، ترخيص الإعلانات، عقود الإيجار، تسويق العقارات، والاستشارة العقارية المجانية."
-            />
-            <div style={styles.grid4}>
-              {SERVICE_CARDS.map((item) => <InfoCard key={item.title} item={item} />)}
+          {loading ? <ListingSkeletons /> : null}
+          {!loading && errorText ? <div className="homeError">{errorText}</div> : null}
+          {!loading && !errorText && !visibleItems.length ? <div className="homeEmpty">لا توجد عقارات مطابقة حالياً. جرّب عرض جميع العروض.</div> : null}
+          {!loading && !errorText && visibleItems.length ? (
+            <div className="homeListingsGrid">
+              {visibleItems.map((item, index) => (
+                <HomeListingCard key={getListingId(item) || `home-listing-${index}`} item={item} index={index} fallbackPhone={officePhone} />
+              ))}
             </div>
-          </section>
+          ) : null}
+        </section>
 
-          <section style={styles.section}>
-            <NeighborhoodGrid title="استكشف المناطق والأحياء" showViewAll />
-          </section>
+        <section className="container mapRequestGrid">
+          <article className="mapPreviewCard">
+            <div className="sectionHeading miniHeading">
+              <div>
+                <h2><span className="material-icons-outlined">pin_drop</span> استعرض العقارات على الخريطة</h2>
+                <p>ابحث عن العقارات المتاحة مباشرة على الخريطة وتعرّف على مواقعها بدقة.</p>
+              </div>
+            </div>
+            <div className="mapMock" aria-hidden="true">
+              <span className="seaBlock" />
+              <span className="road r1" />
+              <span className="road r2" />
+              <span className="road r3" />
+              <span className="pin p1" />
+              <span className="pin p2" />
+              <span className="pin p3" />
+              <span className="mapLabel l1">الفنار</span>
+              <span className="mapLabel l2">الزمرد</span>
+              <span className="mapLabel l3">الشراع</span>
+            </div>
+            <Link href="/map" className="goldAction mapAction"><span className="material-icons-outlined">map</span> فتح الخريطة</Link>
+          </article>
 
-          <section style={styles.section}>
-            <SectionHeader
-              eyebrow="معرفة عقارية"
-              title="أسئلة عقارية مهمة"
-              description="إجابات مختصرة على أسئلة يحتاجها المالك أو المشتري عند البيع، الإفراغ، ضريبة التصرفات العقارية، والتعامل مع البورصة العقارية."
-              action={<Link href="/faq" className="nb-view-btn outline-btn">عرض جميع الأسئلة</Link>}
-            />
-            <div style={styles.grid3}>
-              {FAQ_ITEMS.map((item) => <FaqCard key={item.question} item={item} />)}
+          <article className="requestCard">
+            <div className="sectionHeading miniHeading centeredHeading">
+              <div>
+                <h2><span className="material-icons-outlined">send</span> أرسل طلبك العقاري</h2>
+                <p>أخبرنا عن طلبك وسيتواصل معك أحد مستشارينا في أسرع وقت.</p>
+              </div>
             </div>
-            <div style={{ marginTop: 16, display: 'grid', gridTemplateColumns: 'auto 1fr auto', alignItems: 'center', gap: 12, padding: 16, borderRadius: 18, background: '#f8fafc', border: '1px solid var(--border)' }} className="faqHelpBox">
-              <span className="material-icons-outlined" style={{ color: 'var(--primary)', fontSize: 28 }}>support_agent</span>
-              <p style={{ margin: 0, color: 'var(--muted)', lineHeight: 1.8, fontWeight: 800 }}>للتوضيح أو المساعدة في أي إجراء عقاري، يمكنك التواصل معنا عبر واتساب وسنوضح لك الخطوات المناسبة حسب حالتك.</p>
-              <a href={whatsappLink} target="_blank" rel="noopener noreferrer" style={{ color: '#fff', background: 'var(--primary)', textDecoration: 'none', borderRadius: 999, padding: '10px 16px', fontWeight: 950, whiteSpace: 'nowrap' }}>تواصل عبر واتساب</a>
-            </div>
-          </section>
 
-          <section className="cta-section gradient-bg" style={styles.section}>
-            <div className="cta-text">
-              <h2>تحتاج خدمة أو استشارة عقارية؟</h2>
-              <p>تواصل معنا لطلب خدمة عقارية، استشارة مجانية، أو متابعة عروض البيع والإيجار في أبحر الشمالية وشمال جدة.</p>
+            <form className="requestForm" onSubmit={handleRequestSubmit}>
+              <label>
+                <span>الاسم</span>
+                <input value={request.name} onChange={(e) => setRequest((prev) => ({ ...prev, name: e.target.value }))} placeholder="الاسم الكامل" />
+              </label>
+              <label>
+                <span>رقم الجوال</span>
+                <input value={request.phone} onChange={(e) => setRequest((prev) => ({ ...prev, phone: e.target.value }))} placeholder="05XXXXXXXX" />
+              </label>
+              <label>
+                <span>نوع الطلب</span>
+                <select value={request.type} onChange={(e) => setRequest((prev) => ({ ...prev, type: e.target.value }))}>
+                  <option value="">اختر نوع الطلب</option>
+                  <option value="شراء">شراء</option>
+                  <option value="إيجار">إيجار</option>
+                  <option value="تسويق عقار">تسويق عقار</option>
+                </select>
+              </label>
+              <label>
+                <span>تفاصيل الطلب</span>
+                <textarea value={request.message} onChange={(e) => setRequest((prev) => ({ ...prev, message: e.target.value }))} placeholder="اكتب تفاصيل طلبك..." rows={3} />
+              </label>
+              <button type="submit" className="goldAction fullAction"><span className="material-icons-outlined">near_me</span> إرسال الطلب</button>
+            </form>
+          </article>
+        </section>
+
+        <section className="container servicesSection">
+          <div className="sectionHeading compactHeading">
+            <div>
+              <h2><span className="material-icons-outlined">real_estate_agent</span> خدماتنا</h2>
             </div>
-            <a href={whatsappLink} target="_blank" rel="noopener noreferrer" className="whatsapp-cta-btn pulse-effect">
-              <span className="material-icons-outlined">chat</span>
-              تحدث معنا عبر الواتساب
-            </a>
-          </section>
-        </div>
-      </div>
+          </div>
+          <div className="serviceGrid">
+            {SERVICES.map((service) => (
+              <Link href={service.href} key={service.title} className="serviceCard">
+                <span className="material-icons-outlined">{service.icon}</span>
+                <div>
+                  <h3>{service.title}</h3>
+                  <p>{service.text}</p>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </section>
+
+        <section className="container faqSection">
+          <div className="sectionHeading compactHeading">
+            <div>
+              <h2><span className="material-icons-outlined">chat_bubble_outline</span> الأسئلة الشائعة</h2>
+            </div>
+          </div>
+          <div className="faqRow">
+            {FAQ_ITEMS.map((question) => (
+              <Link href="/faq" key={question} className="faqPill">
+                {question}
+                <span className="material-icons-outlined">expand_more</span>
+              </Link>
+            ))}
+          </div>
+          <Link href="/faq" className="allFaqLink">عرض جميع الأسئلة</Link>
+        </section>
+      </main>
 
       <style jsx>{`
-        @media (max-width: 720px) {
-          .faqHelpBox { grid-template-columns: 1fr !important; }
+        :global(.mainContent) { background: #fbfaf7; overflow-x: clip; }
+        :global(body) { background: #fbfaf7; }
+
+        .premiumHome {
+          --home-gold: ${GOLD};
+          --home-gold-dark: #8f631f;
+          --home-text: #111827;
+          --home-muted: #667085;
+          --home-border: rgba(190, 157, 98, 0.23);
+          background: #fbfaf7;
+          color: var(--home-text);
+          padding-bottom: 22px;
+        }
+
+        .heroPanel {
+          position: relative;
+          min-height: 356px;
+          overflow: visible;
+          background: linear-gradient(180deg, #f6ead7 0%, #f7f3ea 64%, #ffffff 100%);
+        }
+
+        .heroBackdrop {
+          position: absolute;
+          inset: 0;
+          overflow: hidden;
+          background:
+            linear-gradient(90deg, rgba(255,255,255,.2), rgba(255,255,255,.42)),
+            radial-gradient(circle at 16% 38%, rgba(244, 184, 95, .58), transparent 12%),
+            radial-gradient(circle at 72% 16%, rgba(255, 255, 255, .7), transparent 24%),
+            linear-gradient(135deg, #f6ddb3 0%, #dfe9ee 46%, #efe5d5 100%);
+        }
+
+        .heroBackdrop::after {
+          content: '';
+          position: absolute;
+          inset: 0;
+          background: linear-gradient(180deg, rgba(255,255,255,.05), rgba(0,0,0,.12));
+        }
+
+        .sun {
+          position: absolute;
+          right: 13%;
+          top: 74px;
+          width: 70px;
+          height: 70px;
+          border-radius: 50%;
+          background: rgba(255, 219, 146, .72);
+          box-shadow: 0 0 80px rgba(255, 205, 105, .9);
+        }
+
+        .coastLine {
+          position: absolute;
+          inset-inline: -8% -4%;
+          bottom: -24px;
+          height: 190px;
+          background: linear-gradient(110deg, #7fb6c5 0 36%, #dbc9aa 36% 100%);
+          clip-path: polygon(0 34%, 32% 20%, 50% 37%, 69% 18%, 100% 0, 100% 100%, 0 100%);
+          opacity: .88;
+        }
+
+        .villa {
+          position: absolute;
+          bottom: 78px;
+          width: 210px;
+          height: 105px;
+          border-radius: 12px 12px 0 0;
+          background: linear-gradient(180deg, #f7f0e5, #d7c7b0);
+          box-shadow: 0 18px 40px rgba(37, 42, 52, .18);
+        }
+        .villa::before {
+          content: '';
+          position: absolute;
+          inset-inline: 16px;
+          top: -42px;
+          height: 64px;
+          border-radius: 9px;
+          background: linear-gradient(180deg, #fdf8ef, #d9cab7);
+        }
+        .villa::after {
+          content: '';
+          position: absolute;
+          left: 18px;
+          right: 18px;
+          bottom: 22px;
+          height: 44px;
+          border-radius: 4px;
+          background: repeating-linear-gradient(90deg, rgba(16, 27, 43, .72) 0 38px, rgba(255,255,255,.34) 38px 48px);
+        }
+        .villaOne { left: 8%; transform: scale(.82); opacity: .78; }
+        .villaTwo { left: 28%; transform: scale(1); opacity: .92; }
+        .villaThree { left: 51%; transform: scale(.88); opacity: .82; }
+
+        .palm {
+          position: absolute;
+          bottom: 112px;
+          width: 7px;
+          height: 92px;
+          background: #475569;
+          border-radius: 999px;
+          opacity: .48;
+        }
+        .palm::before {
+          content: '';
+          position: absolute;
+          width: 86px;
+          height: 52px;
+          right: -42px;
+          top: -32px;
+          background: #475569;
+          clip-path: polygon(50% 100%, 0 0, 36% 36%, 50% 0, 64% 36%, 100% 0);
+        }
+        .palmOne { left: 20%; }
+        .palmTwo { left: 76%; transform: scale(.82); }
+
+        .heroContent {
+          position: relative;
+          z-index: 2;
+          min-height: 356px;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          text-align: center;
+          padding-top: 52px;
+          padding-bottom: 68px;
+        }
+
+        .heroContent h1 {
+          margin: 0 0 12px;
+          font-size: clamp(28px, 4.3vw, 46px);
+          line-height: 1.35;
+          font-weight: 950;
+          color: #152033;
+          letter-spacing: -.02em;
+          text-shadow: 0 2px 20px rgba(255,255,255,.6);
+        }
+
+        .heroContent p {
+          margin: 0;
+          color: #243047;
+          font-size: clamp(15px, 2vw, 20px);
+          font-weight: 800;
+        }
+
+        .heroSearch {
+          position: absolute;
+          left: 50%;
+          bottom: -45px;
+          transform: translateX(-50%);
+          width: min(1020px, calc(100vw - 36px));
+          display: grid;
+          grid-template-columns: 1.1fr 1.1fr 1fr 1.15fr 128px;
+          gap: 12px;
+          align-items: end;
+          padding: 20px;
+          border-radius: 18px;
+          background: rgba(255, 255, 255, .96);
+          border: 1px solid rgba(255,255,255,.84);
+          box-shadow: 0 22px 55px rgba(15, 23, 42, .17);
+          backdrop-filter: blur(18px);
+        }
+
+        .heroSearch label,
+        .requestForm label {
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+          text-align: right;
+          min-width: 0;
+        }
+
+        .heroSearch label span,
+        .requestForm label span {
+          color: #3f4656;
+          font-size: 12px;
+          font-weight: 900;
+        }
+
+        .heroSearch select,
+        .requestForm input,
+        .requestForm select,
+        .requestForm textarea {
+          min-width: 0;
+          width: 100%;
+          height: 46px;
+          border: 1px solid rgba(183, 151, 91, .25);
+          background: #fff;
+          color: #273244;
+          border-radius: 10px;
+          padding: 0 13px;
+          font-weight: 750;
+          outline: none;
+        }
+
+        .requestForm textarea {
+          height: auto;
+          min-height: 82px;
+          padding-top: 12px;
+          resize: vertical;
+        }
+
+        .heroSearch select:focus,
+        .requestForm input:focus,
+        .requestForm select:focus,
+        .requestForm textarea:focus {
+          border-color: var(--home-gold);
+          box-shadow: 0 0 0 4px rgba(184, 132, 47, .12);
+        }
+
+        .heroSearch button,
+        .goldAction {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          height: 50px;
+          border: 0;
+          border-radius: 11px;
+          background: linear-gradient(180deg, #c89a45, #a97625);
+          color: #fff;
+          font-weight: 950;
+          cursor: pointer;
+          box-shadow: 0 12px 24px rgba(163, 108, 32, .24);
+          text-decoration: none;
+          transition: transform .2s ease, box-shadow .2s ease;
+        }
+        .heroSearch button:hover,
+        .goldAction:hover { transform: translateY(-2px); box-shadow: 0 16px 30px rgba(163, 108, 32, .3); }
+
+        .neighborhoodsBand {
+          padding-top: 74px;
+          padding-bottom: 18px;
+        }
+
+        .bandHeader,
+        .sectionHeading {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 16px;
+          margin-bottom: 16px;
+        }
+
+        .bandHeader h2,
+        .sectionHeading h2 {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          margin: 0;
+          color: #151c2d;
+          font-size: 20px;
+          font-weight: 950;
+        }
+
+        .bandHeader h2 .material-icons-outlined,
+        .sectionHeading h2 .material-icons-outlined { color: var(--home-gold); }
+
+        .bandHeader a,
+        .sectionHeading > a,
+        .allFaqLink {
+          color: #1f2937;
+          font-size: 13px;
+          font-weight: 900;
+          text-decoration: none;
+        }
+
+        .chipsScroller {
+          display: flex;
+          gap: 12px;
+          overflow-x: auto;
+          padding: 6px 4px 12px;
+          scrollbar-width: none;
+          -webkit-overflow-scrolling: touch;
+        }
+        .chipsScroller::-webkit-scrollbar { display: none; }
+
+        .neighborhoodChip {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          flex: 0 0 auto;
+          min-height: 46px;
+          padding: 0 18px;
+          border-radius: 10px;
+          background: #fff;
+          border: 1px solid rgba(183, 151, 91, .22);
+          color: #20293a;
+          font-weight: 850;
+          box-shadow: 0 9px 24px rgba(15, 23, 42, .04);
+          text-decoration: none;
+        }
+        .neighborhoodChip:first-child { border-color: rgba(184,132,47,.52); background: #fffaf0; }
+        .neighborhoodChip .material-icons-outlined { color: var(--home-gold); font-size: 19px; }
+
+        .listingsSection,
+        .mapRequestGrid,
+        .servicesSection,
+        .faqSection { margin-top: 22px; }
+
+        .compactHeading { margin-bottom: 18px; }
+        .miniHeading { margin-bottom: 12px; align-items: flex-start; }
+        .miniHeading p {
+          margin: 5px 0 0;
+          color: var(--home-muted);
+          font-size: 14px;
+          font-weight: 750;
+          line-height: 1.8;
+        }
+        .centeredHeading { justify-content: center; text-align: center; }
+
+        .homeListingsGrid {
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 18px;
+        }
+
+        .homeListingCard,
+        .mapPreviewCard,
+        .requestCard,
+        .serviceCard,
+        .faqPill {
+          background: #fff;
+          border: 1px solid rgba(183, 151, 91, .2);
+          box-shadow: 0 14px 34px rgba(15, 23, 42, .055);
+        }
+
+        .homeListingCard {
+          border-radius: 14px;
+          overflow: hidden;
+          transition: transform .2s ease, box-shadow .2s ease;
+        }
+        .homeListingCard:hover { transform: translateY(-4px); box-shadow: 0 18px 42px rgba(15, 23, 42, .1); }
+
+        .homeListingMedia {
+          position: relative;
+          display: block;
+          aspect-ratio: 16 / 10;
+          overflow: hidden;
+          background: #f3f4f6;
+          color: inherit;
+        }
+        .homeListingMedia img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .35s ease; }
+        .homeListingCard:hover .homeListingMedia img { transform: scale(1.04); }
+        .homeListingMedia::after {
+          content: '';
+          position: absolute;
+          inset: auto 0 0;
+          height: 54%;
+          background: linear-gradient(180deg, transparent, rgba(8, 14, 24, .62));
+        }
+
+        .listingFallback {
+          width: 100%;
+          height: 100%;
+          display: grid;
+          place-items: center;
+          color: rgba(255,255,255,.82);
+          background:
+            radial-gradient(circle at 18% 18%, rgba(255,255,255,.28), transparent 28%),
+            linear-gradient(135deg, #b98a36, #172033);
+        }
+        .listingFallback .material-icons-outlined { font-size: 54px; }
+        .fallback2 { background: linear-gradient(135deg, #263448, #a97625); }
+        .fallback3 { background: linear-gradient(135deg, #d8c4a1, #506070); }
+        .fallback4 { background: linear-gradient(135deg, #a97625, #0f172a); }
+
+        .dealChip,
+        .heartChip,
+        .priceOverlay {
+          position: absolute;
+          z-index: 2;
+        }
+        .dealChip {
+          top: 11px;
+          right: 11px;
+          padding: 5px 10px;
+          border-radius: 7px;
+          font-size: 12px;
+          color: #fff;
+          font-weight: 950;
+          background: #b8842f;
+        }
+        .dealChip.rent { background: #111827; color: #f0d28c; }
+        .heartChip {
+          top: 10px;
+          left: 10px;
+          width: 30px;
+          height: 30px;
+          display: grid;
+          place-items: center;
+          border-radius: 50%;
+          background: rgba(255,255,255,.9);
+          color: #4b5563;
+        }
+        .heartChip .material-icons-outlined { font-size: 18px; }
+        .priceOverlay {
+          left: 13px;
+          right: 13px;
+          bottom: 11px;
+          color: #fff;
+          font-size: 20px;
+          font-weight: 950;
+          text-align: left;
+          text-shadow: 0 2px 12px rgba(0,0,0,.38);
+        }
+        .priceOverlay small { font-size: 11px; font-weight: 800; }
+
+        .homeListingBody { padding: 13px 14px 14px; }
+        .homeListingTitle {
+          display: block;
+          color: #111827;
+          font-size: 15px;
+          font-weight: 950;
+          line-height: 1.55;
+          text-decoration: none;
+          min-height: 46px;
+        }
+        .homeListingLocation {
+          margin: 2px 0 8px;
+          color: #6b7280;
+          font-size: 13px;
+          font-weight: 800;
+        }
+        .homeListingFacts {
+          display: flex;
+          justify-content: space-between;
+          gap: 10px;
+          color: #5d6573;
+          font-size: 12px;
+          font-weight: 800;
+          border-top: 1px solid #f1f1ef;
+          padding-top: 8px;
+        }
+        .homeListingActions {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 10px;
+          margin-top: 12px;
+        }
+        .whatsBtn,
+        .detailsBtn {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 5px;
+          height: 38px;
+          border-radius: 8px;
+          font-size: 13px;
+          font-weight: 950;
+          text-decoration: none;
+        }
+        .whatsBtn { color: #15803d; background: #f1fbf5; border: 1px solid rgba(21, 128, 61, .18); }
+        .whatsBtn .material-icons-outlined { font-size: 16px; }
+        .detailsBtn { color: #9a6a21; border: 1px solid rgba(184,132,47,.35); background: #fff; }
+
+        .homeListingSkeleton {
+          min-height: 304px;
+          border-radius: 14px;
+          background: linear-gradient(90deg, #f1eee8, #fff, #f1eee8);
+          background-size: 200% 100%;
+          animation: shimmer 1.2s infinite linear;
+          border: 1px solid rgba(183, 151, 91, .2);
+        }
+        @keyframes shimmer { to { background-position: -200% 0; } }
+        .homeError,
+        .homeEmpty {
+          padding: 22px;
+          border-radius: 16px;
+          background: #fff;
+          border: 1px dashed rgba(184,132,47,.35);
+          color: #6b7280;
+          font-weight: 900;
+          text-align: center;
+        }
+
+        .mapRequestGrid {
+          display: grid;
+          grid-template-columns: 1fr 1.08fr;
+          gap: 18px;
+          align-items: stretch;
+        }
+        .mapPreviewCard,
+        .requestCard {
+          border-radius: 16px;
+          padding: 18px;
+          min-width: 0;
+        }
+
+        .mapMock {
+          position: relative;
+          height: 178px;
+          overflow: hidden;
+          border-radius: 12px;
+          background: #eef0ec;
+          border: 1px solid #eee1cc;
+        }
+        .seaBlock {
+          position: absolute;
+          inset-block: 0;
+          right: 0;
+          width: 33%;
+          background: linear-gradient(180deg, #9fd2df, #cae8ed);
+        }
+        .road {
+          position: absolute;
+          left: -10%;
+          right: 28%;
+          height: 2px;
+          background: #fff;
+          transform: rotate(-10deg);
+          box-shadow: 0 32px 0 #fff, 0 64px 0 #fff, 0 96px 0 #fff;
+          opacity: .9;
+        }
+        .r1 { top: 40px; }
+        .r2 { top: 24px; transform: rotate(12deg); opacity: .7; }
+        .r3 { top: 96px; transform: rotate(2deg); opacity: .65; }
+        .pin {
+          position: absolute;
+          width: 18px;
+          height: 18px;
+          border-radius: 50% 50% 50% 0;
+          background: var(--home-gold);
+          transform: rotate(-45deg);
+          box-shadow: 0 5px 12px rgba(0,0,0,.18);
+        }
+        .pin::after {
+          content: '';
+          position: absolute;
+          width: 7px;
+          height: 7px;
+          border-radius: 50%;
+          background: #fff;
+          inset: 5px;
+        }
+        .p1 { left: 24%; top: 55px; }
+        .p2 { left: 50%; top: 78px; }
+        .p3 { left: 72%; top: 44px; }
+        .mapLabel {
+          position: absolute;
+          color: #475569;
+          font-size: 12px;
+          font-weight: 900;
+        }
+        .l1 { left: 18%; top: 22px; }
+        .l2 { left: 45%; top: 42px; }
+        .l3 { left: 68%; top: 82px; }
+        .mapAction { width: 132px; margin-top: -54px; margin-right: 12px; position: relative; z-index: 2; height: 42px; border-radius: 8px; }
+
+        .requestForm {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 12px;
+        }
+        .requestForm label:nth-child(4),
+        .fullAction { grid-column: 1 / -1; }
+        .fullAction { width: 100%; height: 42px; }
+
+        .serviceGrid {
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 18px;
+        }
+        .serviceCard {
+          display: grid;
+          grid-template-columns: 54px 1fr;
+          gap: 13px;
+          align-items: center;
+          min-height: 98px;
+          padding: 16px;
+          border-radius: 14px;
+          color: inherit;
+          text-decoration: none;
+          transition: transform .2s ease, border-color .2s ease;
+        }
+        .serviceCard:hover { transform: translateY(-3px); border-color: rgba(184,132,47,.45); }
+        .serviceCard > .material-icons-outlined {
+          width: 46px;
+          height: 46px;
+          display: grid;
+          place-items: center;
+          border-radius: 13px;
+          color: var(--home-gold);
+          background: #fff7e8;
+          font-size: 27px;
+        }
+        .serviceCard h3 {
+          margin: 0 0 4px;
+          color: #111827;
+          font-size: 15px;
+          font-weight: 950;
+        }
+        .serviceCard p {
+          margin: 0;
+          color: #667085;
+          font-size: 12.5px;
+          line-height: 1.7;
+          font-weight: 750;
+        }
+
+        .faqRow {
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 12px;
+        }
+        .faqPill {
+          min-height: 44px;
+          border-radius: 9px;
+          padding: 0 13px;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          color: #344054;
+          font-size: 13px;
+          font-weight: 850;
+          text-decoration: none;
+        }
+        .faqPill .material-icons-outlined { color: #8b94a6; font-size: 18px; }
+        .allFaqLink { display: block; width: fit-content; margin: 14px auto 0; }
+
+        @media (max-width: 1100px) {
+          .heroSearch { grid-template-columns: repeat(2, minmax(0, 1fr)); bottom: -108px; }
+          .heroSearch button { grid-column: 1 / -1; }
+          .neighborhoodsBand { padding-top: 135px; }
+          .homeListingsGrid,
+          .serviceGrid,
+          .faqRow { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+          .mapRequestGrid { grid-template-columns: 1fr; }
+        }
+
+        @media (max-width: 680px) {
+          :global(.container) { padding-inline: 14px !important; }
+          .heroPanel { min-height: 520px; }
+          .heroContent { justify-content: flex-start; padding-top: 46px; }
+          .heroSearch {
+            position: relative;
+            left: auto;
+            bottom: auto;
+            transform: none;
+            width: 100%;
+            margin-top: 28px;
+            grid-template-columns: 1fr;
+            border-radius: 16px;
+            padding: 14px;
+          }
+          .heroSearch button { grid-column: auto; }
+          .neighborhoodsBand { padding-top: 22px; }
+          .bandHeader,
+          .sectionHeading { align-items: flex-start; }
+          .homeListingsGrid,
+          .serviceGrid,
+          .faqRow,
+          .requestForm { grid-template-columns: 1fr; }
+          .requestForm label:nth-child(4),
+          .fullAction { grid-column: auto; }
+          .serviceCard { grid-template-columns: 46px 1fr; }
+          .villaOne { display: none; }
+          .villaTwo { left: 8%; bottom: 54px; transform: scale(.9); }
+          .villaThree { left: 47%; bottom: 46px; transform: scale(.78); }
+          .palmTwo { display: none; }
         }
       `}</style>
     </>
