@@ -18,20 +18,12 @@ function escapeHtml(s) {
     .replaceAll("'", '&#039;');
 }
 
-/** تنسيق السعر بالعربية (مثل: 1.4 مليون, 650 ألف) */
 function formatPrice(price) {
   if (price == null) return '?';
   const num = Number(price);
   if (Number.isNaN(num)) return '?';
-
-  if (num >= 1_000_000) {
-    const millions = (num / 1_000_000).toFixed(1);
-    return `${millions} مليون`;
-  }
-  if (num >= 1_000) {
-    const thousands = Math.round(num / 1_000);
-    return `${thousands} ألف`;
-  }
+  if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(1)} مليون`;
+  if (num >= 1_000) return `${Math.round(num / 1_000)} ألف`;
   return String(num);
 }
 
@@ -40,7 +32,6 @@ function normalizeDealType(v) {
   return '';
 }
 
-/** Escape للنص داخل SVG */
 function escapeXml(s) {
   return String(s || '')
     .replaceAll('&', '&amp;')
@@ -50,12 +41,8 @@ function escapeXml(s) {
     .replaceAll("'", '&#39;');
 }
 
-/**
- * ✅ إنشاء أيقونة SVG مستطيلة بلون عقار أبحر الأساسي تعرض السعر داخلها
- */
 function buildPriceBadgeIcon(maps, priceText) {
   const text = String(priceText || '?');
-
   const charW = 8;
   const padX = 12;
   const h = 30;
@@ -63,26 +50,15 @@ function buildPriceBadgeIcon(maps, priceText) {
   const maxW = 160;
   const w = Math.max(minW, Math.min(maxW, text.length * charW + padX * 2));
 
-  // استخدام اللون الأساسي (0f766e) الخاص بعقار أبحر
   const svg = `
     <svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
-      <rect x="1" y="1" width="${w - 2}" height="${h - 2}" rx="12"
-        fill="#0f766e" stroke="rgba(255,255,255,0.95)" stroke-width="2"/>
-      <text x="${w / 2}" y="${h / 2 + 5}"
-        text-anchor="middle"
-        font-family="system-ui, -apple-system, Segoe UI, Roboto, Arial"
-        font-size="13"
-        font-weight="900"
-        fill="#ffffff"
-        direction="rtl"
-        unicode-bidi="plaintext">${escapeXml(text)}</text>
+      <rect x="1" y="1" width="${w - 2}" height="${h - 2}" rx="12" fill="#0f766e" stroke="rgba(255,255,255,0.95)" stroke-width="2"/>
+      <text x="${w / 2}" y="${h / 2 + 5}" text-anchor="middle" font-family="system-ui, -apple-system, Segoe UI, Roboto, Arial" font-size="13" font-weight="900" fill="#ffffff" direction="rtl" unicode-bidi="plaintext">${escapeXml(text)}</text>
     </svg>
   `.trim();
 
-  const url = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
-
   return {
-    url,
+    url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`,
     scaledSize: new maps.Size(w, h),
     anchor: new maps.Point(Math.round(w / 2), h),
   };
@@ -92,7 +68,6 @@ let __gmapsPromise = null;
 function loadGoogleMaps(apiKey) {
   if (typeof window === 'undefined') return Promise.reject(new Error('No window'));
   if (window.google && window.google.maps) return Promise.resolve(window.google.maps);
-
   if (__gmapsPromise) return __gmapsPromise;
 
   __gmapsPromise = new Promise((resolve, reject) => {
@@ -103,16 +78,12 @@ function loadGoogleMaps(apiKey) {
       } catch (e) {
         reject(e);
       } finally {
-        try {
-          delete window[cbName];
-        } catch {}
+        try { delete window[cbName]; } catch {}
       }
     };
 
     const script = document.createElement('script');
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(
-      apiKey
-    )}&libraries=places&callback=${cbName}`;
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&libraries=places&callback=${cbName}`;
     script.async = true;
     script.defer = true;
     script.onerror = () => reject(new Error('تعذر تحميل سكربت Google Maps.'));
@@ -124,14 +95,11 @@ function loadGoogleMaps(apiKey) {
 
 export default function MapClient() {
   const searchParams = useSearchParams();
-
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
-
   const [neighborhood, setNeighborhood] = useState(searchParams.get('neighborhood') || '');
   const [dealType, setDealType] = useState(normalizeDealType(searchParams.get('dealType') || ''));
-
   const [mapReady, setMapReady] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
@@ -139,18 +107,13 @@ export default function MapClient() {
   const mapRef = useRef(null);
   const markersRef = useRef([]);
   const infoRef = useRef(null);
-
   const prevHtmlOverflowRef = useRef('');
   const prevBodyOverflowRef = useRef('');
+  const didFitBoundsRef = useRef(false);
 
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
 
-  const filters = useMemo(() => {
-    return {
-      neighborhood: neighborhood || '',
-      dealType: dealType || '',
-    };
-  }, [neighborhood, dealType]);
+  const filters = useMemo(() => ({ neighborhood: neighborhood || '', dealType: dealType || '' }), [neighborhood, dealType]);
 
   const neighborhoodOptions = useMemo(() => {
     const opts = [{ value: '', label: 'كل الأحياء' }];
@@ -174,15 +137,7 @@ export default function MapClient() {
     alignItems: 'center',
     gap: 10,
     boxShadow: 'var(--shadow-md)',
-    ...(isFullscreen
-      ? {
-          position: 'fixed',
-          top: 'calc(12px + env(safe-area-inset-top))',
-          left: 'calc(12px + env(safe-area-inset-left))',
-          right: 'calc(12px + env(safe-area-inset-right))',
-          zIndex: 1000002,
-        }
-      : null),
+    ...(isFullscreen ? { position: 'fixed', top: 'calc(12px + env(safe-area-inset-top))', left: 'calc(12px + env(safe-area-inset-left))', right: 'calc(12px + env(safe-area-inset-right))', zIndex: 1000002 } : null),
   };
 
   const xBtnStyle = {
@@ -198,10 +153,7 @@ export default function MapClient() {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    transition: 'all 0.2s ease'
   };
-
-  const barCenterStyle = { flex: 1, minWidth: 0 };
 
   const mapHostStyle = {
     marginTop: 12,
@@ -214,85 +166,47 @@ export default function MapClient() {
     position: isFullscreen ? 'fixed' : 'relative',
     inset: isFullscreen ? 0 : undefined,
     zIndex: isFullscreen ? 1000000 : undefined,
-    boxShadow: isFullscreen ? 'none' : 'var(--shadow-sm)'
-  };
-
-  const mapBoxStyle = { width: '100%', height: '100%' };
-
-  const mapLoadingStyle = {
-    position: 'absolute',
-    inset: 0,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontWeight: 950,
-    color: 'var(--primary)',
-    background: 'rgba(255, 255, 255, 0.85)',
-    zIndex: 5,
-    backdropFilter: 'blur(4px)',
-  };
-
-  const mapTapFsStyle = {
-    position: 'absolute',
-    inset: 0,
-    border: 0,
-    padding: 0,
-    margin: 0,
-    background: 'transparent',
-    cursor: 'zoom-in',
-    zIndex: 6,
+    boxShadow: isFullscreen ? 'none' : 'var(--shadow-sm)',
   };
 
   const mapItems = useMemo(() => {
-    return (items || []).filter((it) => {
-      const lat = Number(it.lat);
-      const lng = Number(it.lng);
-      return Number.isFinite(lat) && Number.isFinite(lng);
-    });
+    return (items || []).filter((it) => Number.isFinite(Number(it.lat)) && Number.isFinite(Number(it.lng)));
   }, [items]);
 
-  async function load() {
-    setErr('');
-    setLoading(true);
-    try {
-      const data = await fetchListings({
-        onlyPublic: true,
-        filters,
-        includeLegacy: false,
-        max: 500,
-      });
-      setItems(Array.isArray(data) ? data : []);
-    } catch (e) {
-      setErr(String(e?.message || 'حصل خطأ أثناء جلب العروض.'));
-      setItems([]);
-    } finally {
-      setLoading(false);
-    }
-  }
-
   useEffect(() => {
+    let active = true;
+    async function load() {
+      setErr('');
+      setLoading(true);
+      try {
+        const data = await fetchListings({ onlyPublic: true, filters, includeLegacy: true, max: 1000 });
+        if (active) setItems(Array.isArray(data) ? data : []);
+      } catch (e) {
+        if (active) {
+          setErr(String(e?.message || 'حصل خطأ أثناء جلب العروض.'));
+          setItems([]);
+        }
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+    didFitBoundsRef.current = false;
     load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => { active = false; };
   }, [filters]);
 
   useEffect(() => {
     let alive = true;
-
     async function initMap() {
       try {
         if (!apiKey) throw new Error('تعذر تحميل خريطة Google. تأكد من المفتاح وتفعيل Google Maps JavaScript API.');
         const maps = await loadGoogleMaps(apiKey);
-        if (!alive) return;
-
-        const mapDiv = mapDivRef.current;
-        if (!mapDiv) return;
-
-        const center = { lat: 21.7628, lng: 39.0994 }; // أبحر الشمالية
-
-        const map = new maps.Map(mapDiv, {
+        if (!alive || !mapDivRef.current) return;
+        const center = { lat: 21.7628, lng: 39.0994 };
+        const map = new maps.Map(mapDivRef.current, {
           center,
           zoom: 12,
-          mapTypeControl: false,
+          mapTypeControl: true,
           fullscreenControl: false,
           streetViewControl: false,
           rotateControl: false,
@@ -300,28 +214,15 @@ export default function MapClient() {
           clickableIcons: false,
           gestureHandling: 'greedy',
           styles: [
-            {
-              featureType: "poi.business",
-              stylers: [{ visibility: "off" }],
-            },
-            {
-              featureType: "transit",
-              elementType: "labels.icon",
-              stylers: [{ visibility: "off" }],
-            }
-          ]
+            { featureType: 'poi.business', stylers: [{ visibility: 'off' }] },
+            { featureType: 'transit', elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
+          ],
         });
-
         mapRef.current = map;
         infoRef.current = new maps.InfoWindow();
-
         setMapReady(true);
-
         setTimeout(() => {
-          try {
-            maps.event.trigger(map, 'resize');
-            map.setCenter(center);
-          } catch {}
+          try { maps.event.trigger(map, 'resize'); map.setCenter(center); } catch {}
         }, 250);
       } catch (e) {
         if (!alive) return;
@@ -329,110 +230,61 @@ export default function MapClient() {
         setMapReady(false);
       }
     }
-
     initMap();
-
-    return () => {
-      alive = false;
-    };
+    return () => { alive = false; };
   }, [apiKey]);
 
   useEffect(() => {
-    if (!mapReady) return;
-    if (!mapRef.current) return;
-    if (!window.google || !window.google.maps) return;
-
+    if (!mapReady || !mapRef.current || !window.google?.maps) return;
     const maps = window.google.maps;
     const map = mapRef.current;
-
-    markersRef.current.forEach((m) => {
-      try { m.setMap(null); } catch {}
-    });
+    markersRef.current.forEach((m) => { try { m.setMap(null); } catch {} });
     markersRef.current = [];
-
     const bounds = new maps.LatLngBounds();
 
     mapItems.forEach((it) => {
-      const lat = Number(it.lat);
-      const lng = Number(it.lng);
-      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
-
-      const pos = { lat, lng };
+      const pos = { lat: Number(it.lat), lng: Number(it.lng) };
       bounds.extend(pos);
-
-      const priceText = formatPrice(it.price);
-      const icon = buildPriceBadgeIcon(maps, priceText);
-
-      const marker = new maps.Marker({
-        position: pos,
-        map,
-        title: it.title || 'عرض عقاري',
-        icon,
-        optimized: true,
-      });
-
+      const marker = new maps.Marker({ position: pos, map, title: it.title || 'عرض عقاري', icon: buildPriceBadgeIcon(maps, formatPrice(it.price)), optimized: true });
       marker.addListener('click', () => {
         try {
           const title = escapeHtml(it.title || 'عرض عقاري');
           const n = escapeHtml(it.neighborhood || '');
           const link = `/listing/${encodeURIComponent(String(it.id || it.docId || ''))}`;
-
-          // تم تعديل الألوان لتعكس هوية عقار أبحر
-          const html = `
-            <div style="direction:rtl; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; min-width:240px; padding: 4px;">
-              <div style="font-weight:900; margin:0 0 6px; font-size: 15px; color: #0f172a;">${title}</div>
-              <div style="color:#5b6474; font-weight:700; font-size:13px; margin:0 0 12px">
-                <span style="color:#0f766e; margin-left:4px;">📍</span>${n ? `${n}` : 'حي غير محدد'}
-              </div>
-              <a href="${link}" style="display:block; text-align:center; padding:10px 14px; border-radius:12px; text-decoration:none;
-                 background: #0f766e; color:#ffffff; font-weight:800; font-size:14px; transition: background 0.2s;">
-                 استعراض التفاصيل
-              </a>
+          infoRef.current.setContent(`
+            <div style="direction:rtl; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; min-width:240px; padding:4px;">
+              <div style="font-weight:900; margin:0 0 6px; font-size:15px; color:#0f172a;">${title}</div>
+              <div style="color:#5b6474; font-weight:700; font-size:13px; margin:0 0 12px"><span style="color:#0f766e; margin-left:4px;">📍</span>${n || 'حي غير محدد'}</div>
+              <a href="${link}" style="display:block; text-align:center; padding:10px 14px; border-radius:12px; text-decoration:none; background:#0f766e; color:#fff; font-weight:800; font-size:14px;">استعراض التفاصيل</a>
             </div>
-          `;
-
-          infoRef.current.setContent(html);
+          `);
           infoRef.current.open({ anchor: marker, map, shouldFocus: false });
         } catch {}
       });
-
       markersRef.current.push(marker);
     });
 
-    if (mapItems.length) {
-      try {
-        map.fitBounds(bounds, 60);
-      } catch {}
+    if (mapItems.length && !didFitBoundsRef.current) {
+      try { map.fitBounds(bounds, 60); didFitBoundsRef.current = true; } catch {}
     }
   }, [mapReady, mapItems]);
 
   useEffect(() => {
     if (typeof document === 'undefined') return;
-
     const html = document.documentElement;
     const body = document.body;
-
     if (isFullscreen) {
       prevHtmlOverflowRef.current = html.style.overflow || '';
       prevBodyOverflowRef.current = body.style.overflow || '';
-
       html.style.overflow = 'hidden';
       body.style.overflow = 'hidden';
       body.classList.add('isMapFullscreen');
-
-      setTimeout(() => {
-        try { window.google?.maps?.event?.trigger(mapRef.current, 'resize'); } catch {}
-      }, 200);
     } else {
       html.style.overflow = prevHtmlOverflowRef.current;
       body.style.overflow = prevBodyOverflowRef.current;
       body.classList.remove('isMapFullscreen');
-
-      setTimeout(() => {
-        try { window.google?.maps?.event?.trigger(mapRef.current, 'resize'); } catch {}
-      }, 200);
     }
-
+    setTimeout(() => { try { window.google?.maps?.event?.trigger(mapRef.current, 'resize'); } catch {} }, 200);
     return () => {
       html.style.overflow = prevHtmlOverflowRef.current;
       body.style.overflow = prevBodyOverflowRef.current;
@@ -442,79 +294,36 @@ export default function MapClient() {
 
   return (
     <div className="container" style={{ paddingBottom: '30px' }}>
-      <h1 style={{ marginTop: 24, marginBottom: 5, fontSize: '28px', fontWeight: 900, color: 'var(--text)' }}>
-        الخريطة العقارية
-      </h1>
-      <div style={{ color: 'var(--muted)', fontSize: '15px' }}>
-        تصفح العقارات المتاحة بمدينة جدة (أبحر الشمالية) مباشرة عبر الخريطة.
-      </div>
+      <h1 style={{ marginTop: 24, marginBottom: 5, fontSize: '28px', fontWeight: 900, color: 'var(--text)' }}>الخريطة العقارية</h1>
+      <div style={{ color: 'var(--muted)', fontSize: '15px' }}>تصفح العقارات المتاحة في أبحر الشمالية وشمال جدة مباشرة عبر الخريطة.</div>
 
-      {err ? (
-        <section className="card" style={{ marginTop: 15, padding: 16, background: '#fef2f2', borderColor: '#f87171' }}>
-          <div style={{ color: '#dc2626', fontWeight: 700 }}>{err}</div>
-        </section>
-      ) : null}
+      {err ? <section className="card" style={{ marginTop: 15, padding: 16, background: '#fef2f2', borderColor: '#f87171' }}><div style={{ color: '#dc2626', fontWeight: 700 }}>{err}</div></section> : null}
 
       <div style={topBarStyle}>
-        <button
-          style={xBtnStyle}
-          onClick={() => (isFullscreen ? setIsFullscreen(false) : window.history.back())}
-          aria-label="العودة"
-        >
-          {isFullscreen ? '✕' : '←'}
-        </button>
-
-        <div style={barCenterStyle}>
+        <button style={xBtnStyle} onClick={() => (isFullscreen ? setIsFullscreen(false) : window.history.back())} aria-label="العودة">{isFullscreen ? '✕' : '←'}</button>
+        <div style={{ flex: 1, minWidth: 0 }}>
           <ChipsRow value={neighborhood} options={neighborhoodOptions} onChange={setNeighborhood} />
-          <div style={{ marginTop: 10 }}>
-            <ChipsRow value={dealType} options={dealTypeOptions} onChange={setDealType} />
-          </div>
+          <div style={{ marginTop: 10 }}><ChipsRow value={dealType} options={dealTypeOptions} onChange={setDealType} /></div>
         </div>
-
         <div style={{ width: 44 }} />
       </div>
 
       <div style={mapHostStyle}>
-        <div ref={mapDivRef} style={mapBoxStyle} />
-
-        {!mapReady && !err ? <div style={mapLoadingStyle}>جاري تهيئة الخريطة…</div> : null}
-
-        {!isFullscreen && mapReady ? (
-          <button
-            type="button"
-            style={mapTapFsStyle}
-            onClick={() => setIsFullscreen(true)}
-            aria-label="فتح الخريطة بكامل الشاشة"
-            title="انقر لتكبير الخريطة"
-          />
-        ) : null}
+        <div ref={mapDivRef} style={{ width: '100%', height: '100%' }} />
+        {!mapReady && !err ? <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 950, color: 'var(--primary)', background: 'rgba(255,255,255,.85)', zIndex: 5 }}>جاري تهيئة الخريطة…</div> : null}
+        {!isFullscreen && mapReady ? <button type="button" style={{ position: 'absolute', inset: 0, border: 0, padding: 0, margin: 0, background: 'transparent', cursor: 'zoom-in', zIndex: 6 }} onClick={() => setIsFullscreen(true)} aria-label="فتح الخريطة بكامل الشاشة" title="انقر لتكبير الخريطة" /> : null}
       </div>
 
       {!isFullscreen ? (
         <section style={{ marginTop: 24 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-            <div style={{ fontWeight: 900, fontSize: '18px' }}>
-              العروض المطابقة <span style={{ color: 'var(--muted)', fontSize: '14px' }}>({items.length})</span>
-            </div>
-
-            <Link href="/listings" style={{ color: 'var(--primary)', fontWeight: 700, fontSize: '14px', textDecoration: 'none' }}>
-              تصفح القائمة ‹
-            </Link>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}>
+            <div style={{ fontWeight: 900, fontSize: 18 }}>العروض المطابقة <span style={{ color: 'var(--muted)', fontSize: 14 }}>({loading ? '...' : items.length})</span></div>
+            <Link href="/listings" style={{ color: 'var(--primary)', fontWeight: 700, fontSize: 14, textDecoration: 'none' }}>تصفح القائمة ‹</Link>
           </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '15px' }}>
-            {(items || []).slice(0, 12).map((it, idx) => (
-              <ListingCard key={it.id || it.docId || `idx-${idx}`} item={it} compact />
-            ))}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 15 }}>
+            {(items || []).slice(0, 12).map((it, idx) => <ListingCard key={it.id || it.docId || `idx-${idx}`} item={it} compact />)}
           </div>
-
-          {items.length > 12 ? (
-            <div style={{ marginTop: 20, textAlign: 'center' }}>
-              <Link className="btn btnPrimary" href="/listings">
-                مشاهدة المزيد من العروض
-              </Link>
-            </div>
-          ) : null}
+          {items.length > 12 ? <div style={{ marginTop: 20, textAlign: 'center' }}><Link className="btn btnPrimary" href="/listings">مشاهدة المزيد من العروض</Link></div> : null}
         </section>
       ) : null}
     </div>
