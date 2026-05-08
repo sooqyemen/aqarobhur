@@ -1,282 +1,226 @@
 'use client';
 
 import Link from 'next/link';
-import { getFooterSeoGroups } from '@/lib/areaCatalog';
+
+const quickLinks = [
+  { href: '/', label: 'الرئيسية' },
+  { href: '/neighborhoods', label: 'الأحياء' },
+  { href: '/map', label: 'الخريطة' },
+  { href: '/request', label: 'أرسل طلبك' },
+  { href: '/add', label: 'إضافة إعلان' },
+];
+
+const infoLinks = [
+  { href: '/about', label: 'من نحن' },
+  { href: '/terms', label: 'شروط الاستخدام' },
+  { href: '/privacy', label: 'سياسة الخصوصية' },
+  { href: '/faq', label: 'الأسئلة الشائعة' },
+  { href: '/contact', label: 'تواصل معنا' },
+];
+
+const seoLinks = [
+  { href: '/listings?dealType=sale', label: 'عقارات للبيع في أبحر الشمالية' },
+  { href: '/listings?propertyType=أرض&dealType=sale', label: 'أراضي للبيع شمال جدة' },
+  { href: '/listings?propertyType=شقة&dealType=rent', label: 'شقق للإيجار شمال جدة' },
+  { href: '/listings?propertyType=فيلا&dealType=sale', label: 'فلل للبيع في أبحر' },
+  { href: '/listings?neighborhood=جوهرة العروس', label: 'عقارات جوهرة العروس' },
+  { href: '/listings?neighborhood=الهجرة', label: 'عقارات الهجرة' },
+  { href: '/listings?neighborhood=طيبة الفرعية', label: 'عقارات طيبة الفرعية' },
+];
 
 export default function Footer() {
   const currentYear = new Date().getFullYear();
-  const seoGroups = getFooterSeoGroups();
 
   return (
-    <footer className="site-footer">
-      <div className="container">
-        <div className="footer-main">
-          <div className="footer-brand">
-            <div className="footer-logo">
-              <strong>
-                عقار<span> أبحر</span>
-              </strong>
-            </div>
-
-            <p className="footer-tagline">
-              وجهتك الموثوقة للعقارات في أبحر الشمالية وشمال جدة، أراضي، فلل،
-              شقق، بيع وإيجار.
-            </p>
-          </div>
-
-          <div className="footer-nav">
-            <div className="footer-col">
-              <h4>الشركة</h4>
-              <Link href="/about">من نحن</Link>
-              <Link href="/contact">اتصل بنا</Link>
-            </div>
-
-            <div className="footer-col">
-              <h4>الخدمات</h4>
-              <Link href="/marketing-request">تسويق عقار</Link>
-              <Link href="/ejar-request">توثيق عقود</Link>
-              <Link href="/request">أرسل طلبك</Link>
-            </div>
-
-            <div className="footer-col">
-              <h4>العقارات</h4>
-              <Link href="/listings">أحدث العروض</Link>
-              <Link href="/neighborhoods">الأحياء</Link>
-              <Link href="/map">الخريطة</Link>
+    <footer className="premiumFooter">
+      <div className="container footerGrid">
+        <section className="footerBrand">
+          <div className="footerLogo">
+            <span className="mark">ع</span>
+            <div>
+              <strong>عقار أبحر</strong>
+              <small>عقارك في أبحر وشمال جدة</small>
             </div>
           </div>
-        </div>
-
-        <section className="seo-links-section" aria-label="روابط عقارية مهمة">
-          <div className="seo-links-head">
-            <span className="seo-eyebrow">روابط بحث سريعة</span>
-            <h3>عقارات أبحر الشمالية وشمال جدة</h3>
-          </div>
-
-          <div className="seo-links-grid">
-            {seoGroups.map((group) => (
-              <div className="seo-links-card" key={group.title}>
-                <h4>{group.title}</h4>
-
-                <div className="seo-links-list">
-                  {group.links.slice(0, 8).map((link) => (
-                    <Link key={`${group.title}-${link.label}`} href={link.href}>
-                      {link.label}
-                    </Link>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="seo-keywords-row">
-            <Link href="/listings?dealType=sale">عقارات للبيع في أبحر الشمالية</Link>
-            <Link href="/listings?propertyType=أرض&dealType=sale">أراضي للبيع شمال جدة</Link>
-            <Link href="/listings?propertyType=فيلا&dealType=sale">فلل للبيع في أبحر</Link>
-            <Link href="/listings?propertyType=فيلا&dealType=rent">فلل للإيجار في أبحر</Link>
-            <Link href="/listings?propertyType=شقة&dealType=rent">شقق للإيجار شمال جدة</Link>
-            <Link href="/listings?neighborhood=الصواري&plan=مخطط الفال&propertyType=شقة&dealType=sale">
-              شقق تمليك في مخطط الفال الصواري
-            </Link>
-            <Link href="/listings?neighborhood=جوهرة العروس&propertyType=أرض&dealType=sale">
-              أراضي جوهرة العروس
-            </Link>
-            <Link href="/listings?neighborhood=طيبة الفرعية&propertyType=أرض&dealType=sale">
-              أراضي طيبة الفرعية
-            </Link>
-            <Link href="/listings?neighborhood=الهجرة&propertyType=أرض&dealType=sale">
-              أراضي الهجرة
-            </Link>
+          <p>
+            منصة عقارية متخصصة في أرقى أحياء أبحر وشمال جدة. نربط بين البائعين والمشترين
+            بشفافية واحترافية.
+          </p>
+          <div className="socials" aria-label="روابط التواصل">
+            <a href="#" aria-label="Instagram">◎</a>
+            <a href="#" aria-label="X">𝕏</a>
+            <a href="#" aria-label="WhatsApp">☎</a>
+            <a href="#" aria-label="YouTube">▶</a>
           </div>
         </section>
 
-        <div className="footer-bottom">
-          <p className="copyright">
-            © {currentYear} عقار أبحر. جميع الحقوق محفوظة.
-          </p>
+        <section className="footerColumn">
+          <h3>روابط مهمة</h3>
+          {quickLinks.map((link) => <Link key={link.href} href={link.href}>{link.label}</Link>)}
+        </section>
 
-          <div className="footer-socials">
-            <a href="#" aria-label="Snapchat" className="social-icon">
-              Snapchat
-            </a>
-            <a href="#" aria-label="Twitter" className="social-icon">
-              X
-            </a>
-            <a href="#" aria-label="Instagram" className="social-icon">
-              Instagram
-            </a>
-          </div>
-        </div>
+        <section className="footerColumn">
+          <h3>معلومات</h3>
+          {infoLinks.map((link) => <Link key={link.href} href={link.href}>{link.label}</Link>)}
+        </section>
+
+        <section className="footerColumn contactColumn">
+          <h3>تواصل معنا</h3>
+          <a href="tel:+966501234567">+966 50 123 4567</a>
+          <a href="mailto:info@aqarabhur.com">info@aqarabhur.com</a>
+          <span>أبحر الشمالية، جدة</span>
+          <span>المملكة العربية السعودية</span>
+        </section>
+      </div>
+
+      <div className="container footerSeo">
+        {seoLinks.map((link) => <Link key={link.href} href={link.href}>{link.label}</Link>)}
+      </div>
+
+      <div className="container footerBottom">
+        <p>© {currentYear} عقار أبحر. جميع الحقوق محفوظة.</p>
+        <span>تصميم وتطوير</span>
       </div>
 
       <style jsx>{`
-        .seo-links-section {
-          margin-top: 28px;
-          padding: 26px;
-          border-radius: 26px;
+        .premiumFooter {
+          margin-top: 26px;
+          padding: 44px 0 18px;
           background:
-            radial-gradient(circle at top right, rgba(214, 179, 91, 0.16), transparent 34%),
-            linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
-          border: 1px solid rgba(226, 232, 240, 0.95);
-          box-shadow: 0 16px 38px rgba(15, 23, 42, 0.07);
+            radial-gradient(circle at 18% 0, rgba(184,132,47,.18), transparent 34%),
+            linear-gradient(180deg, #121b2b 0%, #07111f 100%);
+          color: #e5e7eb;
+          border-top: 1px solid rgba(184,132,47,.25);
         }
 
-        .seo-links-head {
-          text-align: center;
-          margin-bottom: 20px;
+        .footerGrid {
+          display: grid;
+          grid-template-columns: 1.45fr .85fr .85fr 1fr;
+          gap: 34px;
+          align-items: start;
         }
 
-        .seo-eyebrow {
+        .footerLogo {
           display: inline-flex;
           align-items: center;
-          justify-content: center;
-          padding: 7px 13px;
-          border-radius: 999px;
-          background: #fff7df;
-          color: #8a6a12;
-          border: 1px solid rgba(214, 179, 91, 0.35);
-          font-size: 12px;
-          font-weight: 900;
-          margin-bottom: 10px;
+          gap: 12px;
+          margin-bottom: 14px;
         }
-
-        .seo-links-head h3 {
-          margin: 0;
-          font-size: clamp(20px, 3vw, 25px);
-          font-weight: 950;
-          color: #111827;
-          letter-spacing: -0.02em;
-        }
-
-        .seo-links-grid {
+        .mark {
+          width: 48px;
+          height: 48px;
           display: grid;
-          grid-template-columns: repeat(4, minmax(0, 1fr));
-          gap: 14px;
+          place-items: center;
+          border-radius: 15px;
+          color: #d7ad55;
+          border: 1px solid rgba(215,173,85,.32);
+          background: rgba(255,255,255,.06);
+          font-weight: 950;
+          font-size: 24px;
+        }
+        .footerLogo strong {
+          display: block;
+          color: #d7ad55;
+          font-size: 22px;
+          font-weight: 950;
+        }
+        .footerLogo small {
+          display: block;
+          color: #cbd5e1;
+          font-size: 12px;
+          font-weight: 800;
         }
 
-        .seo-links-card {
-          min-width: 0;
-          padding: 16px;
-          border-radius: 20px;
-          background: rgba(255, 255, 255, 0.86);
-          border: 1px solid rgba(226, 232, 240, 0.95);
-          box-shadow: 0 10px 24px rgba(15, 23, 42, 0.045);
+        .footerBrand p {
+          max-width: 390px;
+          margin: 0 0 18px;
+          color: #cbd5e1;
+          font-size: 14px;
+          line-height: 1.9;
+          font-weight: 700;
         }
 
-        .seo-links-card h4 {
-          margin: 0 0 12px;
-          color: #111827;
+        .socials {
+          display: flex;
+          gap: 10px;
+        }
+        .socials a {
+          width: 34px;
+          height: 34px;
+          display: grid;
+          place-items: center;
+          border-radius: 50%;
+          color: #fff;
+          background: rgba(255,255,255,.06);
+          border: 1px solid rgba(255,255,255,.12);
+          text-decoration: none;
+          font-size: 14px;
+          font-weight: 900;
+        }
+
+        .footerColumn h3 {
+          margin: 0 0 14px;
+          color: #fff;
           font-size: 16px;
           font-weight: 950;
-          padding-bottom: 10px;
-          border-bottom: 1px solid rgba(226, 232, 240, 0.9);
         }
-
-        .seo-links-list {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 8px;
-        }
-
-        .seo-links-list a {
-          display: inline-flex;
-          align-items: center;
-          max-width: 100%;
-          min-height: 34px;
-          padding: 7px 10px;
-          border-radius: 999px;
-          background: #f8fafc;
-          border: 1px solid rgba(226, 232, 240, 0.95);
-          color: #475569;
+        .footerColumn a,
+        .footerColumn span {
+          display: block;
+          color: #cbd5e1;
+          font-size: 14px;
+          font-weight: 750;
+          line-height: 2.1;
           text-decoration: none;
-          font-size: 12.5px;
-          line-height: 1.5;
-          font-weight: 850;
-          white-space: normal;
-          transition: border-color 0.18s ease, background 0.18s ease, color 0.18s ease, transform 0.18s ease;
         }
+        .footerColumn a:hover { color: #d7ad55; }
 
-        .seo-links-list a:hover {
-          transform: translateY(-1px);
-          border-color: #d6b35b;
-          color: #111827;
-          background: #fffaf0;
-        }
-
-        .seo-keywords-row {
+        .footerSeo {
           display: flex;
           flex-wrap: wrap;
-          justify-content: center;
           gap: 9px;
-          margin-top: 22px;
-          padding-top: 18px;
-          border-top: 1px solid rgba(226, 232, 240, 0.95);
+          margin-top: 30px;
+          padding-top: 22px;
+          border-top: 1px solid rgba(255,255,255,.09);
         }
-
-        .seo-keywords-row a {
+        .footerSeo a {
           display: inline-flex;
           align-items: center;
-          justify-content: center;
-          padding: 8px 12px;
+          min-height: 34px;
+          padding: 0 12px;
           border-radius: 999px;
-          background: #111827;
-          border: 1px solid rgba(17, 24, 39, 0.1);
-          color: #fff;
-          text-decoration: none;
-          font-size: 12.5px;
+          color: #f8fafc;
+          background: rgba(255,255,255,.055);
+          border: 1px solid rgba(215,173,85,.18);
+          font-size: 12px;
           font-weight: 850;
-          line-height: 1.45;
+          text-decoration: none;
         }
+        .footerSeo a:hover { background: rgba(215,173,85,.16); }
 
-        .seo-keywords-row a:hover {
-          background: #8a6a12;
+        .footerBottom {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 14px;
+          margin-top: 22px;
+          padding-top: 14px;
+          border-top: 1px solid rgba(255,255,255,.08);
+          color: #94a3b8;
+          font-size: 13px;
+          font-weight: 800;
         }
+        .footerBottom p { margin: 0; }
+        .footerBottom span { color: #d7ad55; }
 
-        @media (max-width: 1100px) {
-          .seo-links-grid {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-          }
+        @media (max-width: 980px) {
+          .footerGrid { grid-template-columns: 1fr 1fr; }
         }
-
         @media (max-width: 640px) {
-          .seo-links-section {
-            margin-top: 22px;
-            padding: 18px 14px;
-            border-radius: 22px;
-          }
-
-          .seo-links-head {
-            text-align: right;
-            margin-bottom: 16px;
-          }
-
-          .seo-links-grid {
-            grid-template-columns: 1fr;
-            gap: 12px;
-          }
-
-          .seo-links-card {
-            padding: 14px;
-            border-radius: 18px;
-          }
-
-          .seo-links-list a:nth-child(n + 7) {
-            display: none;
-          }
-
-          .seo-keywords-row {
-            justify-content: flex-start;
-            gap: 8px;
-          }
-
-          .seo-keywords-row a {
-            font-size: 12px;
-            padding: 7px 10px;
-          }
-
-          .seo-keywords-row a:nth-child(n + 7) {
-            display: none;
-          }
+          .premiumFooter { padding-bottom: 86px; }
+          .footerGrid { grid-template-columns: 1fr; gap: 24px; }
+          .footerBottom { flex-direction: column; align-items: flex-start; }
+          .footerSeo a:nth-child(n + 6) { display: none; }
         }
       `}</style>
     </footer>
