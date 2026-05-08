@@ -12,16 +12,19 @@ export default function MobileNav() {
 
   useEffect(() => {
     const tick = () => {
-      try { setHiddenByFullscreen(document.body.classList.contains('isMapFullscreen')); } 
-      catch { setHiddenByFullscreen(false); }
+      try {
+        setHiddenByFullscreen(document.body.classList.contains('isMapFullscreen'));
+      } catch {
+        setHiddenByFullscreen(false);
+      }
     };
     tick();
-    const id = setInterval(tick, 200);
+    const id = setInterval(tick, 250);
     return () => clearInterval(id);
   }, []);
 
   useEffect(() => {
-    if (typeof window === 'undefined' || !window.matchMedia) return;
+    if (typeof window === 'undefined' || !window.matchMedia) return undefined;
     const mq = window.matchMedia('(min-width: 900px)');
     const apply = () => setIsDesktop(!!mq.matches);
     apply();
@@ -29,41 +32,76 @@ export default function MobileNav() {
     return () => mq.removeEventListener('change', apply);
   }, []);
 
-  // نتأكد من وجود الروابط قبل الفلترة لتجنب الأخطاء
-  const items = (MAIN_NAV_LINKS || []).filter(link => link.mobileBottom);
+  const items = (MAIN_NAV_LINKS || []).filter((link) => link.mobileBottom);
+  const isActive = (href) => (href === '/' ? pathname === '/' : pathname.startsWith(href));
 
-  const isActive = (href) => href === '/' ? pathname === '/' : pathname.startsWith(href);
-
-  if (isDesktop) return null;
+  if (isDesktop || !items.length) return null;
 
   return (
-    <>
-      <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined" rel="stylesheet" />
-      <nav className={`mobileBottomNav ${hiddenByFullscreen ? 'hidden' : ''}`}>
-        <div className="navContainer">
-          {items.map((it) => {
-            const active = isActive(it.href);
-            return (
-              <button key={it.href} type="button" className={`navItem ${active ? 'active' : ''}`} onClick={() => router.push(it.href)}>
-                <span className="material-icons-outlined icon">{it.icon}</span>
-                <span className="label">{it.shortLabel}</span>
-              </button>
-            );
-          })}
-        </div>
-      </nav>
+    <nav className={`mobileBottomNav ${hiddenByFullscreen ? 'hidden' : ''}`} aria-label="التنقل السفلي">
+      <div className="navContainer">
+        {items.map((it) => {
+          const active = isActive(it.href);
+          return (
+            <button
+              key={it.href}
+              type="button"
+              className={`navItem ${active ? 'active' : ''}`}
+              onClick={() => router.push(it.href)}
+            >
+              {it.shortLabel || it.label}
+            </button>
+          );
+        })}
+      </div>
+
       <style jsx>{`
-        .mobileBottomNav { position: fixed; bottom: 20px; left: 15px; right: 15px; z-index: 5000; transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s; }
-        .mobileBottomNav.hidden { transform: translateY(150%); opacity: 0; pointer-events: none; }
-        .navContainer { display: grid; grid-template-columns: repeat(${items.length || 1}, 1fr); background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(15px); border: 1px solid rgba(255, 255, 255, 0.3); border-radius: 24px; padding: 8px 5px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.15); }
-        .navItem { display: flex; flex-direction: column; align-items: center; gap: 4px; background: none; border: none; color: #64748b; padding: 8px 0; cursor: pointer; transition: all 0.2s; position: relative; }
-        .icon { font-size: 24px; transition: transform 0.2s; }
-        .label { font-size: 10px; font-weight: 800; }
-        .navItem.active { color: var(--primary); }
-        .navItem.active .icon { transform: translateY(-2px); font-variation-settings: 'FILL' 1; }
-        .navItem.active::after { content: ''; position: absolute; bottom: 2px; width: 4px; height: 4px; background: var(--primary); border-radius: 50%; }
-        @media (max-width: 350px) { .label { font-size: 9px; } }
+        .mobileBottomNav {
+          position: fixed;
+          left: 14px;
+          right: 14px;
+          bottom: calc(12px + env(safe-area-inset-bottom));
+          z-index: 5000;
+          transition: transform .25s ease, opacity .25s ease;
+        }
+        .mobileBottomNav.hidden {
+          transform: translateY(150%);
+          opacity: 0;
+          pointer-events: none;
+        }
+        .navContainer {
+          display: grid;
+          grid-template-columns: repeat(${items.length || 1}, minmax(0, 1fr));
+          gap: 6px;
+          padding: 7px;
+          border-radius: 18px;
+          background: rgba(255, 255, 255, .94);
+          border: 1px solid rgba(184, 132, 47, .22);
+          box-shadow: 0 12px 30px rgba(15, 23, 42, .16);
+          backdrop-filter: blur(16px);
+        }
+        .navItem {
+          min-width: 0;
+          height: 40px;
+          border: 0;
+          border-radius: 13px;
+          background: transparent;
+          color: #64748b;
+          font-size: 12px;
+          font-weight: 900;
+          white-space: nowrap;
+          cursor: pointer;
+        }
+        .navItem.active {
+          color: #fff;
+          background: linear-gradient(180deg, #c89a45, #a97625);
+          box-shadow: 0 8px 18px rgba(169, 118, 37, .22);
+        }
+        @media (max-width: 360px) {
+          .navContainer { gap: 4px; padding: 6px; }
+          .navItem { font-size: 11px; }
+        }
       `}</style>
-    </>
+    </nav>
   );
 }
