@@ -9,6 +9,25 @@ import ListingCard from '@/components/ListingCard';
 import { fetchListings } from '@/lib/listings';
 import { NEIGHBORHOODS } from '@/lib/taxonomy';
 
+const NORTH_JEDDAH_CENTER = { lat: 21.7648, lng: 39.1288 };
+const NORTH_JEDDAH_ZOOM = 12;
+const NORTH_JEDDAH_BOUNDS = {
+  south: 21.5600,
+  west: 38.9900,
+  north: 22.0200,
+  east: 39.3000,
+};
+
+function isInsideNorthJeddah(item) {
+  const lat = Number(item?.lat);
+  const lng = Number(item?.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return false;
+  return lat >= NORTH_JEDDAH_BOUNDS.south
+    && lat <= NORTH_JEDDAH_BOUNDS.north
+    && lng >= NORTH_JEDDAH_BOUNDS.west
+    && lng <= NORTH_JEDDAH_BOUNDS.east;
+}
+
 function escapeHtml(s) {
   return String(s || '')
     .replaceAll('&', '&amp;')
@@ -109,7 +128,7 @@ export default function MapClient() {
   const infoRef = useRef(null);
   const prevHtmlOverflowRef = useRef('');
   const prevBodyOverflowRef = useRef('');
-  const didFitBoundsRef = useRef(false);
+  const didFocusNorthJeddahRef = useRef(false);
 
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
 
@@ -173,6 +192,11 @@ export default function MapClient() {
     return (items || []).filter((it) => Number.isFinite(Number(it.lat)) && Number.isFinite(Number(it.lng)));
   }, [items]);
 
+  const focusedMapItems = useMemo(() => {
+    const northItems = mapItems.filter(isInsideNorthJeddah);
+    return northItems.length ? northItems : mapItems;
+  }, [mapItems]);
+
   useEffect(() => {
     let active = true;
     async function load() {
@@ -190,7 +214,7 @@ export default function MapClient() {
         if (active) setLoading(false);
       }
     }
-    didFitBoundsRef.current = false;
+    didFocusNorthJeddahRef.current = false;
     load();
     return () => { active = false; };
   }, [filters]);
@@ -202,10 +226,9 @@ export default function MapClient() {
         if (!apiKey) throw new Error('تعذر تحميل خريطة Google. تأكد من المفتاح وتفعيل Google Maps JavaScript API.');
         const maps = await loadGoogleMaps(apiKey);
         if (!alive || !mapDivRef.current) return;
-        const center = { lat: 21.7628, lng: 39.0994 };
         const map = new maps.Map(mapDivRef.current, {
-          center,
-          zoom: 12,
+          center: NORTH_JEDDAH_CENTER,
+          zoom: NORTH_JEDDAH_ZOOM,
           mapTypeControl: true,
           fullscreenControl: false,
           streetViewControl: false,
@@ -213,6 +236,15 @@ export default function MapClient() {
           scaleControl: false,
           clickableIcons: false,
           gestureHandling: 'greedy',
+          restriction: {
+            latLngBounds: {
+              north: 22.1800,
+              south: 21.3600,
+              east: 39.5200,
+              west: 38.7600,
+            },
+            strictBounds: false,
+          },
           styles: [
             { featureType: 'poi.business', stylers: [{ visibility: 'off' }] },
             { featureType: 'transit', elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
@@ -222,7 +254,11 @@ export default function MapClient() {
         infoRef.current = new maps.InfoWindow();
         setMapReady(true);
         setTimeout(() => {
-          try { maps.event.trigger(map, 'resize'); map.setCenter(center); } catch {}
+          try {
+            maps.event.trigger(map, 'resize');
+            map.setCenter(NORTH_JEDDAH_CENTER);
+            map.setZoom(NORTH_JEDDAH_ZOOM);
+          } catch {}
         }, 250);
       } catch (e) {
         if (!alive) return;
@@ -244,8 +280,16 @@ export default function MapClient() {
 
     mapItems.forEach((it) => {
       const pos = { lat: Number(it.lat), lng: Number(it.lng) };
+      const insideFocusArea = isInsideNorthJeddah(it);
       bounds.extend(pos);
-      const marker = new maps.Marker({ position: pos, map, title: it.title || 'عرض عقاري', icon: buildPriceBadgeIcon(maps, formatPrice(it.price)), optimized: true });
+      const marker = new maps.Marker({
+        position: pos,
+        map,
+        title: it.title || 'عرض عقاري',
+        icon: buildPriceBadgeIcon(maps, formatPrice(it.price)),
+        optimized: true,
+        opacity: insideFocusArea ? 1 : 0.82,
+      });
       marker.addListener('click', () => {
         try {
           const title = escapeHtml(it.title || 'عرض عقاري');
@@ -264,10 +308,29 @@ export default function MapClient() {
       markersRef.current.push(marker);
     });
 
-    if (mapItems.length && !didFitBoundsRef.current) {
-      try { map.fitBounds(bounds, 60); didFitBoundsRef.current = true; } catch {}
+    if (!didFocusNorthJeddahRef.current) {
+      try {
+        if (focusedMapItems.length >= 2) {
+          const focusedBounds = new maps.LatLngBounds();
+          focusedMapItems.forEach((it) => focusedBounds.extend({ lat: Number(it.lat), lng: Number(it.lng) }));
+          map.fitBounds(focusedBounds, 70);
+          const currentZoom = map.getZoom();
+          if (currentZoom && currentZoom < NORTH_JEDDAH_ZOOM) map.setZoom(NORTH_JEDDAH_ZOOM);
+          if (currentZoom && currentZoom > 15) map.setZoom(15);
+        } else {
+          map.setCenter(NORTH_JEDDAH_CENTER);
+          map.setZoom(NORTH_JEDDAH_ZOOM);
+        }
+        didFocusNorthJeddahRef.current = true;
+      } catch {
+        try {
+          map.setCenter(NORTH_JEDDAH_CENTER);
+          map.setZoom(NORTH_JEDDAH_ZOOM);
+          didFocusNorthJeddahRef.current = true;
+        } catch {}
+      }
     }
-  }, [mapReady, mapItems]);
+  }, [mapReady, mapItems, focusedMapItems]);
 
   useEffect(() => {
     if (typeof document === 'undefined') return;
