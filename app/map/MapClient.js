@@ -229,11 +229,15 @@ export default function MapClient() {
         const map = new maps.Map(mapDivRef.current, {
           center: NORTH_JEDDAH_CENTER,
           zoom: NORTH_JEDDAH_ZOOM,
-          mapTypeControl: true,
+          disableDefaultUI: true,
+          zoomControl: false,
+          mapTypeControl: false,
           fullscreenControl: false,
           streetViewControl: false,
           rotateControl: false,
           scaleControl: false,
+          panControl: false,
+          keyboardShortcuts: false,
           clickableIcons: false,
           gestureHandling: 'greedy',
           restriction: {
