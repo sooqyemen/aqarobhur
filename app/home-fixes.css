@@ -1,0 +1,523 @@
+/* Premium homepage hard fixes: global CSS so the layout stays stable in production */
+
+.mainContent {
+  background: #fbfaf7 !important;
+  overflow-x: hidden !important;
+}
+
+/* Header */
+.premiumHeader {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 1000 !important;
+  height: 70px !important;
+  background: rgba(255,255,255,.98) !important;
+  border-bottom: 1px solid rgba(184,132,47,.18) !important;
+  box-shadow: 0 8px 24px rgba(15,23,42,.04) !important;
+}
+.premiumHeader .headerInner {
+  height: 70px !important;
+  display: grid !important;
+  grid-template-columns: auto 1fr auto !important;
+  align-items: center !important;
+  gap: 24px !important;
+}
+.premiumHeader .brandBlock {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  text-decoration: none !important;
+  min-width: 0 !important;
+}
+.premiumHeader .brandLogo {
+  width: 48px !important;
+  height: 48px !important;
+  max-width: 48px !important;
+  max-height: 48px !important;
+  object-fit: contain !important;
+  display: block !important;
+}
+.premiumHeader .logoFallback {
+  width: 46px !important;
+  height: 46px !important;
+  display: grid !important;
+  place-items: center !important;
+  border-radius: 14px !important;
+  color: #b8842f !important;
+  background: #fff7e8 !important;
+  border: 1px solid rgba(184,132,47,.25) !important;
+  font-size: 22px !important;
+  font-weight: 950 !important;
+}
+.premiumHeader .brandText {
+  display: flex !important;
+  flex-direction: column !important;
+  line-height: 1.35 !important;
+  white-space: nowrap !important;
+}
+.premiumHeader .brandText strong {
+  color: #b8842f !important;
+  font-size: 20px !important;
+  font-weight: 950 !important;
+}
+.premiumHeader .brandText small {
+  color: #4b5563 !important;
+  font-size: 11px !important;
+  font-weight: 800 !important;
+}
+.premiumHeader .desktopNav {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 34px !important;
+}
+.premiumHeader .desktopNav a {
+  position: relative !important;
+  color: #111827 !important;
+  font-size: 14px !important;
+  font-weight: 850 !important;
+  text-decoration: none !important;
+  padding: 24px 0 20px !important;
+}
+.premiumHeader .desktopNav a.active,
+.premiumHeader .desktopNav a:hover { color: #a97625 !important; }
+.premiumHeader .headerActions {
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+}
+.premiumHeader .addListingBtn,
+.premiumHeader .loginBtn {
+  min-height: 38px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 7px !important;
+  padding: 0 14px !important;
+  border-radius: 8px !important;
+  font-size: 13px !important;
+  font-weight: 950 !important;
+  text-decoration: none !important;
+  white-space: nowrap !important;
+}
+.premiumHeader .addListingBtn {
+  border: 1px solid #b8842f !important;
+  color: #fff !important;
+  background: linear-gradient(180deg,#c89a45,#a97625) !important;
+}
+.premiumHeader .loginBtn {
+  border: 1px solid rgba(184,132,47,.35) !important;
+  background: #fff !important;
+  color: #9a6a21 !important;
+}
+.premiumHeader .mobileMenuBtn { display: none !important; }
+
+/* Homepage */
+.premiumHome {
+  background: #fbfaf7 !important;
+  color: #111827 !important;
+  padding-bottom: 22px !important;
+}
+.premiumHome .heroPanel {
+  position: relative !important;
+  min-height: 356px !important;
+  overflow: visible !important;
+  background: linear-gradient(180deg,#f6ead7 0%,#f7f3ea 64%,#fff 100%) !important;
+}
+.premiumHome .heroBackdrop {
+  position: absolute !important;
+  inset: 0 !important;
+  overflow: hidden !important;
+  background: linear-gradient(90deg,rgba(255,255,255,.2),rgba(255,255,255,.42)), radial-gradient(circle at 16% 38%,rgba(244,184,95,.58),transparent 12%), radial-gradient(circle at 72% 16%,rgba(255,255,255,.7),transparent 24%), linear-gradient(135deg,#f6ddb3 0%,#dfe9ee 46%,#efe5d5 100%) !important;
+}
+.premiumHome .heroBackdrop > span { position: absolute !important; display: block !important; }
+.premiumHome .sun {
+  right: 13% !important;
+  top: 74px !important;
+  width: 70px !important;
+  height: 70px !important;
+  border-radius: 50% !important;
+  background: rgba(255,219,146,.72) !important;
+  box-shadow: 0 0 80px rgba(255,205,105,.9) !important;
+}
+.premiumHome .coastLine {
+  left: -8% !important;
+  right: -4% !important;
+  bottom: -24px !important;
+  height: 190px !important;
+  background: linear-gradient(110deg,#7fb6c5 0 36%,#dbc9aa 36% 100%) !important;
+  clip-path: polygon(0 34%,32% 20%,50% 37%,69% 18%,100% 0,100% 100%,0 100%) !important;
+  opacity: .88 !important;
+}
+.premiumHome .villa {
+  bottom: 78px !important;
+  width: 210px !important;
+  height: 105px !important;
+  border-radius: 12px 12px 0 0 !important;
+  background: linear-gradient(180deg,#f7f0e5,#d7c7b0) !important;
+  box-shadow: 0 18px 40px rgba(37,42,52,.18) !important;
+}
+.premiumHome .villa::before {
+  content: '' !important;
+  position: absolute !important;
+  left: 16px !important;
+  right: 16px !important;
+  top: -42px !important;
+  height: 64px !important;
+  border-radius: 9px !important;
+  background: linear-gradient(180deg,#fdf8ef,#d9cab7) !important;
+}
+.premiumHome .villa::after {
+  content: '' !important;
+  position: absolute !important;
+  left: 18px !important;
+  right: 18px !important;
+  bottom: 22px !important;
+  height: 44px !important;
+  border-radius: 4px !important;
+  background: repeating-linear-gradient(90deg,rgba(16,27,43,.72) 0 38px,rgba(255,255,255,.34) 38px 48px) !important;
+}
+.premiumHome .villaOne { left: 8% !important; transform: scale(.82) !important; opacity: .78 !important; }
+.premiumHome .villaTwo { left: 28% !important; transform: scale(1) !important; opacity: .92 !important; }
+.premiumHome .villaThree { left: 51% !important; transform: scale(.88) !important; opacity: .82 !important; }
+.premiumHome .palm { display: none !important; }
+.premiumHome .heroContent {
+  position: relative !important;
+  z-index: 2 !important;
+  min-height: 356px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  text-align: center !important;
+  padding-top: 52px !important;
+  padding-bottom: 68px !important;
+}
+.premiumHome .heroContent h1 {
+  margin: 0 0 12px !important;
+  font-size: clamp(28px,4.3vw,46px) !important;
+  line-height: 1.35 !important;
+  font-weight: 950 !important;
+  color: #152033 !important;
+}
+.premiumHome .heroContent p {
+  margin: 0 !important;
+  color: #243047 !important;
+  font-size: clamp(15px,2vw,20px) !important;
+  font-weight: 800 !important;
+}
+.premiumHome .heroSearch {
+  position: absolute !important;
+  left: 50% !important;
+  bottom: -45px !important;
+  transform: translateX(-50%) !important;
+  width: min(1020px,calc(100vw - 36px)) !important;
+  display: grid !important;
+  grid-template-columns: 1.1fr 1.1fr 1fr 1.15fr 128px !important;
+  gap: 12px !important;
+  align-items: end !important;
+  padding: 20px !important;
+  border-radius: 18px !important;
+  background: rgba(255,255,255,.96) !important;
+  border: 1px solid rgba(255,255,255,.84) !important;
+  box-shadow: 0 22px 55px rgba(15,23,42,.17) !important;
+  backdrop-filter: blur(18px) !important;
+}
+.premiumHome .heroSearch label,
+.premiumHome .requestForm label {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 6px !important;
+  text-align: right !important;
+  min-width: 0 !important;
+}
+.premiumHome .heroSearch label span,
+.premiumHome .requestForm label span {
+  color: #3f4656 !important;
+  font-size: 12px !important;
+  font-weight: 900 !important;
+}
+.premiumHome .heroSearch select,
+.premiumHome .requestForm input,
+.premiumHome .requestForm select,
+.premiumHome .requestForm textarea {
+  width: 100% !important;
+  min-width: 0 !important;
+  height: 46px !important;
+  border: 1px solid rgba(183,151,91,.25) !important;
+  background: #fff !important;
+  color: #273244 !important;
+  border-radius: 10px !important;
+  padding: 0 13px !important;
+  font-weight: 750 !important;
+}
+.premiumHome .requestForm textarea { height: auto !important; min-height: 82px !important; padding-top: 12px !important; }
+.premiumHome .heroSearch button,
+.premiumHome .goldAction {
+  height: 50px !important;
+  border: 0 !important;
+  border-radius: 11px !important;
+  background: linear-gradient(180deg,#c89a45,#a97625) !important;
+  color: #fff !important;
+  font-weight: 950 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 8px !important;
+  text-decoration: none !important;
+}
+.premiumHome .neighborhoodsBand { padding-top: 74px !important; padding-bottom: 18px !important; }
+.premiumHome .bandHeader,
+.premiumHome .sectionHeading {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 16px !important;
+  margin-bottom: 16px !important;
+}
+.premiumHome .bandHeader h2,
+.premiumHome .sectionHeading h2 {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  margin: 0 !important;
+  color: #151c2d !important;
+  font-size: 20px !important;
+  font-weight: 950 !important;
+}
+.premiumHome .chipsScroller {
+  display: flex !important;
+  gap: 12px !important;
+  overflow-x: auto !important;
+  padding: 6px 4px 12px !important;
+  scrollbar-width: none !important;
+  white-space: nowrap !important;
+}
+.premiumHome .neighborhoodChip {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  flex: 0 0 auto !important;
+  min-height: 46px !important;
+  padding: 0 18px !important;
+  border-radius: 10px !important;
+  background: #fff !important;
+  border: 1px solid rgba(183,151,91,.22) !important;
+  color: #20293a !important;
+  font-weight: 850 !important;
+  box-shadow: 0 9px 24px rgba(15,23,42,.04) !important;
+  text-decoration: none !important;
+}
+.premiumHome .listingsSection,
+.premiumHome .mapRequestGrid,
+.premiumHome .servicesSection,
+.premiumHome .faqSection { margin-top: 22px !important; }
+.premiumHome .homeListingsGrid {
+  display: grid !important;
+  grid-template-columns: repeat(4,minmax(0,1fr)) !important;
+  gap: 18px !important;
+}
+.premiumHome .homeListingCard,
+.premiumHome .mapPreviewCard,
+.premiumHome .requestCard,
+.premiumHome .serviceCard,
+.premiumHome .faqPill {
+  background: #fff !important;
+  border: 1px solid rgba(183,151,91,.2) !important;
+  box-shadow: 0 14px 34px rgba(15,23,42,.055) !important;
+}
+.premiumHome .homeListingCard { border-radius: 14px !important; overflow: hidden !important; min-width: 0 !important; }
+.premiumHome .homeListingMedia {
+  position: relative !important;
+  display: block !important;
+  aspect-ratio: 16/10 !important;
+  height: auto !important;
+  overflow: hidden !important;
+  background: #f3f4f6 !important;
+}
+.premiumHome .homeListingMedia img {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  display: block !important;
+}
+.premiumHome .homeListingMedia::after {
+  content: '' !important;
+  position: absolute !important;
+  inset: auto 0 0 !important;
+  height: 54% !important;
+  background: linear-gradient(180deg,transparent,rgba(8,14,24,.62)) !important;
+}
+.premiumHome .listingFallback {
+  width: 100% !important;
+  height: 100% !important;
+  display: grid !important;
+  place-items: center !important;
+  background: linear-gradient(135deg,#b98a36,#172033) !important;
+  color: #fff !important;
+}
+.premiumHome .dealChip,
+.premiumHome .heartChip,
+.premiumHome .priceOverlay { position: absolute !important; z-index: 2 !important; }
+.premiumHome .dealChip {
+  top: 11px !important;
+  right: 11px !important;
+  padding: 5px 10px !important;
+  border-radius: 7px !important;
+  font-size: 12px !important;
+  color: #fff !important;
+  font-weight: 950 !important;
+  background: #b8842f !important;
+}
+.premiumHome .dealChip.rent { background: #111827 !important; color: #f0d28c !important; }
+.premiumHome .heartChip {
+  top: 10px !important;
+  left: 10px !important;
+  width: 30px !important;
+  height: 30px !important;
+  display: grid !important;
+  place-items: center !important;
+  border-radius: 50% !important;
+  background: rgba(255,255,255,.9) !important;
+  color: #4b5563 !important;
+}
+.premiumHome .priceOverlay {
+  left: 13px !important;
+  right: 13px !important;
+  bottom: 11px !important;
+  color: #fff !important;
+  font-size: 20px !important;
+  font-weight: 950 !important;
+  text-align: left !important;
+  text-shadow: 0 2px 12px rgba(0,0,0,.38) !important;
+}
+.premiumHome .homeListingBody { padding: 13px 14px 14px !important; }
+.premiumHome .homeListingTitle {
+  display: block !important;
+  min-height: 46px !important;
+  color: #111827 !important;
+  font-size: 15px !important;
+  font-weight: 950 !important;
+  line-height: 1.55 !important;
+  text-decoration: none !important;
+}
+.premiumHome .homeListingLocation { margin: 2px 0 8px !important; color: #6b7280 !important; font-size: 13px !important; font-weight: 800 !important; }
+.premiumHome .homeListingFacts { display: flex !important; justify-content: space-between !important; gap: 10px !important; color: #5d6573 !important; font-size: 12px !important; font-weight: 800 !important; border-top: 1px solid #f1f1ef !important; padding-top: 8px !important; }
+.premiumHome .homeListingActions { display: grid !important; grid-template-columns: 1fr 1fr !important; gap: 10px !important; margin-top: 12px !important; }
+.premiumHome .whatsBtn,
+.premiumHome .detailsBtn {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 5px !important;
+  height: 38px !important;
+  border-radius: 8px !important;
+  font-size: 13px !important;
+  font-weight: 950 !important;
+  text-decoration: none !important;
+}
+.premiumHome .whatsBtn { color: #15803d !important; background: #f1fbf5 !important; border: 1px solid rgba(21,128,61,.18) !important; }
+.premiumHome .detailsBtn { color: #9a6a21 !important; border: 1px solid rgba(184,132,47,.35) !important; background: #fff !important; }
+.premiumHome .mapRequestGrid { display: grid !important; grid-template-columns: 1fr 1.08fr !important; gap: 18px !important; align-items: stretch !important; }
+.premiumHome .mapPreviewCard,
+.premiumHome .requestCard { border-radius: 16px !important; padding: 18px !important; min-width: 0 !important; }
+.premiumHome .mapMock { position: relative !important; height: 178px !important; overflow: hidden !important; border-radius: 12px !important; background: #eef0ec !important; border: 1px solid #eee1cc !important; }
+.premiumHome .mapMock > span { position: absolute !important; display: block !important; }
+.premiumHome .seaBlock { inset-block: 0 !important; right: 0 !important; width: 33% !important; background: linear-gradient(180deg,#9fd2df,#cae8ed) !important; }
+.premiumHome .pin { width: 18px !important; height: 18px !important; border-radius: 50% 50% 50% 0 !important; background: #b8842f !important; transform: rotate(-45deg) !important; }
+.premiumHome .p1 { left: 24% !important; top: 55px !important; }
+.premiumHome .p2 { left: 50% !important; top: 78px !important; }
+.premiumHome .p3 { left: 72% !important; top: 44px !important; }
+.premiumHome .mapLabel { color: #475569 !important; font-size: 12px !important; font-weight: 900 !important; }
+.premiumHome .l1 { left: 18% !important; top: 22px !important; }
+.premiumHome .l2 { left: 45% !important; top: 42px !important; }
+.premiumHome .l3 { left: 68% !important; top: 82px !important; }
+.premiumHome .requestForm { display: grid !important; grid-template-columns: 1fr 1fr !important; gap: 12px !important; }
+.premiumHome .requestForm label:nth-child(4),
+.premiumHome .fullAction { grid-column: 1 / -1 !important; }
+.premiumHome .fullAction { width: 100% !important; height: 42px !important; }
+.premiumHome .serviceGrid { display: grid !important; grid-template-columns: repeat(4,minmax(0,1fr)) !important; gap: 18px !important; }
+.premiumHome .serviceCard {
+  display: grid !important;
+  grid-template-columns: 54px 1fr !important;
+  gap: 13px !important;
+  align-items: center !important;
+  min-height: 98px !important;
+  padding: 16px !important;
+  border-radius: 14px !important;
+  color: inherit !important;
+  text-decoration: none !important;
+}
+.premiumHome .serviceCard > .material-icons-outlined { width: 46px !important; height: 46px !important; display: grid !important; place-items: center !important; border-radius: 13px !important; color: #b8842f !important; background: #fff7e8 !important; font-size: 27px !important; }
+.premiumHome .serviceCard h3 { margin: 0 0 4px !important; color: #111827 !important; font-size: 15px !important; font-weight: 950 !important; }
+.premiumHome .serviceCard p { margin: 0 !important; color: #667085 !important; font-size: 12.5px !important; line-height: 1.7 !important; font-weight: 750 !important; }
+.premiumHome .faqRow { display: grid !important; grid-template-columns: repeat(4,minmax(0,1fr)) !important; gap: 12px !important; }
+.premiumHome .faqPill { min-height: 44px !important; border-radius: 9px !important; padding: 0 13px !important; display: flex !important; align-items: center !important; justify-content: space-between !important; color: #344054 !important; font-size: 13px !important; font-weight: 850 !important; text-decoration: none !important; }
+.premiumHome .allFaqLink { display: block !important; width: fit-content !important; margin: 14px auto 0 !important; color: #1f2937 !important; font-size: 13px !important; font-weight: 900 !important; }
+
+/* Footer */
+.premiumFooter {
+  margin-top: 26px !important;
+  padding: 44px 0 18px !important;
+  background: radial-gradient(circle at 18% 0,rgba(184,132,47,.18),transparent 34%), linear-gradient(180deg,#121b2b 0%,#07111f 100%) !important;
+  color: #e5e7eb !important;
+  border-top: 1px solid rgba(184,132,47,.25) !important;
+}
+.premiumFooter .footerGrid {
+  display: grid !important;
+  grid-template-columns: 1.45fr .85fr .85fr 1fr !important;
+  gap: 34px !important;
+  align-items: start !important;
+}
+.premiumFooter .footerLogo { display: inline-flex !important; align-items: center !important; gap: 12px !important; margin-bottom: 14px !important; }
+.premiumFooter .mark { width: 48px !important; height: 48px !important; display: grid !important; place-items: center !important; border-radius: 15px !important; color: #d7ad55 !important; border: 1px solid rgba(215,173,85,.32) !important; background: rgba(255,255,255,.06) !important; font-weight: 950 !important; font-size: 24px !important; }
+.premiumFooter .footerLogo strong { display: block !important; color: #d7ad55 !important; font-size: 22px !important; font-weight: 950 !important; }
+.premiumFooter .footerLogo small { display: block !important; color: #cbd5e1 !important; font-size: 12px !important; font-weight: 800 !important; }
+.premiumFooter .footerBrand p { max-width: 390px !important; margin: 0 0 18px !important; color: #cbd5e1 !important; font-size: 14px !important; line-height: 1.9 !important; font-weight: 700 !important; }
+.premiumFooter .socials { display: flex !important; gap: 10px !important; }
+.premiumFooter .socials a { width: 34px !important; height: 34px !important; display: grid !important; place-items: center !important; border-radius: 50% !important; color: #fff !important; background: rgba(255,255,255,.06) !important; border: 1px solid rgba(255,255,255,.12) !important; text-decoration: none !important; }
+.premiumFooter .footerColumn h3 { margin: 0 0 14px !important; color: #fff !important; font-size: 16px !important; font-weight: 950 !important; }
+.premiumFooter .footerColumn a,
+.premiumFooter .footerColumn span { display: block !important; color: #cbd5e1 !important; font-size: 14px !important; font-weight: 750 !important; line-height: 2.1 !important; text-decoration: none !important; white-space: normal !important; }
+.premiumFooter .footerSeo { display: flex !important; flex-wrap: wrap !important; gap: 9px !important; margin-top: 30px !important; padding-top: 22px !important; border-top: 1px solid rgba(255,255,255,.09) !important; }
+.premiumFooter .footerSeo a { display: inline-flex !important; align-items: center !important; min-height: 34px !important; padding: 0 12px !important; border-radius: 999px !important; color: #f8fafc !important; background: rgba(255,255,255,.055) !important; border: 1px solid rgba(215,173,85,.18) !important; font-size: 12px !important; font-weight: 850 !important; text-decoration: none !important; }
+.premiumFooter .footerBottom { display: flex !important; justify-content: space-between !important; align-items: center !important; gap: 14px !important; margin-top: 22px !important; padding-top: 14px !important; border-top: 1px solid rgba(255,255,255,.08) !important; color: #94a3b8 !important; font-size: 13px !important; font-weight: 800 !important; }
+.premiumFooter .footerBottom p { margin: 0 !important; }
+
+@media (max-width: 1100px) {
+  .premiumHome .heroSearch { grid-template-columns: repeat(2,minmax(0,1fr)) !important; bottom: -108px !important; }
+  .premiumHome .heroSearch button { grid-column: 1 / -1 !important; }
+  .premiumHome .neighborhoodsBand { padding-top: 135px !important; }
+  .premiumHome .homeListingsGrid,
+  .premiumHome .serviceGrid,
+  .premiumHome .faqRow { grid-template-columns: repeat(2,minmax(0,1fr)) !important; }
+  .premiumHome .mapRequestGrid { grid-template-columns: 1fr !important; }
+  .premiumFooter .footerGrid { grid-template-columns: 1fr 1fr !important; }
+}
+
+@media (max-width: 920px) {
+  .premiumHeader,
+  .premiumHeader .headerInner { height: 66px !important; }
+  .premiumHeader .headerInner { grid-template-columns: 1fr auto !important; }
+  .premiumHeader .desktopNav { display: none !important; }
+  .premiumHeader .mobileMenuBtn { display: grid !important; place-items: center !important; width: 40px !important; height: 40px !important; border-radius: 10px !important; border: 1px solid rgba(184,132,47,.25) !important; background: #fff !important; color: #a97625 !important; }
+  .premiumHeader .addListingBtn:not(.full),
+  .premiumHeader .loginBtn:not(.full) { display: none !important; }
+}
+
+@media (max-width: 680px) {
+  .premiumHome .heroPanel { min-height: 520px !important; }
+  .premiumHome .heroContent { justify-content: flex-start !important; padding-top: 46px !important; }
+  .premiumHome .heroSearch { position: relative !important; left: auto !important; bottom: auto !important; transform: none !important; width: 100% !important; margin-top: 28px !important; grid-template-columns: 1fr !important; border-radius: 16px !important; padding: 14px !important; }
+  .premiumHome .heroSearch button { grid-column: auto !important; }
+  .premiumHome .neighborhoodsBand { padding-top: 22px !important; }
+  .premiumHome .homeListingsGrid,
+  .premiumHome .serviceGrid,
+  .premiumHome .faqRow,
+  .premiumHome .requestForm { grid-template-columns: 1fr !important; }
+  .premiumHome .requestForm label:nth-child(4),
+  .premiumHome .fullAction { grid-column: auto !important; }
+  .premiumFooter { padding-bottom: 86px !important; }
+  .premiumFooter .footerGrid { grid-template-columns: 1fr !important; gap: 24px !important; }
+  .premiumFooter .footerBottom { flex-direction: column !important; align-items: flex-start !important; }
+}
