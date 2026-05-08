@@ -100,6 +100,82 @@ svg {
   max-width: none !important;
 }
 
+/* إصلاحات محددة للواجهة الجديدة بدون الرجوع لملف home-fixes القديم */
+.premiumHeader .logoBox,
+.premiumHeader .brandLogo,
+.premiumHeader .logoFallback {
+  width: 42px !important;
+  height: 42px !important;
+  max-width: 42px !important;
+  max-height: 42px !important;
+  min-width: 42px !important;
+  min-height: 42px !important;
+  flex: 0 0 42px !important;
+  overflow: hidden !important;
+  object-fit: contain !important;
+}
+
+.premiumHeader .brandLogo {
+  object-fit: contain !important;
+  display: block !important;
+}
+
+.premiumHome .heroPanel {
+  min-height: 330px !important;
+}
+
+.premiumHome .heroBackdrop .villa,
+.premiumHome .heroBackdrop .palm,
+.premiumHome .heroBackdrop .coastLine,
+.premiumHome .heroBackdrop .sun {
+  transform: scale(.78) !important;
+  opacity: .42 !important;
+}
+
+.premiumHome .heroContent {
+  min-height: 330px !important;
+}
+
+.premiumHome .bandHeader h2::after {
+  content: '' !important;
+}
+
+.premiumHome .mapMock {
+  height: 210px !important;
+  border-radius: 16px !important;
+  background: none !important;
+  overflow: hidden !important;
+  border: 1px solid rgba(184, 132, 47, .20) !important;
+}
+
+.premiumHome .mapMock::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: url('https://maps.googleapis.com/maps/api/staticmap?center=21.7628,39.0994&zoom=13&size=800x360&maptype=roadmap&markers=color:green%7C21.7628,39.0994&key=');
+  background-size: cover;
+  background-position: center;
+  opacity: .16;
+}
+
+.premiumHome .mapMock::after {
+  content: 'اضغط فتح الخريطة لعرض العقارات على الخريطة الحقيقية';
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  text-align: center;
+  color: #111827;
+  font-size: 15px;
+  font-weight: 950;
+  background: linear-gradient(135deg, rgba(255,255,255,.92), rgba(255,247,232,.88));
+}
+
+.premiumHome .mapMock > span {
+  display: none !important;
+}
+
 @media (max-width: 768px) {
   .mainContent {
     overflow-x: hidden !important;
@@ -109,6 +185,31 @@ svg {
   .listingPageWrap {
     padding-inline: 12px !important;
     max-width: 100vw !important;
+  }
+
+  .premiumHeader .logoBox,
+  .premiumHeader .brandLogo,
+  .premiumHeader .logoFallback {
+    width: 38px !important;
+    height: 38px !important;
+    max-width: 38px !important;
+    max-height: 38px !important;
+    min-width: 38px !important;
+    min-height: 38px !important;
+    flex-basis: 38px !important;
+  }
+
+  .premiumHome .heroPanel,
+  .premiumHome .heroContent {
+    min-height: 430px !important;
+  }
+
+  .premiumHome .heroBackdrop .villa,
+  .premiumHome .heroBackdrop .palm,
+  .premiumHome .heroBackdrop .coastLine,
+  .premiumHome .heroBackdrop .sun {
+    opacity: .28 !important;
+    transform: scale(.58) !important;
   }
 
   .galleryCard,
