@@ -178,12 +178,15 @@ svg {
 }
 
 .premiumHome .mapMock.cleanGoogleMapPreview::before,
-.premiumHome .mapMock.cleanGoogleMapPreview::after {
+.premiumHome .mapMock.cleanGoogleMapPreview::after,
+.premiumHome .mapMock.homeLiveListingsMap::before,
+.premiumHome .mapMock.homeLiveListingsMap::after {
   content: none !important;
   display: none !important;
 }
 
-.premiumHome .mapMock.cleanGoogleMapPreview > span {
+.premiumHome .mapMock.cleanGoogleMapPreview > span,
+.premiumHome .mapMock.homeLiveListingsMap > span {
   display: none !important;
 }
 
@@ -232,6 +235,47 @@ svg {
   font-weight: 850;
 }
 
+.premiumHome .homeLiveListingsMap {
+  height: 220px !important;
+  background: #eef2f7 !important;
+}
+
+.premiumHome .homeLiveMapCanvas {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.premiumHome .homeLiveMapCanvas .gm-style,
+.premiumHome .homeLiveMapCanvas .gm-style > div {
+  max-width: none !important;
+}
+
+.premiumHome .homeLiveMapFallback {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  gap: 4px;
+  text-align: center;
+  padding: 20px;
+  color: #111827;
+  text-decoration: none;
+  background: linear-gradient(135deg, #fff, #fff7e8);
+}
+
+.premiumHome .homeLiveMapFallback strong {
+  font-size: 16px;
+  font-weight: 950;
+}
+
+.premiumHome .homeLiveMapFallback small {
+  color: #667085;
+  font-size: 13px;
+  font-weight: 850;
+}
+
 @media (max-width: 768px) {
   .mainContent {
     overflow-x: hidden !important;
@@ -268,7 +312,8 @@ svg {
     transform: scale(.58) !important;
   }
 
-  .premiumHome .mapMock.cleanGoogleMapPreview {
+  .premiumHome .mapMock.cleanGoogleMapPreview,
+  .premiumHome .mapMock.homeLiveListingsMap {
     height: 190px !important;
   }
 
