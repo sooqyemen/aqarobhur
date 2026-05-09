@@ -13,6 +13,47 @@ const NORTH_JEDDAH_BOUNDS = {
   east: 39.3000,
 };
 
+const HOME_NEIGHBORHOODS = [
+  'أبحر الشمالية',
+  'الفردوس',
+  'الشراع',
+  'الأمواج',
+  'الصواري',
+  'الياقوت',
+  'اللؤلؤ',
+  'الزمرد',
+  'المنارات',
+  'الفنار',
+  'البحيرات',
+  'النور',
+  'المروج',
+  'الخليج',
+  'النجمة',
+  'الزهور',
+  'الغربية',
+  'الشويضي',
+  'الغدير',
+  'الربيع',
+  'الدرة',
+  'العبير',
+  'العقيق',
+  'المجامع',
+  'الفرقان',
+  'اليسر',
+  'الجزيرة',
+  'الوداد',
+  'التوفيق',
+  'الندى',
+  'البيان',
+  'المجد',
+  'رضوى',
+  'البوادر',
+  'أم سدرة',
+  'الهجرة',
+  'العويجاء',
+  'الشرائع',
+];
+
 let gmapsPromise = null;
 
 function isInsideNorthJeddah(item) {
@@ -92,6 +133,57 @@ function loadGoogleMaps(apiKey) {
   });
 
   return gmapsPromise;
+}
+
+function patchHomeNeighborhoods() {
+  const strip = document.querySelector('.premiumHome .neighborhoodsBand .chipsScroller');
+  if (!strip || strip.dataset.neighborhoodsReady === '1') return;
+
+  strip.dataset.neighborhoodsReady = '1';
+  strip.innerHTML = '';
+  strip.style.display = 'flex';
+  strip.style.flexWrap = 'nowrap';
+  strip.style.gap = '10px';
+  strip.style.overflowX = 'auto';
+  strip.style.overflowY = 'hidden';
+  strip.style.padding = '4px 2px 14px';
+  strip.style.webkitOverflowScrolling = 'touch';
+  strip.style.scrollbarWidth = 'none';
+
+  HOME_NEIGHBORHOODS.forEach((name) => {
+    const link = document.createElement('a');
+    link.href = `/listings?neighborhood=${encodeURIComponent(name)}`;
+    link.className = 'neighborhoodChip';
+    link.textContent = name;
+    link.style.flex = '0 0 auto';
+    link.style.display = 'inline-flex';
+    link.style.alignItems = 'center';
+    link.style.justifyContent = 'center';
+    link.style.minHeight = '42px';
+    link.style.padding = '0 15px';
+    link.style.borderRadius = '999px';
+    link.style.whiteSpace = 'nowrap';
+    link.style.background = '#fff';
+    link.style.border = '1px solid rgba(216,178,95,.38)';
+    link.style.color = '#1f2937';
+    link.style.fontSize = '14px';
+    link.style.fontWeight = '850';
+    link.style.textDecoration = 'none';
+    link.style.boxShadow = '0 8px 22px rgba(15,23,42,.05)';
+    strip.appendChild(link);
+  });
+
+  const select = document.querySelector('.premiumHome .heroSearch select');
+  if (select && select.dataset.neighborhoodsReady !== '1') {
+    select.dataset.neighborhoodsReady = '1';
+    select.innerHTML = '<option value="">اختر الحي</option>';
+    HOME_NEIGHBORHOODS.forEach((name) => {
+      const option = document.createElement('option');
+      option.value = name;
+      option.textContent = name;
+      select.appendChild(option);
+    });
+  }
 }
 
 export default function HomeMapRuntimePatch() {
@@ -218,8 +310,13 @@ export default function HomeMapRuntimePatch() {
       renderLiveMap(oldMap);
     }
 
-    patchMapCard();
-    observer = new MutationObserver(patchMapCard);
+    function patchHome() {
+      patchHomeNeighborhoods();
+      patchMapCard();
+    }
+
+    patchHome();
+    observer = new MutationObserver(patchHome);
     observer.observe(document.body, { childList: true, subtree: true });
 
     return () => {
