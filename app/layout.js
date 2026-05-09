@@ -1,6 +1,5 @@
 import './globals.css';
 import './mobile-fixes.css';
-import './home-neighborhoods-fix.css';
 import { Cairo } from 'next/font/google';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
