@@ -1054,3 +1054,330 @@ button, input, select, textarea { font: inherit; outline: none; }
     font-size: 14px !important;
   }
 }
+/* ============================================ */
+/* 🏠 تنسيق الفوتر الاحترافي - عقار أبحر        */
+/* ============================================ */
+
+.siteFooter {
+  background: #0f172a;
+  color: #e2e8f0;
+  margin-top: 60px;
+  position: relative;
+  overflow: hidden;
+}
+
+.siteFooter::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #b8842f, #d4a84b, #b8842f);
+}
+
+.footerInner {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 50px 20px 30px;
+}
+
+.footerGrid {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 1fr 1.2fr;
+  gap: 40px;
+  margin-bottom: 40px;
+}
+
+/* --- العمود الأول: الهوية --- */
+.footerBrand {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.footerLogo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.footerLogoIcon {
+  width: 48px;
+  height: 48px;
+  background: linear-gradient(135deg, #b8842f, #d4a84b);
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 24px;
+  font-weight: 900;
+  flex-shrink: 0;
+}
+
+.footerLogoText {
+  font-size: 22px;
+  font-weight: 950;
+  color: #fff;
+  margin: 0;
+}
+
+.footerLogoText span {
+  color: #d4a84b;
+}
+
+.footerDesc {
+  color: #94a3b8;
+  font-size: 14px;
+  line-height: 1.8;
+  font-weight: 600;
+  margin: 0;
+}
+
+.footerSocials {
+  display: flex;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.socialBtn {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #cbd5e1;
+  font-size: 18px;
+  transition: all 0.3s ease;
+  text-decoration: none;
+}
+
+.socialBtn:hover {
+  background: #b8842f;
+  border-color: #b8842f;
+  color: #fff;
+  transform: translateY(-3px);
+}
+
+/* --- الأعمدة: الروابط --- */
+.footerCol h4 {
+  color: #fff;
+  font-size: 16px;
+  font-weight: 950;
+  margin: 0 0 20px 0;
+  position: relative;
+  padding-bottom: 12px;
+}
+
+.footerCol h4::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 35px;
+  height: 3px;
+  background: linear-gradient(90deg, #b8842f, #d4a84b);
+  border-radius: 3px;
+}
+
+.footerLinks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.footerLinks li a {
+  color: #94a3b8;
+  font-size: 14px;
+  font-weight: 700;
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.25s ease;
+}
+
+.footerLinks li a::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #475569;
+  transition: all 0.25s ease;
+  flex-shrink: 0;
+}
+
+.footerLinks li a:hover {
+  color: #d4a84b;
+  padding-right: 6px;
+}
+
+.footerLinks li a:hover::before {
+  background: #d4a84b;
+}
+
+/* --- عمود التواصل --- */
+.footerContact {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.contactItem {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.contactItem .material-icons-outlined {
+  color: #b8842f;
+  font-size: 20px;
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.contactItem div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.contactItem strong {
+  color: #fff;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.contactItem span,
+.contactItem a {
+  color: #94a3b8;
+  font-size: 14px;
+  font-weight: 700;
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+.contactItem a:hover {
+  color: #d4a84b;
+}
+
+/* --- الشريط السفلي --- */
+.footerBottom {
+  border-top: 1px solid rgba(255,255,255,0.08);
+  padding-top: 25px;
+}
+
+.footerBottomInner {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 20px;
+}
+
+.footerKeywords {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  justify-content: center;
+  margin-bottom: 20px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+
+.footerKeywords a {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+.footerKeywords a:hover {
+  color: #d4a84b;
+}
+
+.footerCopyright {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.footerCopyright p {
+  margin: 0;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.footerCopyright a {
+  color: #d4a84b;
+  text-decoration: none;
+  font-weight: 800;
+}
+
+/* ============================================ */
+/* 📱 استجابة الجوال (Mobile Footer)            */
+/* ============================================ */
+
+@media (max-width: 1024px) {
+  .footerGrid {
+    grid-template-columns: 1fr 1fr;
+    gap: 35px;
+  }
+}
+
+@media (max-width: 640px) {
+  .footerGrid {
+    grid-template-columns: 1fr;
+    gap: 30px;
+    text-align: center;
+  }
+
+  .footerLogo {
+    justify-content: center;
+  }
+
+  .footerSocials {
+    justify-content: center;
+  }
+
+  .footerCol h4::after {
+    right: 50%;
+    transform: translateX(50%);
+  }
+
+  .footerLinks li a {
+    justify-content: center;
+  }
+
+  .contactItem {
+    justify-content: center;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+
+  .footerCopyright {
+    flex-direction: column;
+    text-align: center;
+  }
+
+  .footerKeywords {
+    gap: 6px 10px;
+  }
+
+  .footerKeywords a {
+    font-size: 11px;
+  }
+}
