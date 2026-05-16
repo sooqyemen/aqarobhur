@@ -245,7 +245,7 @@ export default function HomePage() {
       });
 
       setRequest({ name: '', phone: '', type: '', message: '' });
-      setRequestStatus({ type: 'success', text: 'تم استلام طلبك بنجاح. سيتواصل معك أحد مستشارينا قريباً.' });
+      setRequestStatus({ type: 'success', text: 'تم استلام طلبك بنجاح. سيقوم أحد موظفينا بالتواصل معك قريباً.' });
     } catch (error) {
       console.warn('Home request submit failed', error);
       setRequestStatus({ type: 'error', text: 'تعذر إرسال الطلب الآن. تأكد من الاتصال أو جرّب مرة أخرى.' });
