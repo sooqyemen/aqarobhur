@@ -221,8 +221,8 @@ export default function HomePage() {
     const type = String(request.type || '').trim();
     const message = String(request.message || '').trim();
 
-    if (!name || !phone) {
-      setRequestStatus({ type: 'error', text: 'اكتب الاسم ورقم الجوال فقط، وبعدها نقدر نستقبل طلبك مباشرة.' });
+    if (!name || !phone || !type || !message) {
+      setRequestStatus({ type: 'error', text: 'الاسم ورقم الجوال ونوع الطلب وتفاصيل الطلب مطلوبة لإرسال الطلب.' });
       return;
     }
 
@@ -391,15 +391,15 @@ export default function HomePage() {
             <form className="requestForm" onSubmit={handleRequestSubmit}>
               <label>
                 <span>الاسم</span>
-                <input value={request.name} onChange={(e) => updateRequestField('name', e.target.value)} placeholder="الاسم الكامل" disabled={requestSubmitting} />
+                <input value={request.name} onChange={(e) => updateRequestField('name', e.target.value)} placeholder="الاسم الكامل" disabled={requestSubmitting} required />
               </label>
               <label>
                 <span>رقم الجوال</span>
-                <input value={request.phone} onChange={(e) => updateRequestField('phone', e.target.value)} placeholder="05XXXXXXXX" disabled={requestSubmitting} />
+                <input value={request.phone} onChange={(e) => updateRequestField('phone', e.target.value)} placeholder="05XXXXXXXX" disabled={requestSubmitting} required />
               </label>
               <label>
                 <span>نوع الطلب</span>
-                <select value={request.type} onChange={(e) => updateRequestField('type', e.target.value)} disabled={requestSubmitting}>
+                <select value={request.type} onChange={(e) => updateRequestField('type', e.target.value)} disabled={requestSubmitting} required>
                   <option value="">اختر نوع الطلب</option>
                   <option value="شراء">شراء</option>
                   <option value="إيجار">إيجار</option>
@@ -408,7 +408,7 @@ export default function HomePage() {
               </label>
               <label>
                 <span>تفاصيل الطلب</span>
-                <textarea value={request.message} onChange={(e) => updateRequestField('message', e.target.value)} placeholder="اكتب تفاصيل طلبك..." rows={3} disabled={requestSubmitting} />
+                <textarea value={request.message} onChange={(e) => updateRequestField('message', e.target.value)} placeholder="مثال: مطلوب فيلا للإيجار في أبحر الشمالية، 4 غرف، ميزانية مناسبة..." rows={3} disabled={requestSubmitting} required />
               </label>
 
               {requestStatus.text ? (
