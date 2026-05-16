@@ -63,13 +63,16 @@ function getStaticPageTitle(path = '') {
     const queryLabel = getQueryLabel(clean);
     return queryLabel ? `صفحة العروض - ${queryLabel}` : 'صفحة العروض العقارية';
   }
-  if (pathname === '/marketing-request') return 'عقود الوساطة وترخيص الإعلان العقاري';
+  if (pathname === '/marketing-request') return 'تسويق عقارك';
   if (pathname === '/neighborhoods') return 'المناطق والأحياء';
   if (pathname === '/request') return 'إرسال طلب عقاري';
   if (pathname === '/map') return 'الخريطة العقارية';
   if (pathname === '/account') return 'الحساب';
   if (pathname === '/faq') return 'الأسئلة الشائعة';
-  if (pathname === '/ejar-request') return 'توثيق عقود الإيجار';
+  if (pathname === '/privacy') return 'سياسة الخصوصية';
+  if (pathname === '/terms') return 'شروط الاستخدام';
+  if (pathname === '/ejar-request') return 'عقود إيجار';
+  if (pathname.startsWith('/neighborhood/')) return `حي ${decodeURIComponent(pathname.split('/').pop() || '')}`;
 
   return '';
 }
@@ -104,6 +107,29 @@ function getPageMeta(page, listingMap) {
   };
 }
 
+function formatDateLabel(dateKey) {
+  const today = new Date();
+  const todayKey = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Riyadh',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(today);
+
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+  const yesterdayKey = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Riyadh',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(yesterday);
+
+  if (dateKey === todayKey) return 'اليوم';
+  if (dateKey === yesterdayKey) return 'أمس';
+  return dateKey;
+}
+
 export default function AnalyticsDashboardCard() {
   const [analytics, setAnalytics] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -125,7 +151,8 @@ export default function AnalyticsDashboardCard() {
     };
   }, []);
 
-  const topPages = useMemo(() => analytics?.topPages || [], [analytics?.topPages]);
+  const todayPages = useMemo(() => analytics?.todayPages || analytics?.topPages || [], [analytics]);
+  const dailyStats = useMemo(() => analytics?.dailyStats || [], [analytics]);
 
   useEffect(() => {
     let live = true;
@@ -133,7 +160,7 @@ export default function AnalyticsDashboardCard() {
     async function loadListingTitles() {
       const ids = Array.from(
         new Set(
-          topPages
+          todayPages
             .map((page) => safeText(page?.listingId, getListingIdFromPath(page?.path || '')))
             .filter(Boolean),
         ),
@@ -168,47 +195,62 @@ export default function AnalyticsDashboardCard() {
     return () => {
       live = false;
     };
-  }, [loading, topPages]);
+  }, [loading, todayPages]);
 
   return (
     <section className="analyticsPanel">
+      <div className="analyticsHeader topHeader">
+        <div>
+          <h3>مشاهدات الموقع اليومية</h3>
+          <small>يتم حفظ آخر {analytics?.retentionDays || 3} أيام فقط</small>
+        </div>
+        {analytics?.lastPath ? <small className="lastPath">آخر صفحة: {getStaticPageTitle(analytics.lastPath) || analytics.lastPath}</small> : null}
+      </div>
+
       <div className="analyticsStats">
-        <div className="analyticsStat">
+        <div className="analyticsStat mainStat">
           <span>مشاهدات اليوم</span>
           <strong>{loading ? '...' : formatNumber(analytics?.todayPageViews)}</strong>
-        </div>
-        <div className="analyticsStat">
-          <span>إجمالي المشاهدات</span>
-          <strong>{loading ? '...' : formatNumber(analytics?.totalPageViews)}</strong>
         </div>
         <div className="analyticsStat">
           <span>زيارات اليوم</span>
           <strong>{loading ? '...' : formatNumber(analytics?.todayVisits)}</strong>
         </div>
         <div className="analyticsStat">
-          <span>إجمالي الزيارات</span>
-          <strong>{loading ? '...' : formatNumber(analytics?.totalVisits)}</strong>
+          <span>صفحات زاروها اليوم</span>
+          <strong>{loading ? '...' : formatNumber(analytics?.todayUniquePages)}</strong>
         </div>
       </div>
 
-      <div className="analyticsHeader">
-        <h3>أكثر الصفحات مشاهدة</h3>
-        {analytics?.lastPath ? <small>آخر صفحة: {getStaticPageTitle(analytics.lastPath) || analytics.lastPath}</small> : null}
+      {dailyStats.length ? (
+        <div className="dailyStrip">
+          {dailyStats.map((day) => (
+            <div key={day.date} className="dayCard">
+              <span>{formatDateLabel(day.date)}</span>
+              <strong>{formatNumber(day.pageViews)}</strong>
+              <small>مشاهدة</small>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      <div className="analyticsHeader pagesHeader">
+        <h3>الصفحات التي تم زيارتها اليوم</h3>
       </div>
 
       {analytics?.error && (
         <div className="analyticsWarning">
-          إحصائيات المشاهدات لن تظهر إلا بعد نشر قواعد Firestore الخاصة بالعدادات.
+          إحصائيات المشاهدات لن تظهر إلا بعد السماح بكتابة وقراءة مجموعة abhur_daily_stats في Firestore.
         </div>
       )}
 
       <div className="topPagesList">
         {loading ? (
           <div className="emptyAnalytics">جاري تحميل المشاهدات...</div>
-        ) : !topPages.length ? (
-          <div className="emptyAnalytics">لم يتم تسجيل مشاهدات حتى الآن.</div>
+        ) : !todayPages.length ? (
+          <div className="emptyAnalytics">لم يتم تسجيل زيارات اليوم حتى الآن.</div>
         ) : (
-          topPages.map((page, index) => {
+          todayPages.map((page, index) => {
             const meta = getPageMeta(page, listingMap);
             return (
               <div key={page.id} className="topPageItem">
@@ -223,7 +265,7 @@ export default function AnalyticsDashboardCard() {
 
                 <div className="pageViews">
                   <strong>{formatNumber(page.views)}</strong>
-                  <span>مشاهدة</span>
+                  <span>مشاهدة اليوم</span>
                 </div>
               </div>
             );
@@ -241,9 +283,44 @@ export default function AnalyticsDashboardCard() {
           margin-bottom: 25px;
         }
 
+        .analyticsHeader {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          padding: 18px 20px;
+          border-bottom: 1px solid var(--border);
+        }
+
+        .topHeader {
+          background: linear-gradient(135deg, #fffbeb, #ffffff 55%, #eef7f5);
+        }
+
+        .analyticsHeader h3 {
+          margin: 0;
+          font-size: 18px;
+          font-weight: 900;
+          color: var(--text);
+        }
+
+        .analyticsHeader small {
+          display: block;
+          color: var(--muted);
+          font-weight: 800;
+          margin-top: 4px;
+        }
+
+        .lastPath {
+          max-width: 48%;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          text-align: left;
+        }
+
         .analyticsStats {
           display: grid;
-          grid-template-columns: repeat(4, minmax(0, 1fr));
+          grid-template-columns: 1.3fr 1fr 1fr;
           gap: 12px;
           padding: 16px;
           background: #fcfcfd;
@@ -257,6 +334,11 @@ export default function AnalyticsDashboardCard() {
           border: 1px solid var(--border);
         }
 
+        .mainStat {
+          border-color: rgba(15, 118, 110, .24);
+          background: linear-gradient(135deg, rgba(15, 118, 110, .08), #fff);
+        }
+
         .analyticsStat span {
           display: block;
           color: var(--muted);
@@ -268,33 +350,45 @@ export default function AnalyticsDashboardCard() {
         .analyticsStat strong {
           display: block;
           color: var(--text);
-          font-size: 24px;
+          font-size: 28px;
           font-weight: 900;
         }
 
-        .analyticsHeader {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 12px;
-          padding: 18px 20px;
+        .dailyStrip {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 10px;
+          padding: 14px 16px;
           border-bottom: 1px solid var(--border);
+          background: #fff;
         }
 
-        .analyticsHeader h3 {
-          margin: 0;
-          font-size: 18px;
-          font-weight: 900;
-          color: var(--text);
+        .dayCard {
+          border: 1px solid var(--border);
+          border-radius: 14px;
+          padding: 12px;
+          background: #fcfcfd;
         }
 
-        .analyticsHeader small {
+        .dayCard span,
+        .dayCard small {
+          display: block;
           color: var(--muted);
+          font-size: 12px;
           font-weight: 800;
-          max-width: 48%;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
+        }
+
+        .dayCard strong {
+          display: block;
+          margin: 5px 0 2px;
+          color: var(--text);
+          font-size: 20px;
+          font-weight: 900;
+        }
+
+        .pagesHeader {
+          border-bottom: 0;
+          padding-bottom: 4px;
         }
 
         .analyticsWarning {
@@ -337,9 +431,7 @@ export default function AnalyticsDashboardCard() {
           font-weight: 900;
         }
 
-        .pageInfo {
-          min-width: 0;
-        }
+        .pageInfo { min-width: 0; }
 
         .pageTitle {
           font-size: 14px;
@@ -371,7 +463,7 @@ export default function AnalyticsDashboardCard() {
 
         .pageViews {
           text-align: center;
-          min-width: 82px;
+          min-width: 96px;
         }
 
         .pageViews strong {
@@ -396,23 +488,21 @@ export default function AnalyticsDashboardCard() {
         }
 
         @media (max-width: 900px) {
-          .analyticsStats {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
+          .analyticsStats,
+          .dailyStrip {
+            grid-template-columns: 1fr;
           }
         }
 
         @media (max-width: 640px) {
-          .analyticsStats {
-            grid-template-columns: 1fr;
-          }
-
           .analyticsHeader {
             align-items: flex-start;
             flex-direction: column;
           }
 
-          .analyticsHeader small {
+          .lastPath {
             max-width: 100%;
+            text-align: right;
           }
 
           .topPageItem {
