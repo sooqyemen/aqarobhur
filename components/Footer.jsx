@@ -3,6 +3,10 @@
 import Link from 'next/link';
 import styles from './Footer.module.css';
 
+const phoneLocal = '0597520693';
+const phoneIntl = '+966597520693';
+const whatsappUrl = 'https://wa.me/966597520693';
+
 const quickLinks = [
   { href: '/', label: 'الرئيسية' },
   { href: '/neighborhoods', label: 'الأحياء' },
@@ -50,7 +54,7 @@ export default function Footer() {
           <div className={styles.socials} aria-label="روابط التواصل">
             <a href="#" aria-label="Instagram">◎</a>
             <a href="#" aria-label="X">𝕏</a>
-            <a href="#" aria-label="WhatsApp">☎</a>
+            <a href={whatsappUrl} target="_blank" rel="noopener noreferrer" aria-label="WhatsApp">☎</a>
             <a href="#" aria-label="YouTube">▶</a>
           </div>
         </section>
@@ -67,7 +71,8 @@ export default function Footer() {
 
         <section className={`${styles.footerColumn} ${styles.contactColumn}`}>
           <h3>تواصل معنا</h3>
-          <a href="tel:+966501234567">+966 50 123 4567</a>
+          <a href={`tel:${phoneIntl}`}>{phoneLocal}</a>
+          <a href={whatsappUrl} target="_blank" rel="noopener noreferrer">واتساب: {phoneLocal}</a>
           <a href="mailto:info@aqarabhur.com">info@aqarabhur.com</a>
           <span>أبحر الشمالية، جدة</span>
           <span>المملكة العربية السعودية</span>
