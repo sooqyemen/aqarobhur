@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { fetchLatestListings } from '@/lib/listings';
+import { createRequest, fetchLatestListings } from '@/lib/listings';
 import { buildWhatsAppLink } from '@/components/WhatsAppBar';
 import { formatPriceSAR } from '@/lib/format';
 import { collectMediaEntries, isVideoLike } from '@/lib/media';
@@ -62,6 +62,13 @@ function updateQuery(filters) {
   if (filters.maxPrice) params.set('maxPrice', filters.maxPrice);
   const query = params.toString();
   return query ? `/listings?${query}` : '/listings';
+}
+
+function requestDealType(type = '') {
+  const text = String(type || '').trim();
+  if (text === 'شراء') return 'sale';
+  if (text === 'إيجار') return 'rent';
+  return '';
 }
 
 function getListingId(item) {
@@ -151,6 +158,8 @@ export default function HomePage() {
     maxPrice: '',
   });
   const [request, setRequest] = useState({ name: '', phone: '', type: '', message: '' });
+  const [requestSubmitting, setRequestSubmitting] = useState(false);
+  const [requestStatus, setRequestStatus] = useState({ type: '', text: '' });
 
   const officePhone = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || '966597520693';
   const listingsHref = useMemo(() => updateQuery(filters), [filters]);
@@ -193,20 +202,56 @@ export default function HomePage() {
     setFilters((prev) => ({ ...prev, [key]: value }));
   }
 
+  function updateRequestField(key, value) {
+    setRequestStatus({ type: '', text: '' });
+    setRequest((prev) => ({ ...prev, [key]: value }));
+  }
+
   function handleSearchSubmit(event) {
     event.preventDefault();
     router.push(listingsHref);
   }
 
-  function handleRequestSubmit(event) {
+  async function handleRequestSubmit(event) {
     event.preventDefault();
-    const params = new URLSearchParams();
-    if (request.name) params.set('name', request.name);
-    if (request.phone) params.set('phone', request.phone);
-    if (request.type) params.set('type', request.type);
-    if (request.message) params.set('message', request.message);
-    const query = params.toString();
-    router.push(query ? `/request?${query}` : '/request');
+    if (requestSubmitting) return;
+
+    const name = String(request.name || '').trim();
+    const phone = String(request.phone || '').trim();
+    const type = String(request.type || '').trim();
+    const message = String(request.message || '').trim();
+
+    if (!name || !phone) {
+      setRequestStatus({ type: 'error', text: 'اكتب الاسم ورقم الجوال فقط، وبعدها نقدر نستقبل طلبك مباشرة.' });
+      return;
+    }
+
+    setRequestSubmitting(true);
+    setRequestStatus({ type: '', text: '' });
+
+    try {
+      await createRequest({
+        name,
+        phone,
+        dealType: requestDealType(type),
+        propertyType: '',
+        city: 'جدة',
+        region: 'شمال جدة',
+        neighborhood: '',
+        note: message,
+        goal: type,
+        sourceType: 'نموذج الصفحة الرئيسية',
+        status: 'new',
+      });
+
+      setRequest({ name: '', phone: '', type: '', message: '' });
+      setRequestStatus({ type: 'success', text: 'تم استلام طلبك بنجاح. سيتواصل معك أحد مستشارينا قريباً.' });
+    } catch (error) {
+      console.warn('Home request submit failed', error);
+      setRequestStatus({ type: 'error', text: 'تعذر إرسال الطلب الآن. تأكد من الاتصال أو جرّب مرة أخرى.' });
+    } finally {
+      setRequestSubmitting(false);
+    }
   }
 
   return (
@@ -339,22 +384,22 @@ export default function HomePage() {
             <div className="sectionHeading miniHeading centeredHeading">
               <div>
                 <h2><span className="material-icons-outlined">send</span> أرسل طلبك العقاري</h2>
-                <p>أخبرنا عن طلبك وسيتواصل معك أحد مستشارينا في أسرع وقت.</p>
+                <p>اكتب بياناتك مرة واحدة فقط، ويتم حفظ طلبك مباشرة في لوحة الإدارة بدون تحويلك لصفحة ثانية.</p>
               </div>
             </div>
 
             <form className="requestForm" onSubmit={handleRequestSubmit}>
               <label>
                 <span>الاسم</span>
-                <input value={request.name} onChange={(e) => setRequest((prev) => ({ ...prev, name: e.target.value }))} placeholder="الاسم الكامل" />
+                <input value={request.name} onChange={(e) => updateRequestField('name', e.target.value)} placeholder="الاسم الكامل" disabled={requestSubmitting} />
               </label>
               <label>
                 <span>رقم الجوال</span>
-                <input value={request.phone} onChange={(e) => setRequest((prev) => ({ ...prev, phone: e.target.value }))} placeholder="05XXXXXXXX" />
+                <input value={request.phone} onChange={(e) => updateRequestField('phone', e.target.value)} placeholder="05XXXXXXXX" disabled={requestSubmitting} />
               </label>
               <label>
                 <span>نوع الطلب</span>
-                <select value={request.type} onChange={(e) => setRequest((prev) => ({ ...prev, type: e.target.value }))}>
+                <select value={request.type} onChange={(e) => updateRequestField('type', e.target.value)} disabled={requestSubmitting}>
                   <option value="">اختر نوع الطلب</option>
                   <option value="شراء">شراء</option>
                   <option value="إيجار">إيجار</option>
@@ -363,9 +408,20 @@ export default function HomePage() {
               </label>
               <label>
                 <span>تفاصيل الطلب</span>
-                <textarea value={request.message} onChange={(e) => setRequest((prev) => ({ ...prev, message: e.target.value }))} placeholder="اكتب تفاصيل طلبك..." rows={3} />
+                <textarea value={request.message} onChange={(e) => updateRequestField('message', e.target.value)} placeholder="اكتب تفاصيل طلبك..." rows={3} disabled={requestSubmitting} />
               </label>
-              <button type="submit" className="goldAction fullAction"><span className="material-icons-outlined">near_me</span> إرسال الطلب</button>
+
+              {requestStatus.text ? (
+                <div className={`requestNotice ${requestStatus.type === 'success' ? 'success' : 'error'}`}>
+                  <span className="material-icons-outlined">{requestStatus.type === 'success' ? 'check_circle' : 'error'}</span>
+                  {requestStatus.text}
+                </div>
+              ) : null}
+
+              <button type="submit" className="goldAction fullAction" disabled={requestSubmitting}>
+                <span className={`material-icons-outlined ${requestSubmitting ? 'spinIcon' : ''}`}>{requestSubmitting ? 'autorenew' : 'near_me'}</span>
+                {requestSubmitting ? 'جاري إرسال الطلب...' : 'إرسال الطلب مباشرة'}
+              </button>
             </form>
           </article>
         </section>
