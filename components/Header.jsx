@@ -43,15 +43,31 @@ export default function Header() {
     { href: '/request', label: 'أرسل طلبك' },
   ], []);
 
+  const adminLinks = useMemo(() => [
+    { href: '/admin', label: 'لوحة التحكم', icon: 'dashboard' },
+    { href: '/admin/listings', label: 'إدارة العروض', icon: 'real_estate_agent' },
+    { href: '/admin/requests', label: 'إدارة الطلبات', icon: 'support_agent' },
+    { href: '/admin/inbox', label: 'الوارد الذكي', icon: 'all_inbox' },
+    { href: '/admin/search', label: 'البحث الذكي', icon: 'manage_search' },
+  ], []);
+
+  const accountLinks = useMemo(() => {
+    const links = [];
+    if (isAdmin) links.push(...adminLinks);
+    links.push({ href: '/add', label: 'إضافة إعلان', icon: 'add_circle' });
+    links.push({ href: '/account', label: 'حسابي', icon: 'account_circle' });
+    return links;
+  }, [adminLinks, isAdmin]);
+
   const drawerLinks = useMemo(() => {
-    const links = [...navLinks, { href: '/listings', label: 'كل العقارات' }];
-    if (isAdmin) {
-      links.push({ href: '/admin', label: 'لوحة التحكم' });
-      links.push({ href: '/admin/listings', label: 'إدارة العقارات' });
-      links.push({ href: '/admin/requests', label: 'إدارة الطلبات' });
+    const links = [...navLinks, { href: '/listings', label: 'كل العقارات', icon: 'apartment' }];
+    if (user) {
+      accountLinks.forEach((link) => {
+        if (!links.some((item) => item.href === link.href)) links.push(link);
+      });
     }
     return links;
-  }, [navLinks, isAdmin]);
+  }, [navLinks, user, accountLinks]);
 
   function isActive(href) {
     if (href === '/') return pathname === '/';
@@ -114,10 +130,29 @@ export default function Header() {
               إضافة إعلان
             </Link>
             {user ? (
-              <button type="button" className="loginBtn" onClick={handleLogout} title={user.email || 'حسابي'}>
-                <span className="material-icons-outlined">account_circle</span>
-                خروج
-              </button>
+              <details className="accountDetails">
+                <summary className="loginBtn" title={user.email || 'حسابي'}>
+                  <span className="material-icons-outlined">account_circle</span>
+                  حسابي
+                  <span className="material-icons-outlined arrowIcon">expand_more</span>
+                </summary>
+                <div className="accountMenu">
+                  <div className="accountMenuHead">
+                    <strong>{isAdmin ? 'حساب الإدارة' : 'حسابي'}</strong>
+                    <small>{user.email || 'مستخدم مسجل'}</small>
+                  </div>
+                  {accountLinks.map((link) => (
+                    <Link key={link.href} href={link.href} className={isActive(link.href) ? 'active' : ''}>
+                      <span className="material-icons-outlined">{link.icon}</span>
+                      {link.label}
+                    </Link>
+                  ))}
+                  <button type="button" className="logoutMenuBtn" onClick={handleLogout}>
+                    <span className="material-icons-outlined">logout</span>
+                    تسجيل الخروج
+                  </button>
+                </div>
+              </details>
             ) : (
               <Link href="/account" className="loginBtn">
                 <span className="material-icons-outlined">person</span>
@@ -147,9 +182,20 @@ export default function Header() {
               </button>
             </div>
 
+            {user ? (
+              <div className="drawerUserBox">
+                <span className="material-icons-outlined">account_circle</span>
+                <div>
+                  <strong>{isAdmin ? 'حساب الإدارة' : 'حسابي'}</strong>
+                  <small>{user.email || 'مستخدم مسجل'}</small>
+                </div>
+              </div>
+            ) : null}
+
             <div className="drawerLinks">
               {drawerLinks.map((link) => (
                 <Link key={link.href} href={link.href} className={isActive(link.href) ? 'active' : ''}>
+                  {link.icon ? <span className="material-icons-outlined">{link.icon}</span> : null}
                   {link.label}
                 </Link>
               ))}
@@ -304,6 +350,88 @@ export default function Header() {
         }
         .addListingBtn .material-icons-outlined,
         .loginBtn .material-icons-outlined { font-size: 17px; }
+        .accountDetails {
+          position: relative;
+          z-index: 120;
+        }
+        .accountDetails summary {
+          list-style: none;
+        }
+        .accountDetails summary::-webkit-details-marker { display: none; }
+        .arrowIcon { margin-inline-start: -2px; }
+        .accountDetails[open] .arrowIcon { transform: rotate(180deg); }
+        .accountMenu {
+          position: absolute;
+          top: calc(100% + 10px);
+          left: 0;
+          width: 245px;
+          padding: 10px;
+          border-radius: 16px;
+          background: #fff;
+          border: 1px solid rgba(184, 132, 47, .22);
+          box-shadow: 0 20px 48px rgba(15, 23, 42, .16);
+        }
+        .accountMenuHead {
+          padding: 8px 10px 11px;
+          border-bottom: 1px solid #f1e7d6;
+          margin-bottom: 7px;
+        }
+        .accountMenuHead strong,
+        .drawerUserBox strong {
+          display: block;
+          color: #111827;
+          font-size: 14px;
+          font-weight: 950;
+        }
+        .accountMenuHead small,
+        .drawerUserBox small {
+          display: block;
+          color: #6b7280;
+          font-size: 11px;
+          font-weight: 800;
+          margin-top: 2px;
+          direction: ltr;
+          text-align: right;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .accountMenu a,
+        .logoutMenuBtn {
+          width: 100%;
+          min-height: 40px;
+          display: flex;
+          align-items: center;
+          gap: 9px;
+          padding: 0 10px;
+          border-radius: 11px;
+          border: 0;
+          background: transparent;
+          color: #263142;
+          font-size: 13px;
+          font-weight: 900;
+          text-decoration: none;
+          cursor: pointer;
+          text-align: right;
+        }
+        .accountMenu a:hover,
+        .accountMenu a.active {
+          color: #9a6a21;
+          background: #fff7e8;
+        }
+        .accountMenu a .material-icons-outlined,
+        .logoutMenuBtn .material-icons-outlined,
+        .drawerLinks .material-icons-outlined {
+          font-size: 18px;
+          color: #b8842f;
+        }
+        .logoutMenuBtn {
+          margin-top: 7px;
+          border-top: 1px solid #f1e7d6;
+          border-radius: 0 0 11px 11px;
+          color: #b42318;
+        }
+        .logoutMenuBtn .material-icons-outlined { color: #b42318; }
         .mobileMenuBtn,
         .closeBtn {
           width: 40px;
@@ -342,6 +470,20 @@ export default function Header() {
           padding: 16px;
           border-bottom: 1px solid rgba(184, 132, 47, .18);
         }
+        .drawerUserBox {
+          margin: 16px 18px 0;
+          padding: 12px;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          border-radius: 14px;
+          background: #fff7e8;
+          border: 1px solid rgba(184,132,47,.18);
+        }
+        .drawerUserBox > .material-icons-outlined {
+          color: #b8842f;
+          font-size: 28px;
+        }
         .drawerLinks {
           display: flex;
           flex-direction: column;
@@ -349,6 +491,9 @@ export default function Header() {
           padding: 18px;
         }
         .drawerLinks a {
+          display: flex;
+          align-items: center;
+          gap: 9px;
           padding: 13px 14px;
           border-radius: 12px;
           color: #111827;
@@ -378,7 +523,8 @@ export default function Header() {
           .mobileMenuBtn,
           .closeBtn { display: grid; }
           .addListingBtn:not(.full),
-          .loginBtn:not(.full) { display: none; }
+          .loginBtn:not(.full),
+          .accountDetails { display: none; }
           .brandBlock { max-width: calc(100vw - 92px); }
           .logoBox { width: 38px; height: 38px; flex-basis: 38px; }
           .brandLogo { max-width: 38px; max-height: 38px; }
