@@ -2,13 +2,14 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // ✅ أدمن (Bootstrap) – عدّل الإيميلات حسب حساباتك
+    // ✅ دالة للتحقق من أن المستخدم هو الأدمن
     function isAdmin() {
       return request.auth != null
         && request.auth.token.email != null
         && request.auth.token.email in [
           'aqarobhr@gmail.com',
-          'aqarobhur@gmail.com'
+          'aqarobhur@gmail.com',
+          'aboramez965@gmail.com'
         ];
     }
 
@@ -18,20 +19,61 @@ service cloud.firestore {
         && !(resource.data.hidden == true);
     }
 
-    // العروض الأساسية
-    match /abhur_listings/{docId} {
-      allow read: if isPublicListing() || isAdmin();
-      allow create, update, delete: if isAdmin();
-    }
-
-    // الطلبات (الزوار ينشئون فقط – الأدمن يقرأ/يحدث)
+    // =========================================================
+    // 1. جداول الطلبات
+    // =========================================================
     match /abhur_requests/{docId} {
       allow create: if true;
       allow read, update, delete: if isAdmin();
     }
 
-    // ✅ عدادات مشاهدات الموقع
-    // الزائر يكتب عداد فقط، والقراءة تبقى للأدمن.
+    match /fanar_requests/{docId} {
+      allow create: if true;
+      allow read, update, delete: if isAdmin();
+    }
+
+    // =========================================================
+    // 2. جداول العروض
+    // =========================================================
+    match /abhur_listings/{docId} {
+      allow read: if isPublicListing() || isAdmin();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /fanar_listings/{docId} {
+      allow read: if isPublicListing() || isAdmin();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // جدول العروض القديم
+    match /listings/{docId} {
+      allow read, write: if isAdmin();
+    }
+
+    // =========================================================
+    // 3. جداول الوارد الذكي والذكاء الاصطناعي
+    // =========================================================
+    match /fanar_inbox_entries/{docId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /fanar_extracted_items/{docId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /abhur_inbox_entries/{docId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /abhur_extracted_items/{docId} {
+      allow read, write: if isAdmin();
+    }
+
+    // =========================================================
+    // 4. جداول مشاهدات وزيارات الموقع
+    // الزائر يكتب العداد فقط، والقراءة للأدمن فقط.
+    // مهم: صفحات اليوم محفوظة داخل subcollection باسم pages.
+    // =========================================================
     match /abhur_site_stats/{docId} {
       allow create, update: if docId == 'summary';
       allow read, delete: if isAdmin();
@@ -40,6 +82,11 @@ service cloud.firestore {
     match /abhur_daily_stats/{docId} {
       allow create, update: if true;
       allow read, delete: if isAdmin();
+
+      match /pages/{pageId} {
+        allow create, update: if true;
+        allow read, delete: if isAdmin();
+      }
     }
 
     match /abhur_page_stats/{docId} {
@@ -47,9 +94,11 @@ service cloud.firestore {
       allow read, delete: if isAdmin();
     }
 
-    // legacy (إن وُجد): للأدمن فقط
-    match /listings/{docId} {
-      allow read, write: if isAdmin();
+    // =========================================================
+    // 5. قاعدة عامة: منع الوصول لأي شيء آخر غير معرف أعلاه
+    // =========================================================
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }
