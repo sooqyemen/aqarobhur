@@ -240,6 +240,11 @@ body {
   transform: translateY(-2px);
   box-shadow: 0 16px 30px rgba(163, 108, 32, .3);
 }
+.goldAction:disabled {
+  opacity: .72;
+  cursor: wait;
+  transform: none;
+}
 
 .neighborhoodsBand {
   padding-top: 74px;
@@ -601,8 +606,32 @@ body {
   gap: 12px;
 }
 .requestForm label:nth-child(4),
+.requestNotice,
 .fullAction { grid-column: 1 / -1; }
 .fullAction { width: 100%; height: 42px; }
+.requestNotice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 13px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1.7;
+}
+.requestNotice .material-icons-outlined { font-size: 19px; }
+.requestNotice.success {
+  color: #166534;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+}
+.requestNotice.error {
+  color: #991b1b;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+}
+.spinIcon { animation: homeSpin .9s linear infinite; }
+@keyframes homeSpin { to { transform: rotate(360deg); } }
 
 .serviceGrid {
   display: grid;
@@ -717,6 +746,7 @@ body {
   .faqRow,
   .requestForm { grid-template-columns: 1fr; }
   .requestForm label:nth-child(4),
+  .requestNotice,
   .fullAction { grid-column: auto; }
   .serviceCard { grid-template-columns: 46px 1fr; }
   .villaOne { display: none; }
