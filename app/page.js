@@ -8,51 +8,17 @@ import { buildWhatsAppLink } from '@/components/WhatsAppBar';
 import { formatPriceSAR } from '@/lib/format';
 import { collectMediaEntries, isVideoLike } from '@/lib/media';
 
-const NEIGHBORHOODS = [
-  'أبحر الشمالية',
-  'الفنار',
-  'الزمرد',
-  'الياقوت',
-  'الشراع',
-  'الأمواج',
-  'جوهرة العروس',
-  'الهجرة',
-  'طيبة الفرعية',
-];
+const NEIGHBORHOODS = ['أبحر الشمالية', 'الفنار', 'الزمرد', 'الياقوت', 'الشراع', 'الأمواج', 'جوهرة العروس', 'الهجرة', 'طيبة الفرعية'];
 
 const SERVICES = [
-  {
-    icon: 'groups',
-    title: 'تسويق عقاري',
-    text: 'تسويق احترافي لعقارك للوصول لأفضل المشترين والمستأجرين.',
-    href: '/marketing-request',
-  },
-  {
-    icon: 'fact_check',
-    title: 'إصدار ترخيص إعلان',
-    text: 'نساعدك في عقد الوساطة وإصدار ترخيص الإعلان بسرعة واحترافية.',
-    href: '/marketing-request',
-  },
-  {
-    icon: 'assignment',
-    title: 'إدارة الطلبات',
-    text: 'تنظيم طلبات العملاء ومطابقتها مع العروض المناسبة بكفاءة.',
-    href: '/request',
-  },
-  {
-    icon: 'grade',
-    title: 'عروض مباشرة',
-    text: 'عروض عقارية مباشرة من الملاك والوكلاء المعتمدين متى توفرت.',
-    href: '/listings',
-  },
+  { icon: 'groups', title: 'تسويق عقاري', text: 'تسويق احترافي لعقارك للوصول لأفضل المشترين والمستأجرين.', href: '/marketing-request' },
+  { icon: 'fact_check', title: 'إصدار ترخيص إعلان', text: 'نساعدك في عقد الوساطة وإصدار ترخيص الإعلان بسرعة واحترافية.', href: '/marketing-request' },
+  { icon: 'assignment', title: 'إدارة الطلبات', text: 'تنظيم طلبات العملاء ومطابقتها مع العروض المناسبة بكفاءة.', href: '/request' },
+  { icon: 'grade', title: 'عروض مباشرة', text: 'عروض عقارية مباشرة من الملاك والوكلاء المعتمدين متى توفرت.', href: '/listings' },
 ];
 
-const FAQ_ITEMS = [
-  'كيف يمكنني إضافة إعلان؟',
-  'هل هناك رسوم على نشر الإعلانات؟',
-  'كيف يتم التحقق من الإعلانات؟',
-  'هل يمكنني تعديل أو حذف الإعلان؟',
-];
+const FAQ_ITEMS = ['كيف يمكنني إضافة إعلان؟', 'هل هناك رسوم على نشر الإعلانات؟', 'كيف يتم التحقق من الإعلانات؟', 'هل يمكنني تعديل أو حذف الإعلان؟'];
+const EMPTY_REQUEST = { name: '', phone: '', type: '', message: '', neighborhood: '', propertyType: '', budgetMax: '', areaMax: '' };
 
 function updateQuery(filters) {
   const params = new URLSearchParams();
@@ -107,30 +73,19 @@ function HomeListingCard({ item, index, fallbackPhone }) {
   return (
     <article className="homeListingCard">
       <Link href={detailLink} className="homeListingMedia" aria-label={title}>
-        {coverUrl ? (
-          <img src={coverUrl} alt={title} loading="lazy" />
-        ) : (
-          <div className={`listingFallback fallback${(index % 4) + 1}`}>
-            <span className="material-icons-outlined">villa</span>
-          </div>
+        {coverUrl ? <img src={coverUrl} alt={title} loading="lazy" /> : (
+          <div className={`listingFallback fallback${(index % 4) + 1}`}><span className="material-icons-outlined">villa</span></div>
         )}
         <span className={`dealChip ${isRent ? 'rent' : 'sale'}`}>{isRent ? 'للإيجار' : 'للبيع'}</span>
         <span className="heartChip"><span className="material-icons-outlined">favorite_border</span></span>
         <strong className="priceOverlay">{price}{isRent ? <small> / سنوي</small> : null}</strong>
       </Link>
-
       <div className="homeListingBody">
         <Link href={detailLink} className="homeListingTitle">{title}</Link>
         <p className="homeListingLocation">{neighborhood}</p>
-        <div className="homeListingFacts">
-          <span>{area}</span>
-          <span>{facade}</span>
-        </div>
+        <div className="homeListingFacts"><span>{area}</span><span>{facade}</span></div>
         <div className="homeListingActions">
-          <a href={whatsappHref} target="_blank" rel="noopener noreferrer" className="whatsBtn">
-            <span className="material-icons-outlined">chat</span>
-            واتساب
-          </a>
+          <a href={whatsappHref} target="_blank" rel="noopener noreferrer" className="whatsBtn"><span className="material-icons-outlined">chat</span>واتساب</a>
           <Link href={detailLink} className="detailsBtn">التفاصيل</Link>
         </div>
       </div>
@@ -139,11 +94,7 @@ function HomeListingCard({ item, index, fallbackPhone }) {
 }
 
 function ListingSkeletons() {
-  return (
-    <div className="homeListingsGrid">
-      {[1, 2, 3, 4].map((id) => <div key={id} className="homeListingSkeleton" />)}
-    </div>
-  );
+  return <div className="homeListingsGrid">{[1, 2, 3, 4].map((id) => <div key={id} className="homeListingSkeleton" />)}</div>;
 }
 
 export default function HomePage() {
@@ -151,13 +102,8 @@ export default function HomePage() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errorText, setErrorText] = useState('');
-  const [filters, setFilters] = useState({
-    neighborhood: '',
-    propertyType: '',
-    dealType: '',
-    maxPrice: '',
-  });
-  const [request, setRequest] = useState({ name: '', phone: '', type: '', message: '' });
+  const [filters, setFilters] = useState({ neighborhood: '', propertyType: '', dealType: '', maxPrice: '' });
+  const [request, setRequest] = useState(EMPTY_REQUEST);
   const [requestSubmitting, setRequestSubmitting] = useState(false);
   const [requestStatus, setRequestStatus] = useState({ type: '', text: '' });
 
@@ -166,7 +112,6 @@ export default function HomePage() {
 
   useEffect(() => {
     let active = true;
-
     async function load() {
       try {
         setLoading(true);
@@ -182,21 +127,16 @@ export default function HomePage() {
         if (active) setLoading(false);
       }
     }
-
     load();
     return () => { active = false; };
   }, []);
 
-  const visibleItems = useMemo(() => {
-    return items
-      .filter((item) => {
-        if (filters.dealType && item?.dealType !== filters.dealType) return false;
-        if (filters.neighborhood && item?.neighborhood !== filters.neighborhood) return false;
-        if (filters.propertyType && item?.propertyType !== filters.propertyType) return false;
-        return true;
-      })
-      .slice(0, 4);
-  }, [items, filters]);
+  const visibleItems = useMemo(() => items.filter((item) => {
+    if (filters.dealType && item?.dealType !== filters.dealType) return false;
+    if (filters.neighborhood && item?.neighborhood !== filters.neighborhood) return false;
+    if (filters.propertyType && item?.propertyType !== filters.propertyType) return false;
+    return true;
+  }).slice(0, 4), [items, filters]);
 
   function setFilter(key, value) {
     setFilters((prev) => ({ ...prev, [key]: value }));
@@ -234,17 +174,18 @@ export default function HomePage() {
         name,
         phone,
         dealType: requestDealType(type),
-        propertyType: '',
+        propertyType: String(request.propertyType || '').trim(),
         city: 'جدة',
         region: 'شمال جدة',
-        neighborhood: '',
+        neighborhood: String(request.neighborhood || '').trim(),
+        areaMax: String(request.areaMax || '').trim(),
+        budgetMax: String(request.budgetMax || '').trim(),
         note: message,
         goal: type,
         sourceType: 'نموذج الصفحة الرئيسية',
         status: 'new',
       });
-
-      setRequest({ name: '', phone: '', type: '', message: '' });
+      setRequest(EMPTY_REQUEST);
       setRequestStatus({ type: 'success', text: 'تم استلام طلبك بنجاح. سيقوم أحد موظفينا بالتواصل معك قريباً.' });
     } catch (error) {
       console.warn('Home request submit failed', error);
@@ -257,210 +198,58 @@ export default function HomePage() {
   return (
     <>
       <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined" rel="stylesheet" />
-
       <main className="premiumHome" dir="rtl">
         <section className="heroPanel">
-          <div className="heroBackdrop" aria-hidden="true">
-            <span className="sun" />
-            <span className="coastLine" />
-            <span className="villa villaOne" />
-            <span className="villa villaTwo" />
-            <span className="villa villaThree" />
-            <span className="palm palmOne" />
-            <span className="palm palmTwo" />
-          </div>
-
+          <div className="heroBackdrop" aria-hidden="true"><span className="sun" /><span className="coastLine" /><span className="villa villaOne" /><span className="villa villaTwo" /><span className="villa villaThree" /><span className="palm palmOne" /><span className="palm palmTwo" /></div>
           <div className="container heroContent">
             <h1>عقارات أبحر الشمالية وشمال جدة</h1>
             <p>أراضي، فلل، شقق للبيع والإيجار في أرقى أحياء أبحر وشمال جدة</p>
-
             <form className="heroSearch" onSubmit={handleSearchSubmit}>
-              <label>
-                <span>الحي</span>
-                <select value={filters.neighborhood} onChange={(e) => setFilter('neighborhood', e.target.value)}>
-                  <option value="">اختر الحي</option>
-                  {NEIGHBORHOODS.map((name) => <option key={name} value={name}>{name}</option>)}
-                </select>
-              </label>
-
-              <label>
-                <span>نوع العقار</span>
-                <select value={filters.propertyType} onChange={(e) => setFilter('propertyType', e.target.value)}>
-                  <option value="">اختر نوع العقار</option>
-                  <option value="أرض">أرض</option>
-                  <option value="فيلا">فيلا</option>
-                  <option value="شقة">شقة</option>
-                  <option value="عمارة">عمارة</option>
-                </select>
-              </label>
-
-              <label>
-                <span>بيع / إيجار</span>
-                <select value={filters.dealType} onChange={(e) => setFilter('dealType', e.target.value)}>
-                  <option value="">الكل</option>
-                  <option value="sale">للبيع</option>
-                  <option value="rent">للإيجار</option>
-                </select>
-              </label>
-
-              <label>
-                <span>السعر</span>
-                <select value={filters.maxPrice} onChange={(e) => setFilter('maxPrice', e.target.value)}>
-                  <option value="">الحد الأدنى - الحد الأقصى</option>
-                  <option value="500000">حتى 500 ألف</option>
-                  <option value="1000000">حتى مليون</option>
-                  <option value="2000000">حتى 2 مليون</option>
-                  <option value="5000000">حتى 5 مليون</option>
-                </select>
-              </label>
-
-              <button type="submit">
-                <span className="material-icons-outlined">search</span>
-                بحث
-              </button>
+              <label><span>الحي</span><select value={filters.neighborhood} onChange={(e) => setFilter('neighborhood', e.target.value)}><option value="">اختر الحي</option>{NEIGHBORHOODS.map((name) => <option key={name} value={name}>{name}</option>)}</select></label>
+              <label><span>نوع العقار</span><select value={filters.propertyType} onChange={(e) => setFilter('propertyType', e.target.value)}><option value="">اختر نوع العقار</option><option value="أرض">أرض</option><option value="فيلا">فيلا</option><option value="شقة">شقة</option><option value="عمارة">عمارة</option></select></label>
+              <label><span>بيع / إيجار</span><select value={filters.dealType} onChange={(e) => setFilter('dealType', e.target.value)}><option value="">الكل</option><option value="sale">للبيع</option><option value="rent">للإيجار</option></select></label>
+              <label><span>السعر</span><select value={filters.maxPrice} onChange={(e) => setFilter('maxPrice', e.target.value)}><option value="">الحد الأدنى - الحد الأقصى</option><option value="500000">حتى 500 ألف</option><option value="1000000">حتى مليون</option><option value="2000000">حتى 2 مليون</option><option value="5000000">حتى 5 مليون</option></select></label>
+              <button type="submit"><span className="material-icons-outlined">search</span>بحث</button>
             </form>
           </div>
         </section>
 
         <section className="container neighborhoodsBand" aria-label="تصفح الأحياء">
-          <div className="bandHeader">
-            <h2><span className="material-icons-outlined">location_on</span> تصفح الأحياء</h2>
-            <Link href="/neighborhoods">عرض جميع الأحياء</Link>
-          </div>
-          <div className="chipsScroller">
-            {NEIGHBORHOODS.map((name) => (
-              <Link key={name} href={`/listings?neighborhood=${encodeURIComponent(name)}`} className="neighborhoodChip">
-                <span className="material-icons-outlined">park</span>
-                {name}
-              </Link>
-            ))}
-          </div>
+          <div className="bandHeader"><h2><span className="material-icons-outlined">location_on</span> تصفح الأحياء</h2><Link href="/neighborhoods">عرض جميع الأحياء</Link></div>
+          <div className="chipsScroller">{NEIGHBORHOODS.map((name) => <Link key={name} href={`/listings?neighborhood=${encodeURIComponent(name)}`} className="neighborhoodChip"><span className="material-icons-outlined">park</span>{name}</Link>)}</div>
         </section>
 
         <section className="container listingsSection">
-          <div className="sectionHeading compactHeading">
-            <div>
-              <h2><span className="material-icons-outlined">apartment</span> أحدث العروض العقارية</h2>
-            </div>
-            <Link href="/listings">عرض جميع العروض</Link>
-          </div>
-
+          <div className="sectionHeading compactHeading"><div><h2><span className="material-icons-outlined">apartment</span> أحدث العروض العقارية</h2></div><Link href="/listings">عرض جميع العروض</Link></div>
           {loading ? <ListingSkeletons /> : null}
           {!loading && errorText ? <div className="homeError">{errorText}</div> : null}
           {!loading && !errorText && !visibleItems.length ? <div className="homeEmpty">لا توجد عقارات مطابقة حالياً. جرّب عرض جميع العروض.</div> : null}
-          {!loading && !errorText && visibleItems.length ? (
-            <div className="homeListingsGrid">
-              {visibleItems.map((item, index) => (
-                <HomeListingCard key={getListingId(item) || `home-listing-${index}`} item={item} index={index} fallbackPhone={officePhone} />
-              ))}
-            </div>
-          ) : null}
+          {!loading && !errorText && visibleItems.length ? <div className="homeListingsGrid">{visibleItems.map((item, index) => <HomeListingCard key={getListingId(item) || `home-listing-${index}`} item={item} index={index} fallbackPhone={officePhone} />)}</div> : null}
         </section>
 
         <section className="container mapRequestGrid">
           <article className="mapPreviewCard">
-            <div className="sectionHeading miniHeading">
-              <div>
-                <h2><span className="material-icons-outlined">pin_drop</span> استعرض العقارات على الخريطة</h2>
-                <p>ابحث عن العقارات المتاحة مباشرة على الخريطة وتعرّف على مواقعها بدقة.</p>
-              </div>
-            </div>
-            <div className="mapMock" aria-hidden="true">
-              <span className="seaBlock" />
-              <span className="road r1" />
-              <span className="road r2" />
-              <span className="road r3" />
-              <span className="pin p1" />
-              <span className="pin p2" />
-              <span className="pin p3" />
-              <span className="mapLabel l1">الفنار</span>
-              <span className="mapLabel l2">الزمرد</span>
-              <span className="mapLabel l3">الشراع</span>
-            </div>
+            <div className="sectionHeading miniHeading"><div><h2><span className="material-icons-outlined">pin_drop</span> استعرض العقارات على الخريطة</h2><p>ابحث عن العقارات المتاحة مباشرة على الخريطة وتعرّف على مواقعها بدقة.</p></div></div>
+            <div className="mapMock" aria-hidden="true"><span className="seaBlock" /><span className="road r1" /><span className="road r2" /><span className="road r3" /><span className="pin p1" /><span className="pin p2" /><span className="pin p3" /><span className="mapLabel l1">الفنار</span><span className="mapLabel l2">الزمرد</span><span className="mapLabel l3">الشراع</span></div>
             <Link href="/map" className="goldAction mapAction"><span className="material-icons-outlined">map</span> فتح الخريطة</Link>
           </article>
 
           <article className="requestCard">
-            <div className="sectionHeading miniHeading centeredHeading">
-              <div>
-                <h2><span className="material-icons-outlined">send</span> أرسل طلبك العقاري</h2>
-                <p>اكتب بياناتك مرة واحدة فقط، ويتم حفظ طلبك مباشرة في لوحة الإدارة بدون تحويلك لصفحة ثانية.</p>
-              </div>
-            </div>
-
+            <div className="sectionHeading miniHeading centeredHeading"><div><h2><span className="material-icons-outlined">send</span> أرسل طلبك العقاري</h2><p>اكتب بياناتك مرة واحدة فقط، ويتم حفظ طلبك مباشرة في لوحة الإدارة بدون تحويلك لصفحة ثانية.</p></div></div>
             <form className="requestForm" onSubmit={handleRequestSubmit}>
-              <label>
-                <span>الاسم</span>
-                <input value={request.name} onChange={(e) => updateRequestField('name', e.target.value)} placeholder="الاسم الكامل" disabled={requestSubmitting} required />
-              </label>
-              <label>
-                <span>رقم الجوال</span>
-                <input value={request.phone} onChange={(e) => updateRequestField('phone', e.target.value)} placeholder="05XXXXXXXX" disabled={requestSubmitting} required />
-              </label>
-              <label>
-                <span>نوع الطلب</span>
-                <select value={request.type} onChange={(e) => updateRequestField('type', e.target.value)} disabled={requestSubmitting} required>
-                  <option value="">اختر نوع الطلب</option>
-                  <option value="شراء">شراء</option>
-                  <option value="إيجار">إيجار</option>
-                  <option value="تسويق عقار">تسويق عقار</option>
-                </select>
-              </label>
-              <label>
-                <span>تفاصيل الطلب</span>
-                <textarea value={request.message} onChange={(e) => updateRequestField('message', e.target.value)} placeholder="مثال: مطلوب فيلا للإيجار في أبحر الشمالية، 4 غرف، ميزانية مناسبة..." rows={3} disabled={requestSubmitting} required />
-              </label>
-
-              {requestStatus.text ? (
-                <div className={`requestNotice ${requestStatus.type === 'success' ? 'success' : 'error'}`}>
-                  <span className="material-icons-outlined">{requestStatus.type === 'success' ? 'check_circle' : 'error'}</span>
-                  {requestStatus.text}
-                </div>
-              ) : null}
-
-              <button type="submit" className="goldAction fullAction" disabled={requestSubmitting}>
-                <span className={`material-icons-outlined ${requestSubmitting ? 'spinIcon' : ''}`}>{requestSubmitting ? 'autorenew' : 'near_me'}</span>
-                {requestSubmitting ? 'جاري إرسال الطلب...' : 'إرسال الطلب مباشرة'}
-              </button>
+              <label><span>الاسم</span><input value={request.name} onChange={(e) => updateRequestField('name', e.target.value)} placeholder="الاسم الكامل" disabled={requestSubmitting} required /></label>
+              <label><span>رقم الجوال</span><input value={request.phone} onChange={(e) => updateRequestField('phone', e.target.value)} placeholder="05XXXXXXXX" disabled={requestSubmitting} required /></label>
+              <label><span>نوع الطلب</span><select value={request.type} onChange={(e) => updateRequestField('type', e.target.value)} disabled={requestSubmitting} required><option value="">اختر نوع الطلب</option><option value="شراء">شراء</option><option value="إيجار">إيجار</option><option value="تسويق عقار">تسويق عقار</option></select></label>
+              <label><span>تفاصيل الطلب</span><textarea value={request.message} onChange={(e) => updateRequestField('message', e.target.value)} placeholder="مثال: مطلوب فيلا للإيجار في أبحر الشمالية، 4 غرف، ميزانية مناسبة..." rows={3} disabled={requestSubmitting} required /></label>
+              <details className="optionalDetails"><summary><span className="material-icons-outlined">tune</span> إضافة تفاصيل أكثر اختيارية</summary><div className="optionalFields"><label><span>الحي المفضل</span><select value={request.neighborhood} onChange={(e) => updateRequestField('neighborhood', e.target.value)} disabled={requestSubmitting}><option value="">اختياري</option>{NEIGHBORHOODS.map((name) => <option key={name} value={name}>{name}</option>)}</select></label><label><span>نوع العقار المطلوب</span><select value={request.propertyType} onChange={(e) => updateRequestField('propertyType', e.target.value)} disabled={requestSubmitting}><option value="">اختياري</option><option value="أرض">أرض</option><option value="فيلا">فيلا</option><option value="شقة">شقة</option><option value="دور">دور</option><option value="عمارة">عمارة</option></select></label><label><span>الميزانية التقريبية</span><input value={request.budgetMax} onChange={(e) => updateRequestField('budgetMax', e.target.value)} placeholder="مثال: 120000" disabled={requestSubmitting} /></label><label><span>المساحة التقريبية</span><input value={request.areaMax} onChange={(e) => updateRequestField('areaMax', e.target.value)} placeholder="مثال: 400" disabled={requestSubmitting} /></label></div></details>
+              {requestStatus.text ? <div className={`requestNotice ${requestStatus.type === 'success' ? 'success' : 'error'}`}><span className="material-icons-outlined">{requestStatus.type === 'success' ? 'check_circle' : 'error'}</span>{requestStatus.text}</div> : null}
+              <button type="submit" className="goldAction fullAction" disabled={requestSubmitting}><span className={`material-icons-outlined ${requestSubmitting ? 'spinIcon' : ''}`}>{requestSubmitting ? 'autorenew' : 'near_me'}</span>{requestSubmitting ? 'جاري إرسال الطلب...' : 'إرسال الطلب مباشرة'}</button>
             </form>
           </article>
         </section>
 
-        <section className="container servicesSection">
-          <div className="sectionHeading compactHeading">
-            <div>
-              <h2><span className="material-icons-outlined">real_estate_agent</span> خدماتنا</h2>
-            </div>
-          </div>
-          <div className="serviceGrid">
-            {SERVICES.map((service) => (
-              <Link href={service.href} key={service.title} className="serviceCard">
-                <span className="material-icons-outlined">{service.icon}</span>
-                <div>
-                  <h3>{service.title}</h3>
-                  <p>{service.text}</p>
-                </div>
-              </Link>
-            ))}
-          </div>
-        </section>
-
-        <section className="container faqSection">
-          <div className="sectionHeading compactHeading">
-            <div>
-              <h2><span className="material-icons-outlined">chat_bubble_outline</span> الأسئلة الشائعة</h2>
-            </div>
-          </div>
-          <div className="faqRow">
-            {FAQ_ITEMS.map((question) => (
-              <Link href="/faq" key={question} className="faqPill">
-                {question}
-                <span className="material-icons-outlined">expand_more</span>
-              </Link>
-            ))}
-          </div>
-          <Link href="/faq" className="allFaqLink">عرض جميع الأسئلة</Link>
-        </section>
+        <section className="container servicesSection"><div className="sectionHeading compactHeading"><div><h2><span className="material-icons-outlined">real_estate_agent</span> خدماتنا</h2></div></div><div className="serviceGrid">{SERVICES.map((service) => <Link href={service.href} key={service.title} className="serviceCard"><span className="material-icons-outlined">{service.icon}</span><div><h3>{service.title}</h3><p>{service.text}</p></div></Link>)}</div></section>
+        <section className="container faqSection"><div className="sectionHeading compactHeading"><div><h2><span className="material-icons-outlined">chat_bubble_outline</span> الأسئلة الشائعة</h2></div></div><div className="faqRow">{FAQ_ITEMS.map((question) => <Link href="/faq" key={question} className="faqPill">{question}<span className="material-icons-outlined">expand_more</span></Link>)}</div><Link href="/faq" className="allFaqLink">عرض جميع الأسئلة</Link></section>
       </main>
     </>
   );
