@@ -1,0 +1,102 @@
+/* تكبير خريطة الصفحة الرئيسية وجعلها هي العنصر الأساسي داخل الكرت */
+.premiumHome .mapRequestGrid {
+  grid-template-columns: minmax(0, 1.22fr) minmax(360px, .88fr) !important;
+  align-items: stretch !important;
+}
+
+.premiumHome .mapPreviewCard {
+  position: relative !important;
+  min-height: 430px !important;
+  padding: 0 !important;
+  border-radius: 20px !important;
+  overflow: hidden !important;
+  background: #eef2f7 !important;
+}
+
+/* نخفي عنوان ونص كرت الخريطة حتى يبقى العرض خريطة + زر فقط */
+.premiumHome .mapPreviewCard > .sectionHeading,
+.premiumHome .mapPreviewCard > .miniHeading {
+  display: none !important;
+}
+
+.premiumHome .mapPreviewCard .mapMock,
+.premiumHome .mapPreviewCard .mapMock.cleanGoogleMapPreview,
+.premiumHome .mapPreviewCard .mapMock.homeLiveListingsMap {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 430px !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  margin: 0 !important;
+  background: #eef2f7 !important;
+}
+
+.premiumHome .mapPreviewCard .homeLiveMapCanvas {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.premiumHome .mapPreviewCard .mapAction {
+  position: absolute !important;
+  left: 18px !important;
+  right: auto !important;
+  bottom: 18px !important;
+  z-index: 8 !important;
+  width: auto !important;
+  min-width: 132px !important;
+  height: 46px !important;
+  margin: 0 !important;
+  padding: 0 18px !important;
+  border-radius: 12px !important;
+  box-shadow: 0 18px 40px rgba(143, 99, 31, .30) !important;
+}
+
+.premiumHome .mapPreviewCard .mapAction .material-icons-outlined {
+  font-size: 20px !important;
+}
+
+.premiumHome .mapPreviewCard .homeLiveMapFallback {
+  position: absolute !important;
+  inset: 0 !important;
+  display: grid !important;
+  place-items: center !important;
+  padding: 20px !important;
+  text-align: center !important;
+  color: #111827 !important;
+  text-decoration: none !important;
+  background: linear-gradient(135deg, #ffffff, #fff7e8) !important;
+}
+
+@media (max-width: 1100px) {
+  .premiumHome .mapRequestGrid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .premiumHome .mapPreviewCard,
+  .premiumHome .mapPreviewCard .mapMock,
+  .premiumHome .mapPreviewCard .mapMock.cleanGoogleMapPreview,
+  .premiumHome .mapPreviewCard .mapMock.homeLiveListingsMap {
+    min-height: 360px !important;
+  }
+}
+
+@media (max-width: 680px) {
+  .premiumHome .mapPreviewCard,
+  .premiumHome .mapPreviewCard .mapMock,
+  .premiumHome .mapPreviewCard .mapMock.cleanGoogleMapPreview,
+  .premiumHome .mapPreviewCard .mapMock.homeLiveListingsMap {
+    min-height: 290px !important;
+    border-radius: 18px !important;
+  }
+
+  .premiumHome .mapPreviewCard .mapAction {
+    left: 14px !important;
+    bottom: 14px !important;
+    height: 44px !important;
+    min-width: 124px !important;
+  }
+}
