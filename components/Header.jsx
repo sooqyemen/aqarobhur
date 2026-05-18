@@ -44,23 +44,23 @@ export default function Header() {
   ], []);
 
   const adminLinks = useMemo(() => [
-    { href: '/admin', label: 'لوحة التحكم', icon: 'dashboard' },
-    { href: '/admin/listings', label: 'إدارة العروض', icon: 'real_estate_agent' },
-    { href: '/admin/requests', label: 'إدارة الطلبات', icon: 'support_agent' },
-    { href: '/admin/inbox', label: 'الوارد الذكي', icon: 'all_inbox' },
-    { href: '/admin/search', label: 'البحث الذكي', icon: 'manage_search' },
+    { href: '/admin', label: 'لوحة التحكم' },
+    { href: '/admin/listings', label: 'إدارة العروض' },
+    { href: '/admin/requests', label: 'إدارة الطلبات' },
+    { href: '/admin/inbox', label: 'الوارد الذكي' },
+    { href: '/admin/search', label: 'البحث الذكي' },
   ], []);
 
   const accountLinks = useMemo(() => {
     const links = [];
     if (isAdmin) links.push(...adminLinks);
-    links.push({ href: '/add', label: 'إضافة إعلان', icon: 'add_circle' });
-    links.push({ href: '/account', label: 'حسابي', icon: 'account_circle' });
+    links.push({ href: '/add', label: 'إضافة إعلان' });
+    links.push({ href: '/account', label: 'حسابي' });
     return links;
   }, [adminLinks, isAdmin]);
 
   const drawerLinks = useMemo(() => {
-    const links = [...navLinks, { href: '/listings', label: 'كل العقارات', icon: 'apartment' }];
+    const links = [...navLinks, { href: '/listings', label: 'كل العقارات' }];
     if (user) {
       accountLinks.forEach((link) => {
         if (!links.some((item) => item.href === link.href)) links.push(link);
@@ -131,10 +131,8 @@ export default function Header() {
             </Link>
             {user ? (
               <details className="accountDetails">
-                <summary className="loginBtn" title={user.email || 'حسابي'}>
-                  <span className="material-icons-outlined">account_circle</span>
+                <summary className="loginBtn accountSummary" title={user.email || 'حسابي'}>
                   حسابي
-                  <span className="material-icons-outlined arrowIcon">expand_more</span>
                 </summary>
                 <div className="accountMenu">
                   <div className="accountMenuHead">
@@ -143,12 +141,10 @@ export default function Header() {
                   </div>
                   {accountLinks.map((link) => (
                     <Link key={link.href} href={link.href} className={isActive(link.href) ? 'active' : ''}>
-                      <span className="material-icons-outlined">{link.icon}</span>
                       {link.label}
                     </Link>
                   ))}
                   <button type="button" className="logoutMenuBtn" onClick={handleLogout}>
-                    <span className="material-icons-outlined">logout</span>
                     تسجيل الخروج
                   </button>
                 </div>
@@ -184,18 +180,14 @@ export default function Header() {
 
             {user ? (
               <div className="drawerUserBox">
-                <span className="material-icons-outlined">account_circle</span>
-                <div>
-                  <strong>{isAdmin ? 'حساب الإدارة' : 'حسابي'}</strong>
-                  <small>{user.email || 'مستخدم مسجل'}</small>
-                </div>
+                <strong>{isAdmin ? 'حساب الإدارة' : 'حسابي'}</strong>
+                <small>{user.email || 'مستخدم مسجل'}</small>
               </div>
             ) : null}
 
             <div className="drawerLinks">
               {drawerLinks.map((link) => (
                 <Link key={link.href} href={link.href} className={isActive(link.href) ? 'active' : ''}>
-                  {link.icon ? <span className="material-icons-outlined">{link.icon}</span> : null}
                   {link.label}
                 </Link>
               ))}
@@ -336,6 +328,7 @@ export default function Header() {
           text-decoration: none;
           cursor: pointer;
           white-space: nowrap;
+          font-family: inherit;
         }
         .addListingBtn {
           border: 1px solid #b8842f;
@@ -358,29 +351,41 @@ export default function Header() {
           list-style: none;
         }
         .accountDetails summary::-webkit-details-marker { display: none; }
-        .arrowIcon { margin-inline-start: -2px; }
-        .accountDetails[open] .arrowIcon { transform: rotate(180deg); }
+        .accountSummary {
+          min-width: 96px;
+          border-radius: 999px;
+          background: #fffaf0;
+          color: #8a5a18;
+          box-shadow: 0 8px 18px rgba(184, 132, 47, .08);
+        }
+        .accountSummary:hover {
+          background: #fff7e8;
+          border-color: rgba(184, 132, 47, .5);
+        }
         .accountMenu {
           position: absolute;
           top: calc(100% + 10px);
           left: 0;
-          width: 245px;
-          padding: 10px;
-          border-radius: 16px;
-          background: #fff;
+          width: 265px;
+          padding: 12px;
+          border-radius: 20px;
+          background: rgba(255, 255, 255, .98);
           border: 1px solid rgba(184, 132, 47, .22);
-          box-shadow: 0 20px 48px rgba(15, 23, 42, .16);
+          box-shadow: 0 22px 55px rgba(15, 23, 42, .16);
+          direction: rtl;
         }
         .accountMenuHead {
-          padding: 8px 10px 11px;
-          border-bottom: 1px solid #f1e7d6;
-          margin-bottom: 7px;
+          padding: 13px 14px;
+          border-radius: 16px;
+          border: 1px solid rgba(184, 132, 47, .16);
+          background: linear-gradient(135deg, #fff8e8, #ffffff);
+          margin-bottom: 10px;
         }
         .accountMenuHead strong,
         .drawerUserBox strong {
           display: block;
           color: #111827;
-          font-size: 14px;
+          font-size: 15px;
           font-weight: 950;
         }
         .accountMenuHead small,
@@ -389,7 +394,7 @@ export default function Header() {
           color: #6b7280;
           font-size: 11px;
           font-weight: 800;
-          margin-top: 2px;
+          margin-top: 4px;
           direction: ltr;
           text-align: right;
           overflow: hidden;
@@ -399,13 +404,13 @@ export default function Header() {
         .accountMenu a,
         .logoutMenuBtn {
           width: 100%;
-          min-height: 40px;
+          min-height: 42px;
           display: flex;
           align-items: center;
-          gap: 9px;
-          padding: 0 10px;
-          border-radius: 11px;
-          border: 0;
+          justify-content: flex-start;
+          padding: 0 14px;
+          border-radius: 13px;
+          border: 1px solid transparent;
           background: transparent;
           color: #263142;
           font-size: 13px;
@@ -413,25 +418,25 @@ export default function Header() {
           text-decoration: none;
           cursor: pointer;
           text-align: right;
+          font-family: inherit;
         }
+        .accountMenu a + a { margin-top: 4px; }
         .accountMenu a:hover,
         .accountMenu a.active {
           color: #9a6a21;
           background: #fff7e8;
-        }
-        .accountMenu a .material-icons-outlined,
-        .logoutMenuBtn .material-icons-outlined,
-        .drawerLinks .material-icons-outlined {
-          font-size: 18px;
-          color: #b8842f;
+          border-color: rgba(184, 132, 47, .16);
         }
         .logoutMenuBtn {
-          margin-top: 7px;
-          border-top: 1px solid #f1e7d6;
-          border-radius: 0 0 11px 11px;
+          margin-top: 9px;
           color: #b42318;
+          background: #fff7f6;
+          border-color: rgba(180, 35, 24, .12);
         }
-        .logoutMenuBtn .material-icons-outlined { color: #b42318; }
+        .logoutMenuBtn:hover {
+          background: #fff1ef;
+          border-color: rgba(180, 35, 24, .22);
+        }
         .mobileMenuBtn,
         .closeBtn {
           width: 40px;
@@ -472,17 +477,10 @@ export default function Header() {
         }
         .drawerUserBox {
           margin: 16px 18px 0;
-          padding: 12px;
-          display: flex;
-          align-items: center;
-          gap: 10px;
+          padding: 12px 14px;
           border-radius: 14px;
           background: #fff7e8;
           border: 1px solid rgba(184,132,47,.18);
-        }
-        .drawerUserBox > .material-icons-outlined {
-          color: #b8842f;
-          font-size: 28px;
         }
         .drawerLinks {
           display: flex;
@@ -493,7 +491,6 @@ export default function Header() {
         .drawerLinks a {
           display: flex;
           align-items: center;
-          gap: 9px;
           padding: 13px 14px;
           border-radius: 12px;
           color: #111827;
