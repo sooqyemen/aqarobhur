@@ -72,7 +72,18 @@ function normalizeDealType(v) {
   return '';
 }
 
-function buildPriceBadgeIcon(maps, priceText) {
+function dealColor(item) {
+  const text = `${item?.dealType || ''} ${item?.type || ''} ${item?.goal || ''} ${item?.title || ''}`.toLowerCase();
+  if (text.includes('rent') || text.includes('lease') || text.includes('إيجار') || text.includes('ايجار') || text.includes('للإيجار') || text.includes('للايجار')) {
+    return '#f97316';
+  }
+  if (text.includes('sale') || text.includes('sell') || text.includes('بيع') || text.includes('للبيع')) {
+    return '#0f766e';
+  }
+  return '#b8842f';
+}
+
+function buildPriceBadgeIcon(maps, priceText, color = '#0f766e') {
   const text = String(priceText || '?');
   const charW = 8;
   const padX = 12;
@@ -80,9 +91,10 @@ function buildPriceBadgeIcon(maps, priceText) {
   const minW = 56;
   const maxW = 160;
   const w = Math.max(minW, Math.min(maxW, text.length * charW + padX * 2));
+  const safeColor = /^#[0-9a-fA-F]{6}$/.test(color) ? color : '#0f766e';
   const svg = `
     <svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
-      <rect x="1" y="1" width="${w - 2}" height="${h - 2}" rx="12" fill="#0f766e" stroke="rgba(255,255,255,0.95)" stroke-width="2"/>
+      <rect x="1" y="1" width="${w - 2}" height="${h - 2}" rx="12" fill="${safeColor}" stroke="rgba(255,255,255,0.95)" stroke-width="2"/>
       <text x="${w / 2}" y="${h / 2 + 5}" text-anchor="middle" font-family="system-ui, -apple-system, Segoe UI, Roboto, Arial" font-size="13" font-weight="900" fill="#ffffff" direction="rtl" unicode-bidi="plaintext">${escapeXml(text)}</text>
     </svg>
   `.trim();
@@ -291,7 +303,7 @@ export default function MapClient() {
         position: pos,
         map,
         title: it.title || 'عرض عقاري',
-        icon: buildPriceBadgeIcon(maps, formatPrice(it.price)),
+        icon: buildPriceBadgeIcon(maps, formatPrice(it.price), dealColor(it)),
         optimized: true,
         opacity: isInsideNorthJeddah(it) ? 1 : 0.82,
       });
