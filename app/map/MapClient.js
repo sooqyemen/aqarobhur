@@ -28,6 +28,18 @@ function isInsideNorthJeddah(item) {
     && lng <= NORTH_JEDDAH_BOUNDS.east;
 }
 
+function readQueryCenter(searchParams) {
+  const lat = Number(searchParams.get('lat'));
+  const lng = Number(searchParams.get('lng'));
+  const zoom = Number(searchParams.get('zoom'));
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  if (lat < 21.30 || lat > 22.20 || lng < 38.70 || lng > 39.60) return null;
+  return {
+    center: { lat, lng },
+    zoom: Number.isFinite(zoom) ? Math.max(11, Math.min(16, zoom)) : 13,
+  };
+}
+
 function escapeHtml(s) {
   return String(s || '')
     .replaceAll('&', '&amp;')
@@ -35,6 +47,15 @@ function escapeHtml(s) {
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#039;');
+}
+
+function escapeXml(s) {
+  return String(s || '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
 }
 
 function formatPrice(price) {
@@ -51,15 +72,6 @@ function normalizeDealType(v) {
   return '';
 }
 
-function escapeXml(s) {
-  return String(s || '')
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#39;');
-}
-
 function buildPriceBadgeIcon(maps, priceText) {
   const text = String(priceText || '?');
   const charW = 8;
@@ -68,7 +80,6 @@ function buildPriceBadgeIcon(maps, priceText) {
   const minW = 56;
   const maxW = 160;
   const w = Math.max(minW, Math.min(maxW, text.length * charW + padX * 2));
-
   const svg = `
     <svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
       <rect x="1" y="1" width="${w - 2}" height="${h - 2}" rx="12" fill="#0f766e" stroke="rgba(255,255,255,0.95)" stroke-width="2"/>
@@ -92,13 +103,9 @@ function loadGoogleMaps(apiKey) {
   __gmapsPromise = new Promise((resolve, reject) => {
     const cbName = `__gmaps_cb_${Date.now()}`;
     window[cbName] = () => {
-      try {
-        resolve(window.google.maps);
-      } catch (e) {
-        reject(e);
-      } finally {
-        try { delete window[cbName]; } catch {}
-      }
+      try { resolve(window.google.maps); }
+      catch (e) { reject(e); }
+      finally { try { delete window[cbName]; } catch {} }
     };
 
     const script = document.createElement('script');
@@ -114,6 +121,7 @@ function loadGoogleMaps(apiKey) {
 
 export default function MapClient() {
   const searchParams = useSearchParams();
+  const requestedFocus = useMemo(() => readQueryCenter(searchParams), [searchParams]);
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
@@ -128,10 +136,11 @@ export default function MapClient() {
   const infoRef = useRef(null);
   const prevHtmlOverflowRef = useRef('');
   const prevBodyOverflowRef = useRef('');
-  const didFocusNorthJeddahRef = useRef(false);
+  const didFocusRef = useRef(false);
 
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
-
+  const initialCenter = requestedFocus?.center || NORTH_JEDDAH_CENTER;
+  const initialZoom = requestedFocus?.zoom || NORTH_JEDDAH_ZOOM;
   const filters = useMemo(() => ({ neighborhood: neighborhood || '', dealType: dealType || '' }), [neighborhood, dealType]);
 
   const neighborhoodOptions = useMemo(() => {
@@ -214,7 +223,7 @@ export default function MapClient() {
         if (active) setLoading(false);
       }
     }
-    didFocusNorthJeddahRef.current = false;
+    didFocusRef.current = false;
     load();
     return () => { active = false; };
   }, [filters]);
@@ -227,8 +236,8 @@ export default function MapClient() {
         const maps = await loadGoogleMaps(apiKey);
         if (!alive || !mapDivRef.current) return;
         const map = new maps.Map(mapDivRef.current, {
-          center: NORTH_JEDDAH_CENTER,
-          zoom: NORTH_JEDDAH_ZOOM,
+          center: initialCenter,
+          zoom: initialZoom,
           disableDefaultUI: true,
           zoomControl: false,
           mapTypeControl: false,
@@ -241,12 +250,7 @@ export default function MapClient() {
           clickableIcons: false,
           gestureHandling: 'greedy',
           restriction: {
-            latLngBounds: {
-              north: 22.1800,
-              south: 21.3600,
-              east: 39.5200,
-              west: 38.7600,
-            },
+            latLngBounds: { north: 22.1800, south: 21.3600, east: 39.5200, west: 38.7600 },
             strictBounds: false,
           },
           styles: [
@@ -260,8 +264,8 @@ export default function MapClient() {
         setTimeout(() => {
           try {
             maps.event.trigger(map, 'resize');
-            map.setCenter(NORTH_JEDDAH_CENTER);
-            map.setZoom(NORTH_JEDDAH_ZOOM);
+            map.setCenter(initialCenter);
+            map.setZoom(initialZoom);
           } catch {}
         }, 250);
       } catch (e) {
@@ -272,7 +276,7 @@ export default function MapClient() {
     }
     initMap();
     return () => { alive = false; };
-  }, [apiKey]);
+  }, [apiKey, initialCenter, initialZoom]);
 
   useEffect(() => {
     if (!mapReady || !mapRef.current || !window.google?.maps) return;
@@ -280,19 +284,16 @@ export default function MapClient() {
     const map = mapRef.current;
     markersRef.current.forEach((m) => { try { m.setMap(null); } catch {} });
     markersRef.current = [];
-    const bounds = new maps.LatLngBounds();
 
     mapItems.forEach((it) => {
       const pos = { lat: Number(it.lat), lng: Number(it.lng) };
-      const insideFocusArea = isInsideNorthJeddah(it);
-      bounds.extend(pos);
       const marker = new maps.Marker({
         position: pos,
         map,
         title: it.title || 'عرض عقاري',
         icon: buildPriceBadgeIcon(maps, formatPrice(it.price)),
         optimized: true,
-        opacity: insideFocusArea ? 1 : 0.82,
+        opacity: isInsideNorthJeddah(it) ? 1 : 0.82,
       });
       marker.addListener('click', () => {
         try {
@@ -312,9 +313,12 @@ export default function MapClient() {
       markersRef.current.push(marker);
     });
 
-    if (!didFocusNorthJeddahRef.current) {
+    if (!didFocusRef.current) {
       try {
-        if (focusedMapItems.length >= 2) {
+        if (requestedFocus) {
+          map.setCenter(requestedFocus.center);
+          map.setZoom(requestedFocus.zoom);
+        } else if (focusedMapItems.length >= 2) {
           const focusedBounds = new maps.LatLngBounds();
           focusedMapItems.forEach((it) => focusedBounds.extend({ lat: Number(it.lat), lng: Number(it.lng) }));
           map.fitBounds(focusedBounds, 70);
@@ -325,16 +329,16 @@ export default function MapClient() {
           map.setCenter(NORTH_JEDDAH_CENTER);
           map.setZoom(NORTH_JEDDAH_ZOOM);
         }
-        didFocusNorthJeddahRef.current = true;
+        didFocusRef.current = true;
       } catch {
         try {
-          map.setCenter(NORTH_JEDDAH_CENTER);
-          map.setZoom(NORTH_JEDDAH_ZOOM);
-          didFocusNorthJeddahRef.current = true;
+          map.setCenter(initialCenter);
+          map.setZoom(initialZoom);
+          didFocusRef.current = true;
         } catch {}
       }
     }
-  }, [mapReady, mapItems, focusedMapItems]);
+  }, [mapReady, mapItems, focusedMapItems, requestedFocus, initialCenter, initialZoom]);
 
   useEffect(() => {
     if (typeof document === 'undefined') return;
