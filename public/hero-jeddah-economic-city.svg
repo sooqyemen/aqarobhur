@@ -1,0 +1,122 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 560" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f8ead1"/>
+      <stop offset="0.42" stop-color="#eef3f5"/>
+      <stop offset="1" stop-color="#d7e3e8"/>
+    </linearGradient>
+    <linearGradient id="water" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#97cad6"/>
+      <stop offset="0.52" stop-color="#d9e7e5"/>
+      <stop offset="1" stop-color="#eadcc5"/>
+    </linearGradient>
+    <linearGradient id="tower" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fff8e8"/>
+      <stop offset="0.38" stop-color="#cfdce2"/>
+      <stop offset="0.72" stop-color="#80919f"/>
+      <stop offset="1" stop-color="#f5dca4"/>
+    </linearGradient>
+    <linearGradient id="glass" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f7fbff" stop-opacity="0.9"/>
+      <stop offset="1" stop-color="#657887" stop-opacity="0.78"/>
+    </linearGradient>
+    <linearGradient id="road" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#d6c5a6"/>
+      <stop offset="1" stop-color="#9ba8ad"/>
+    </linearGradient>
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="160%">
+      <feDropShadow dx="0" dy="18" stdDeviation="16" flood-color="#243042" flood-opacity="0.18"/>
+    </filter>
+    <filter id="blur" x="-10%" y="-10%" width="120%" height="120%">
+      <feGaussianBlur stdDeviation="1.2"/>
+    </filter>
+  </defs>
+
+  <rect width="1920" height="560" fill="url(#sky)"/>
+  <circle cx="1596" cy="122" r="66" fill="#f7cf7e" opacity="0.32"/>
+  <circle cx="1564" cy="118" r="118" fill="#ffffff" opacity="0.16"/>
+  <path d="M0 230 C210 176 385 228 585 186 C820 137 1020 192 1214 153 C1448 106 1610 128 1920 80 L1920 328 L0 328 Z" fill="#ffffff" opacity="0.30"/>
+  <path d="M0 300 C260 254 430 294 640 254 C900 205 1110 250 1355 214 C1590 180 1730 190 1920 156 L1920 358 L0 358 Z" fill="#ffffff" opacity="0.24"/>
+
+  <g opacity="0.54" filter="url(#blur)">
+    <path d="M40 316 C260 294 480 324 720 300 C1020 270 1265 310 1550 284 C1720 268 1840 276 1920 270 L1920 390 L0 390 L0 320 Z" fill="#e7d5b8"/>
+  </g>
+
+  <rect x="0" y="356" width="1920" height="204" fill="url(#water)"/>
+  <path d="M0 386 C260 360 512 382 735 360 C1030 330 1320 363 1600 338 C1740 326 1848 318 1920 326 L1920 420 L0 420 Z" fill="#e9dcc8" opacity="0.82"/>
+  <path d="M0 452 C260 438 460 456 650 438 C940 410 1160 440 1420 420 C1620 404 1780 410 1920 398 L1920 560 L0 560 Z" fill="#fbfaf7" opacity="0.88"/>
+  <path d="M0 472 C320 450 620 478 930 448 C1220 420 1505 452 1920 420" fill="none" stroke="#ffffff" stroke-opacity="0.52" stroke-width="3"/>
+  <path d="M0 506 C280 486 560 508 860 486 C1180 462 1480 488 1920 456" fill="none" stroke="#ffffff" stroke-opacity="0.38" stroke-width="2"/>
+
+  <g transform="translate(0 0)" filter="url(#softShadow)">
+    <!-- imagined Jeddah Economic City tower -->
+    <g transform="translate(468 86)">
+      <path d="M60 0 L76 304 L18 304 L35 0 Z" fill="url(#tower)"/>
+      <path d="M48 0 L53 304 L24 304 Z" fill="#eef7fb" opacity="0.55"/>
+      <path d="M62 40 L92 304 L72 304 Z" fill="#7f95a2" opacity="0.56"/>
+      <path d="M32 88 L0 304 L22 304 Z" fill="#c8d5da" opacity="0.86"/>
+      <path d="M50 -22 L58 40 L40 40 Z" fill="#80919f" opacity="0.92"/>
+      <path d="M40 12 L29 305" stroke="#ffffff" stroke-opacity="0.6" stroke-width="2"/>
+      <path d="M61 26 L75 304" stroke="#ffffff" stroke-opacity="0.38" stroke-width="1.5"/>
+      <ellipse cx="47" cy="308" rx="74" ry="14" fill="#ffffff" opacity="0.48"/>
+    </g>
+
+    <!-- far skyline left -->
+    <g fill="#7b8d99" opacity="0.76">
+      <rect x="132" y="296" width="34" height="62" rx="3"/>
+      <rect x="188" y="272" width="48" height="86" rx="4"/>
+      <rect x="270" y="314" width="40" height="44" rx="3"/>
+      <rect x="330" y="282" width="38" height="76" rx="4"/>
+      <polygon points="410,358 410,298 444,262 480,298 480,358"/>
+      <rect x="548" y="310" width="34" height="48" rx="3"/>
+      <rect x="594" y="276" width="42" height="82" rx="4"/>
+      <rect x="652" y="306" width="32" height="52" rx="3"/>
+      <rect x="710" y="292" width="42" height="66" rx="4"/>
+      <rect x="780" y="314" width="50" height="44" rx="3"/>
+    </g>
+
+    <!-- central/right modern towers -->
+    <g opacity="0.86">
+      <rect x="1084" y="286" width="44" height="74" rx="5" fill="url(#glass)"/>
+      <rect x="1144" y="265" width="54" height="95" rx="5" fill="#8395a0"/>
+      <polygon points="1228,360 1228,250 1262,214 1300,250 1300,360" fill="url(#glass)"/>
+      <rect x="1325" y="303" width="66" height="57" rx="4" fill="#a4a18f"/>
+      <rect x="1410" y="287" width="44" height="73" rx="4" fill="#8296a0"/>
+      <rect x="1490" y="270" width="56" height="90" rx="4" fill="#9aa6aa"/>
+      <rect x="1600" y="302" width="48" height="58" rx="3" fill="#8a9aa2"/>
+      <rect x="1710" y="292" width="60" height="68" rx="4" fill="#7d8d98"/>
+      <rect x="1806" y="278" width="42" height="82" rx="4" fill="#909fa6"/>
+    </g>
+
+    <!-- low city blocks -->
+    <g opacity="0.62" fill="#b5aa93">
+      <rect x="0" y="330" width="92" height="30" rx="2"/>
+      <rect x="92" y="338" width="160" height="22" rx="2"/>
+      <rect x="260" y="326" width="126" height="34" rx="2"/>
+      <rect x="690" y="334" width="190" height="26" rx="2"/>
+      <rect x="895" y="326" width="148" height="34" rx="2"/>
+      <rect x="1018" y="338" width="120" height="22" rx="2"/>
+      <rect x="1356" y="334" width="190" height="26" rx="2"/>
+      <rect x="1548" y="326" width="166" height="34" rx="2"/>
+      <rect x="1720" y="336" width="200" height="24" rx="2"/>
+    </g>
+  </g>
+
+  <g opacity="0.72">
+    <path d="M1450 384 C1560 362 1710 356 1920 350 L1920 432 C1740 424 1585 404 1450 384 Z" fill="url(#road)"/>
+    <path d="M1500 380 C1620 370 1760 365 1920 360" fill="none" stroke="#ffffff" stroke-opacity="0.52" stroke-width="4"/>
+    <g fill="#58705a" opacity="0.75">
+      <rect x="1518" y="342" width="5" height="48" rx="2"/>
+      <path d="M1520 344 l-20 -10 l16 19 l-23 3 l24 8 l-12 18 l18 -14 l14 16 l-5 -21 l22 -1 l-20 -11 l10 -18 z"/>
+      <rect x="1625" y="338" width="5" height="50" rx="2"/>
+      <path d="M1627 340 l-21 -11 l16 20 l-23 4 l25 8 l-14 18 l20 -14 l14 16 l-5 -22 l23 -1 l-21 -11 l10 -19 z"/>
+      <rect x="1740" y="336" width="5" height="52" rx="2"/>
+      <path d="M1742 338 l-22 -12 l17 22 l-25 4 l26 8 l-13 20 l19 -15 l15 17 l-6 -23 l25 -1 l-22 -12 l10 -20 z"/>
+      <rect x="1850" y="336" width="5" height="52" rx="2"/>
+      <path d="M1852 338 l-22 -12 l17 22 l-25 4 l26 8 l-13 20 l19 -15 l15 17 l-6 -23 l25 -1 l-22 -12 l10 -20 z"/>
+    </g>
+  </g>
+
+  <rect width="1920" height="560" fill="url(#sky)" opacity="0"/>
+  <path d="M0 0 H1920 V560 H0 Z" fill="rgba(255,255,255,0.08)"/>
+</svg>
