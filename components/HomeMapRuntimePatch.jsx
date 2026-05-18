@@ -107,6 +107,35 @@ function buildPriceBadgeIcon(maps, priceText) {
   };
 }
 
+function getDensestListingCluster(items = []) {
+  const groups = new Map();
+
+  items.forEach((item) => {
+    const lat = Number(item?.lat);
+    const lng = Number(item?.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+
+    const neighborhood = String(item?.neighborhood || '').trim();
+    const key = neighborhood || `${lat.toFixed(2)},${lng.toFixed(2)}`;
+    const prev = groups.get(key) || { key, count: 0, latSum: 0, lngSum: 0, items: [] };
+    prev.count += 1;
+    prev.latSum += lat;
+    prev.lngSum += lng;
+    prev.items.push(item);
+    groups.set(key, prev);
+  });
+
+  const top = [...groups.values()].sort((a, b) => b.count - a.count)[0];
+  if (!top) {
+    return { center: NORTH_JEDDAH_CENTER, zoom: NORTH_JEDDAH_ZOOM, items: [], mapHref: '/map' };
+  }
+
+  const center = { lat: top.latSum / top.count, lng: top.lngSum / top.count };
+  const zoom = top.count >= 8 ? 14 : 13;
+  const href = `/map?lat=${center.lat.toFixed(6)}&lng=${center.lng.toFixed(6)}&zoom=${zoom}`;
+  return { center, zoom, items: top.items, mapHref: href };
+}
+
 function loadGoogleMaps(apiKey) {
   if (typeof window === 'undefined') return Promise.reject(new Error('No window'));
   if (window.google?.maps) return Promise.resolve(window.google.maps);
@@ -219,9 +248,17 @@ export default function HomeMapRuntimePatch() {
         const maps = await loadGoogleMaps(apiKey);
         if (disposed) return;
 
+        const data = await fetchListings({ onlyPublic: true, includeLegacy: true, max: 120 });
+        if (disposed) return;
+
+        const allItems = (Array.isArray(data) ? data : [])
+          .filter(isInsideNorthJeddah)
+          .filter((item) => Number.isFinite(Number(item.lat)) && Number.isFinite(Number(item.lng)));
+        const cluster = getDensestListingCluster(allItems);
+
         const map = new maps.Map(canvas, {
-          center: NORTH_JEDDAH_CENTER,
-          zoom: NORTH_JEDDAH_ZOOM,
+          center: cluster.center,
+          zoom: cluster.zoom,
           disableDefaultUI: true,
           zoomControl: false,
           mapTypeControl: false,
@@ -239,13 +276,9 @@ export default function HomeMapRuntimePatch() {
           ],
         });
 
-        const data = await fetchListings({ onlyPublic: true, includeLegacy: true, max: 80 });
-        if (disposed) return;
-
-        const listingItems = (Array.isArray(data) ? data : [])
-          .filter(isInsideNorthJeddah)
-          .filter((item) => Number.isFinite(Number(item.lat)) && Number.isFinite(Number(item.lng)))
-          .slice(0, 35);
+        const listingItems = (cluster.items.length ? cluster.items : allItems).slice(0, 45);
+        const action = document.querySelector('.premiumHome .mapPreviewCard .mapAction');
+        if (action) action.setAttribute('href', cluster.mapHref || '/map');
 
         if (listingItems.length) {
           const bounds = new maps.LatLngBounds();
@@ -261,21 +294,21 @@ export default function HomeMapRuntimePatch() {
             });
             marker.addListener('click', () => {
               const id = item.id || item.docId || item.listingId || '';
-              window.location.href = id ? `/listing/${encodeURIComponent(String(id))}` : '/map';
+              window.location.href = id ? `/listing/${encodeURIComponent(String(id))}` : cluster.mapHref || '/map';
             });
             markers.push(marker);
           });
 
           try {
-            map.fitBounds(bounds, 58);
+            map.fitBounds(bounds, 72);
             setTimeout(() => {
               const zoom = map.getZoom();
-              if (zoom && zoom < NORTH_JEDDAH_ZOOM) map.setZoom(NORTH_JEDDAH_ZOOM);
+              if (zoom && zoom < 13) map.setZoom(13);
               if (zoom && zoom > 15) map.setZoom(15);
-            }, 120);
+            }, 140);
           } catch {
-            map.setCenter(NORTH_JEDDAH_CENTER);
-            map.setZoom(NORTH_JEDDAH_ZOOM);
+            map.setCenter(cluster.center);
+            map.setZoom(cluster.zoom);
           }
         } else {
           map.setCenter(NORTH_JEDDAH_CENTER);
