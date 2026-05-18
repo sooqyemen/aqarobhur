@@ -347,6 +347,10 @@ export default function Header() {
           position: relative;
           z-index: 120;
         }
+        .accountDetails .material-icons-outlined,
+        .accountMenu .material-icons-outlined {
+          display: none !important;
+        }
         .accountDetails summary {
           list-style: none;
         }
