@@ -45,11 +45,23 @@ function priceText(price) {
   return String(num);
 }
 
-function badgeIcon(maps, text) {
+function dealColor(item) {
+  const text = `${item?.dealType || ''} ${item?.type || ''} ${item?.goal || ''} ${item?.title || ''}`.toLowerCase();
+  if (text.includes('rent') || text.includes('lease') || text.includes('إيجار') || text.includes('ايجار') || text.includes('للإيجار') || text.includes('للايجار')) {
+    return '#f97316';
+  }
+  if (text.includes('sale') || text.includes('sell') || text.includes('بيع') || text.includes('للبيع')) {
+    return '#0f766e';
+  }
+  return '#b8842f';
+}
+
+function badgeIcon(maps, text, color = '#0f766e') {
   const label = String(text || 'السعر');
   const width = Math.max(68, Math.min(172, label.length * 8 + 28));
   const height = 34;
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><rect x="1.5" y="1.5" width="${width - 3}" height="${height - 3}" rx="14" fill="#0f766e" stroke="#fff" stroke-width="3"/><text x="${width / 2}" y="22" text-anchor="middle" font-family="system-ui, Arial" font-size="14" font-weight="900" fill="#fff" direction="rtl" unicode-bidi="plaintext">${xml(label)}</text></svg>`;
+  const safeColor = /^#[0-9a-fA-F]{6}$/.test(color) ? color : '#0f766e';
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><rect x="1.5" y="1.5" width="${width - 3}" height="${height - 3}" rx="14" fill="${safeColor}" stroke="#fff" stroke-width="3"/><text x="${width / 2}" y="22" text-anchor="middle" font-family="system-ui, Arial" font-size="14" font-weight="900" fill="#fff" direction="rtl" unicode-bidi="plaintext">${xml(label)}</text></svg>`;
   return {
     url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`,
     scaledSize: new maps.Size(width, height),
@@ -196,7 +208,7 @@ export default function HomeMapRuntimePatchV2() {
             position: { lat: Number(item.lat), lng: Number(item.lng) },
             map,
             title: item.title || 'عرض عقاري',
-            icon: badgeIcon(maps, priceText(item.price)),
+            icon: badgeIcon(maps, priceText(item.price), dealColor(item)),
             optimized: true,
           });
           marker.addListener('click', () => {
