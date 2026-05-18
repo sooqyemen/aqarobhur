@@ -2,6 +2,7 @@ import './globals.css';
 import './home.css';
 import './mobile-fixes.css';
 import './account-menu-fixes.css';
+import './home-map-fixes.css';
 import { Cairo } from 'next/font/google';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
