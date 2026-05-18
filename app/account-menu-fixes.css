@@ -1,0 +1,71 @@
+/* إصلاح نهائي لقائمة حسابي لأن روابط Next داخل styled-jsx لا تأخذ أحياناً تنسيق العناصر الداخلية */
+.premiumHeader .accountDetails .material-icons-outlined,
+.premiumHeader .accountMenu .material-icons-outlined {
+  display: none !important;
+}
+
+.premiumHeader .accountMenu {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 4px !important;
+  width: 265px !important;
+  padding: 12px !important;
+  direction: rtl !important;
+  text-align: right !important;
+}
+
+.premiumHeader .accountMenuHead {
+  display: block !important;
+  width: 100% !important;
+  margin: 0 0 10px !important;
+}
+
+.premiumHeader .accountMenu a {
+  display: flex !important;
+  width: 100% !important;
+  min-height: 42px !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  padding: 0 14px !important;
+  border-radius: 13px !important;
+  border: 1px solid transparent !important;
+  color: #263142 !important;
+  background: transparent !important;
+  text-decoration: none !important;
+  font-size: 13px !important;
+  font-weight: 900 !important;
+  line-height: 1.2 !important;
+  white-space: nowrap !important;
+  box-sizing: border-box !important;
+}
+
+.premiumHeader .accountMenu a:hover,
+.premiumHeader .accountMenu a.active {
+  color: #9a6a21 !important;
+  background: #fff7e8 !important;
+  border-color: rgba(184, 132, 47, .16) !important;
+}
+
+.premiumHeader .logoutMenuBtn {
+  display: flex !important;
+  width: 100% !important;
+  min-height: 42px !important;
+  align-items: center !important;
+  justify-content: center !important;
+  margin-top: 9px !important;
+  padding: 0 14px !important;
+  border-radius: 13px !important;
+  color: #b42318 !important;
+  background: #fff7f6 !important;
+  border: 1px solid rgba(180, 35, 24, .12) !important;
+  font-family: inherit !important;
+  font-size: 13px !important;
+  font-weight: 950 !important;
+  white-space: nowrap !important;
+  box-sizing: border-box !important;
+}
+
+.premiumHeader .logoutMenuBtn:hover {
+  background: #fff1ef !important;
+  border-color: rgba(180, 35, 24, .22) !important;
+}
